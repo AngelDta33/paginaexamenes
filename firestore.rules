@@ -1,0 +1,70 @@
+rules_version = '2';
+
+// Reglas para el constructor de exámenes.
+// Roles viven en usuarios/{uid}.rol (no se usan custom claims: el alta de cuentas
+// es 100% cliente, sin Cloud Functions, para no requerir el plan Blaze).
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function autenticado() {
+      return request.auth != null;
+    }
+
+    function perfil() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data;
+    }
+
+    function rol() {
+      return autenticado() ? perfil().rol : null;
+    }
+
+    function esRevisorOAdmin() {
+      return rol() == 'revisor' || rol() == 'administrador';
+    }
+
+    // usuarios/{uid}: cualquiera autenticado puede leer (se necesita para mostrar nombres
+    // y para que estas mismas reglas puedan consultar el rol de quien pide). Solo un
+    // administrador puede crear o modificar cuentas.
+    match /usuarios/{uid} {
+      allow read: if autenticado();
+      allow write: if esRevisorOAdmin() && rol() == 'administrador';
+    }
+
+    // configuracion/escuela: datos institucionales compartidos. Lectura para cualquier
+    // cuenta activa; solo el administrador los edita.
+    match /configuracion/{docId} {
+      allow read: if autenticado();
+      allow write: if rol() == 'administrador';
+    }
+
+    // examenes/{id}: el dueño (profesorId) siempre puede leer/escribir lo suyo;
+    // revisor y administrador pueden leer/escribir cualquier examen.
+    match /examenes/{examenId} {
+      allow read, update, delete: if autenticado() &&
+        (resource.data.profesorId == request.auth.uid || esRevisorOAdmin());
+      allow create: if autenticado() &&
+        (request.resource.data.profesorId == request.auth.uid || esRevisorOAdmin());
+    }
+
+    // grupos/{id} y asistencias/{id}: pase de lista y rúbricas — privado por maestro,
+    // sin acceso de revisor/administrador (a diferencia de examenes, aquí no se pidió
+    // que nadie más los vea).
+    match /grupos/{grupoId} {
+      allow read, update, delete: if autenticado() && resource.data.profesorId == request.auth.uid;
+      allow create: if autenticado() && request.resource.data.profesorId == request.auth.uid;
+    }
+    match /asistencias/{docId} {
+      // resource es null cuando el documento del día todavía no existe (primera vez que
+      // se pasa lista ese día) — obtenerOCrearAsistencia hace un getDoc antes de crearlo,
+      // así que la lectura tiene que permitirse aunque no haya nada que leer todavía.
+      allow read: if autenticado() && (
+        resource == null ||
+        get(/databases/$(database)/documents/grupos/$(resource.data.grupoId)).data.profesorId == request.auth.uid
+      );
+      allow update, delete: if autenticado() &&
+        get(/databases/$(database)/documents/grupos/$(resource.data.grupoId)).data.profesorId == request.auth.uid;
+      allow create: if autenticado() &&
+        get(/databases/$(database)/documents/grupos/$(request.resource.data.grupoId)).data.profesorId == request.auth.uid;
+    }
+  }
+}

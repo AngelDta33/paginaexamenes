@@ -1,0 +1,106 @@
+/* Estilos de la "hoja" — compartidos entre vista previa en pantalla e impresión.
+   Las medidas (21.59 x 27.94cm, padding 1.8cm) deben coincidir con las constantes de js/paginate.js */
+
+.page {
+  width: 21.59cm;
+  height: 27.94cm;
+  padding: 1.8cm;
+  box-sizing: border-box;
+  background: #fff;
+  color: #111;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 11pt;
+  line-height: 1.5;
+  position: relative;
+  overflow: hidden;
+  margin: 0 auto 1cm auto;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+}
+
+.page-header { flex: 0 0 auto; }
+.page-body { flex: 1 1 auto; }
+.page-footer { flex: 0 0 auto; }
+
+/* --- Encabezado completo (página 1) --- */
+.encabezado-completo { border-bottom: 1.5pt solid #111; padding-bottom: 0.3cm; margin-bottom: 0.4cm; }
+.encabezado-escuela { display: flex; align-items: center; gap: 0.4cm; margin-bottom: 0.25cm; }
+.logo-escuela { height: 1.6cm; width: auto; object-fit: contain; }
+.nombre-escuela-ciclo { flex: 1 1 auto; }
+.nombre-escuela { font-weight: bold; font-size: 13pt; }
+.ciclo-escolar { font-size: 9.5pt; color: #444; }
+.titulo-tipo-doc { font-weight: bold; font-size: 12pt; letter-spacing: 0.5pt; }
+.encabezado-datos { display: flex; flex-wrap: wrap; gap: 0 0.6cm; font-size: 10pt; margin: 0.1cm 0; }
+.encabezado-alumno { font-size: 10pt; margin: 0.15cm 0; }
+.instrucciones-generales { margin-top: 0.25cm; font-style: italic; font-size: 10pt; }
+
+/* --- Mini encabezado (páginas 2+) --- */
+.encabezado-mini {
+  display: flex; justify-content: flex-end; font-size: 9.5pt; color: #333;
+  border-bottom: 0.5pt solid #999; padding-bottom: 0.15cm; margin-bottom: 0.35cm;
+}
+.etiqueta-clave-mini { font-weight: bold; margin-left: 0.2cm; }
+
+/* --- Pie de página --- */
+.page-footer { text-align: center; font-size: 9pt; color: #444; padding-top: 0.2cm; }
+
+/* --- Bloques de contenido --- */
+.bloque-titulo-seccion { margin: 0.5cm 0 0.25cm 0; }
+.titulo-seccion { font-size: 11.5pt; font-weight: bold; margin: 0 0 0.1cm 0; text-transform: uppercase; }
+.instrucciones-seccion { font-style: italic; font-size: 10pt; margin: 0; }
+
+.reactivo { margin-bottom: 0.45cm; }
+.reactivo-encabezado { display: block; }
+.num-reactivo { font-weight: bold; }
+.valor-reactivo { color: #444; font-size: 9.5pt; }
+
+.imagen-reactivo { margin: 0.15cm 0; }
+.imagen-reactivo img { max-width: 100%; max-height: 6cm; display: block; }
+
+.lista-opciones-examen { margin: 0.1cm 0 0 0.6cm; }
+.opcion-examen { display: block; }
+.opcion-correcta { font-weight: bold; }
+
+.tabla-relacion { border-collapse: collapse; width: 100%; margin: 0.15cm 0 0 0; }
+.tabla-relacion td { border: none; padding: 0.08cm 0.3cm; vertical-align: top; }
+.celda-a { width: 55%; }
+.celda-b { width: 45%; }
+.resp-relacion { font-family: monospace; }
+.resp-correcta { font-weight: bold; }
+
+.linea-respuesta { border-bottom: 0.5pt solid #333; height: 0.7cm; margin-top: 0.1cm; }
+.respuesta-modelo { margin-top: 0.1cm; font-size: 10pt; background: #f4f4f4; padding: 0.15cm; }
+
+.vf-opciones { display: flex; gap: 0.6cm; margin-top: 0.1cm; margin-left: 0.6cm; }
+.vf-correcta { font-weight: bold; }
+
+.reactivo-lectura { margin-bottom: 0.3cm; }
+.instrucciones-lectura { font-style: italic; margin: 0 0 0.15cm 0; }
+.texto-lectura { border: 0.5pt solid #999; padding: 0.3cm; background: #fafafa; white-space: pre-wrap; }
+
+.subtotal-seccion { text-align: right; font-weight: bold; font-size: 10pt; margin: 0.1cm 0 0.3cm 0; border-top: 0.5pt solid #ccc; padding-top: 0.1cm; }
+
+.bloque-firma { margin-top: 1cm; }
+.linea-firma { border-bottom: 0.5pt solid #333; width: 8cm; margin: 0 auto; }
+.etiqueta-firma { text-align: center; font-size: 9.5pt; margin-top: 0.1cm; }
+
+/* --- Contenedor de páginas en pantalla --- */
+.hoja-contenedor { padding: 1cm 0; }
+.hoja-contenedor.vista-compacta {
+  transform: scale(0.55);
+  transform-origin: top center;
+  margin-bottom: -12cm; /* compensa el espacio que deja el scale para no dejar hueco enorme abajo */
+}
+
+@media print {
+  @page { size: letter; margin: 0; }
+  body * { visibility: hidden; }
+  .hoja-contenedor, .hoja-contenedor * { visibility: visible; }
+  .hoja-contenedor {
+    position: absolute; top: 0; left: 0; padding: 0; margin: 0;
+    transform: none !important;
+  }
+  .page { box-shadow: none; margin: 0 auto; }
+  .page + .page { break-before: page; }
+}

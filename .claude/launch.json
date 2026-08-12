@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "paginaexamenes",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-c", "import functools,http.server,socketserver; socketserver.TCPServer.allow_reuse_address=True; Handler=functools.partial(http.server.SimpleHTTPRequestHandler, directory='/Users/revertdata/Documents/paginaexamenes'); socketserver.TCPServer(('', 8420), Handler).serve_forever()"],
+      "port": 8420
+    }
+  ]
+}

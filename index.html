@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="es-MX">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Constructor de exámenes</title>
+  <link rel="stylesheet" href="css/app.css" />
+  <link rel="stylesheet" href="css/page.css" />
+</head>
+<body>
+  <header class="barra-superior">
+    <div class="titulo-y-modulos">
+      <h1 id="titulo-app">📝 Constructor de exámenes</h1>
+      <nav id="selector-modulo" class="selector-modulo oculto">
+        <button type="button" id="btn-modulo-examenes" class="btn-modulo">📝 Exámenes</button>
+        <button type="button" id="btn-modulo-grupos" class="btn-modulo">🗓 Grupos</button>
+      </nav>
+    </div>
+    <div id="info-sesion" class="info-sesion"></div>
+  </header>
+
+  <main>
+    <section id="vista-login" class="vista"></section>
+    <section id="vista-lista" class="vista oculto"></section>
+    <section id="vista-editor" class="vista oculto"></section>
+    <section id="vista-config" class="vista oculto"></section>
+    <section id="vista-admin" class="vista oculto"></section>
+    <section id="vista-grupos" class="vista oculto tema-verde"></section>
+    <section id="vista-grupo" class="vista oculto tema-verde"></section>
+  </main>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
