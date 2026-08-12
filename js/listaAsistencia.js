@@ -1,11 +1,16 @@
 // Pase de lista estilo Excel: alumnos en filas, fechas en columnas.
 
 import { el, clear } from './dom.js';
-import { listarAsistencias, obtenerOCrearAsistencia, guardarAsistencia } from './gruposStore.js';
-import { ESTADOS_ASISTENCIA, ETIQUETAS_ESTADO_ASISTENCIA, fechaHoyISO, fechaCortaMX } from './gruposModel.js';
+import {
+  listarAsistencias, obtenerOCrearAsistencia, guardarAsistencia, guardarGrupo,
+} from './gruposStore.js';
+import {
+  ESTADOS_ASISTENCIA, ETIQUETAS_ESTADO_ASISTENCIA, INICIALES_ESTADO_ASISTENCIA, fechaHoyISO, fechaCortaMX,
+  valoresAsistenciaDeGrupo, promedioAsistenciaAlumno,
+} from './gruposModel.js';
 
 const SIGUIENTE_ESTADO = { null: 'presente', presente: 'falta', falta: 'retardo', retardo: 'justificada', justificada: null };
-const INICIALES_ESTADO = { presente: 'P', falta: 'F', retardo: 'R', justificada: 'J' };
+const INICIALES_ESTADO = INICIALES_ESTADO_ASISTENCIA;
 
 export async function montarListaAsistencia(contenedor, grupo) {
   clear(contenedor);
@@ -41,11 +46,13 @@ export async function montarListaAsistencia(contenedor, grupo) {
     }
 
     const fechas = Array.from(porFecha.keys()).sort();
+    const diasArray = Array.from(porFecha.values());
 
     const encabezado = el('tr', {}, [
       el('th', { class: 'celda-nombre-alumno' }, 'Alumno'),
       ...fechas.map((f) => el('th', { class: 'col-fecha' }, fechaCortaMX(f))),
       el('th', {}, 'Faltas'),
+      el('th', {}, 'Asistencia'),
     ]);
 
     const filas = alumnosActivos.map((alumno) => {
@@ -88,10 +95,12 @@ export async function montarListaAsistencia(contenedor, grupo) {
       });
 
       const totales = alturaFila(alumno);
+      const promedio = promedioAsistenciaAlumno(grupo, alumno.id, diasArray);
       return el('tr', {}, [
         el('td', { class: 'celda-nombre-alumno' }, alumno.nombre),
         ...celdas,
         el('td', { class: 'celda-totales' }, String(totales.falta || 0)),
+        el('td', { class: 'celda-promedio' }, promedio === null ? '—' : (promedio * 10).toFixed(1)),
       ]);
     });
 
@@ -115,10 +124,73 @@ export async function montarListaAsistencia(contenedor, grupo) {
     pintarTabla();
   };
 
+  const leyenda = el('div', { class: 'leyenda-asistencia' });
+  function pintarLeyenda() {
+    clear(leyenda);
+    const valores = valoresAsistenciaDeGrupo(grupo);
+    ESTADOS_ASISTENCIA.forEach((estado) => {
+      leyenda.appendChild(el('span', { class: 'leyenda-item' }, [
+        el('span', { class: `leyenda-swatch estado-${estado}` }, INICIALES_ESTADO_ASISTENCIA[estado]),
+        `${ETIQUETAS_ESTADO_ASISTENCIA[estado]} (${valores[estado]})`,
+      ]));
+    });
+  }
+  pintarLeyenda();
+
+  const btnValores = el('button', { type: 'button', class: 'btn-secundario', onclick: () => abrirModalValores() }, '⚙ Valores de asistencia');
+
+  function abrirModalValores() {
+    const valores = valoresAsistenciaDeGrupo(grupo);
+    const overlay = el('div', { class: 'overlay-modal tema-verde' });
+    const campos = {};
+    const filasCampos = ESTADOS_ASISTENCIA.map((estado) => {
+      const input = el('input', {
+        type: 'number', step: '0.05', min: '0', max: '1', value: valores[estado],
+      });
+      campos[estado] = input;
+      return el('div', { class: 'campo' }, [
+        el('label', {}, `${ETIQUETAS_ESTADO_ASISTENCIA[estado]} (${INICIALES_ESTADO_ASISTENCIA[estado]})`),
+        input,
+      ]);
+    });
+    const mensaje = el('p', { class: 'mensaje-login' });
+    const btnGuardar = el('button', { type: 'button', class: 'btn-primario' }, 'Guardar');
+    const btnCancelar = el('button', { type: 'button', class: 'btn-secundario', onclick: () => overlay.remove() }, 'Cancelar');
+
+    btnGuardar.onclick = async () => {
+      const nuevosValores = {};
+      for (const estado of ESTADOS_ASISTENCIA) {
+        const v = parseFloat(campos[estado].value);
+        nuevosValores[estado] = Number.isFinite(v) ? v : 0;
+      }
+      grupo.valoresAsistencia = nuevosValores;
+      btnGuardar.disabled = true; btnGuardar.textContent = 'Guardando…';
+      try {
+        await guardarGrupo(grupo);
+        overlay.remove();
+        pintarLeyenda();
+        pintarTabla();
+      } catch (err) {
+        mensaje.textContent = `No se pudo guardar: ${err.message}`;
+        btnGuardar.disabled = false; btnGuardar.textContent = 'Guardar';
+      }
+    };
+
+    overlay.appendChild(el('div', { class: 'panel modal-cambiar-clave' }, [
+      el('h2', {}, 'Valores de asistencia'),
+      el('p', { class: 'etiqueta-chica' }, 'Puntos que vale cada tipo (escala 0 a 1) para calcular la columna "Asistencia" de cada alumno.'),
+      ...filasCampos,
+      el('div', { class: 'acciones-modal' }, [btnGuardar, btnCancelar]),
+      mensaje,
+    ]));
+    document.body.appendChild(overlay);
+  }
+
   contenedor.appendChild(el('div', { class: 'panel' }, [
     el('h2', {}, 'Pase de lista'),
     el('p', { class: 'etiqueta-chica' }, 'Haz clic en una celda para marcar Presente → Falta → Retardo → Justificada. El ícono 📝 agrega una nota para ese alumno ese día.'),
-    el('div', { class: 'barra-nueva' }, [campoFecha, btnAgregarFecha]),
+    leyenda,
+    el('div', { class: 'barra-nueva' }, [campoFecha, btnAgregarFecha, btnValores]),
     contenedorTabla,
   ]));
 

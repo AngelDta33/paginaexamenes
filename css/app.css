@@ -220,8 +220,22 @@ button {
 .btn-nota-dia.tiene-nota { opacity: 1; }
 .celda-totales { font-weight: bold; color: var(--rojo); }
 
+.leyenda-asistencia { display: flex; gap: 1.1rem; flex-wrap: wrap; margin: 0.5rem 0 0.9rem 0; font-size: 0.85rem; color: var(--gris); }
+.leyenda-item { display: flex; align-items: center; gap: 0.35rem; }
+.leyenda-swatch {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.5rem; height: 1.5rem; border-radius: 5px; font-weight: bold; font-size: 0.8rem;
+  border: 1px solid var(--borde); background: #fafafa; color: var(--gris);
+}
+.leyenda-swatch.estado-presente { background: #d9f2e3; border-color: #8fd4ab; color: #1c6b3a; }
+.leyenda-swatch.estado-falta { background: #fbdcd8; border-color: #e79890; color: #9c2c22; }
+.leyenda-swatch.estado-retardo { background: #fdf0c4; border-color: #e8cb6a; color: #8a6d00; }
+.leyenda-swatch.estado-justificada { background: #e3e6ea; border-color: #b9c0c9; color: #444; }
+
 .input-nombre-rubro { font-size: 0.85rem; margin-bottom: 0.2rem; font-weight: bold; }
 .fila-porcentaje-rubro { display: flex; align-items: center; gap: 0.2rem; justify-content: center; font-weight: normal; }
 .input-porcentaje-rubro { width: 3.6rem !important; padding: 0.15rem !important; }
 .input-calificacion { width: 4rem !important; text-align: center; }
 .celda-promedio { font-weight: bold; color: var(--azul); }
+.insignia-auto { display: inline-block; background: var(--azul-suave); color: var(--azul); border-radius: 4px; padding: 0 0.3rem; font-size: 0.7rem; font-weight: normal; margin-left: 0.3rem; vertical-align: middle; }
+.celda-asistencia-auto { font-weight: bold; color: var(--azul); background: var(--azul-suave); }

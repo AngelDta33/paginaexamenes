@@ -8,6 +8,8 @@ import {
 import { nuevoGrupo, nuevoAlumno } from './gruposModel.js';
 import { montarListaAsistencia } from './listaAsistencia.js';
 import { montarRubrica } from './rubrica.js';
+import { montarEvaluacionesRubro } from './evaluacionesRubro.js';
+import { exportarGrupoExcel } from './exportarExcel.js';
 
 function fechaCorta(iso) {
   if (!iso) return '';
@@ -74,7 +76,8 @@ export async function montarGrupo(contenedor, grupoId, { onVolver }) {
   }
 
   clear(contenedor);
-  let pestanaActiva = 'lista'; // 'lista' | 'rubrica'
+  let pestanaActiva = 'lista'; // 'lista' | 'rubrica' | 'evaluaciones'
+  let rubroDetalleId = null;
   let guardarTimeout = null;
   const estadoGuardado = el('span', { class: 'estado-guardado' });
 
@@ -159,20 +162,43 @@ export async function montarGrupo(contenedor, grupoId, { onVolver }) {
 
   function actualizarBotonesTab() {
     btnTabLista.style.fontWeight = pestanaActiva === 'lista' ? 'bold' : 'normal';
-    btnTabRubrica.style.fontWeight = pestanaActiva === 'rubrica' ? 'bold' : 'normal';
+    btnTabRubrica.style.fontWeight = pestanaActiva === 'rubrica' || pestanaActiva === 'evaluaciones' ? 'bold' : 'normal';
   }
   function pintarPestana() {
     actualizarBotonesTab();
-    if (pestanaActiva === 'lista') montarListaAsistencia(contenedorPestana, grupo);
-    else montarRubrica(contenedorPestana, grupo);
+    if (pestanaActiva === 'lista') {
+      montarListaAsistencia(contenedorPestana, grupo);
+    } else if (pestanaActiva === 'evaluaciones') {
+      montarEvaluacionesRubro(contenedorPestana, grupo, rubroDetalleId, {
+        onVolver: () => { pestanaActiva = 'rubrica'; pintarPestana(); },
+      });
+    } else {
+      montarRubrica(contenedorPestana, grupo, {
+        onAbrirEvaluaciones: (rubroId) => { pestanaActiva = 'evaluaciones'; rubroDetalleId = rubroId; pintarPestana(); },
+      });
+    }
   }
   btnTabLista.onclick = () => { pestanaActiva = 'lista'; pintarPestana(); };
   btnTabRubrica.onclick = () => { pestanaActiva = 'rubrica'; pintarPestana(); };
 
+  const btnExportarExcel = el('button', {
+    type: 'button', class: 'btn-primario', style: 'margin-left:auto;',
+    onclick: async () => {
+      btnExportarExcel.disabled = true; btnExportarExcel.textContent = 'Generando…';
+      try {
+        await exportarGrupoExcel(grupo);
+      } catch (err) {
+        alert(`No se pudo exportar: ${err.message}`);
+      } finally {
+        btnExportarExcel.disabled = false; btnExportarExcel.textContent = '⬇ Exportar a Excel';
+      }
+    },
+  }, '⬇ Exportar a Excel');
+
   contenedor.appendChild(el('button', { type: 'button', class: 'btn-secundario', onclick: onVolver, style: 'margin-bottom:0.8rem;' }, '← Volver a mis grupos'));
   contenedor.appendChild(panelDatos);
   contenedor.appendChild(panelAlumnos);
-  contenedor.appendChild(el('div', { class: 'selector-pestanas' }, [btnTabLista, btnTabRubrica]));
+  contenedor.appendChild(el('div', { class: 'selector-pestanas' }, [btnTabLista, btnTabRubrica, btnExportarExcel]));
   contenedor.appendChild(contenedorPestana);
 
   pintarPestana();
