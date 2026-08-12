@@ -1,4 +1,4 @@
-import { el, clear } from './dom.js';
+import { el, clear, campoContrasena } from './dom.js';
 import {
   observarSesion, iniciarSesion, cerrarSesion, cambiarContrasena, esRevisorOAdmin,
 } from './auth.js';
@@ -56,8 +56,8 @@ function pintarInfoSesion() {
 
 function abrirModalCambiarContrasena() {
   const overlay = el('div', { class: 'overlay-modal' });
-  const campoNueva = el('input', { type: 'password', placeholder: 'Mínimo 6 caracteres' });
-  const campoConfirmar = el('input', { type: 'password', placeholder: 'Repite la contraseña' });
+  const { contenedor: campoNuevaCont, input: campoNueva } = campoContrasena({ placeholder: 'Mínimo 6 caracteres' });
+  const { contenedor: campoConfirmarCont, input: campoConfirmar } = campoContrasena({ placeholder: 'Repite la contraseña' });
   const mensaje = el('p', { class: 'mensaje-login' });
   const btnGuardar = el('button', { type: 'button', class: 'btn-primario' }, 'Guardar');
   const btnCancelar = el('button', { type: 'button', class: 'btn-secundario', onclick: () => overlay.remove() }, 'Cancelar');
@@ -80,8 +80,8 @@ function abrirModalCambiarContrasena() {
 
   overlay.appendChild(el('div', { class: 'panel modal-cambiar-clave' }, [
     el('h2', {}, 'Cambiar contraseña'),
-    el('div', { class: 'campo' }, [el('label', {}, 'Nueva contraseña'), campoNueva]),
-    el('div', { class: 'campo' }, [el('label', {}, 'Confirmar'), campoConfirmar]),
+    el('div', { class: 'campo' }, [el('label', {}, 'Nueva contraseña'), campoNuevaCont]),
+    el('div', { class: 'campo' }, [el('label', {}, 'Confirmar'), campoConfirmarCont]),
     el('div', { class: 'acciones-modal' }, [btnGuardar, btnCancelar]),
     mensaje,
   ]));
@@ -93,7 +93,7 @@ function abrirModalCambiarContrasena() {
 function pintarLogin() {
   clear(vistaLogin);
   const campoEmail = el('input', { type: 'email', placeholder: 'correo@escuela.mx' });
-  const campoPass = el('input', { type: 'password', placeholder: 'Contraseña' });
+  const { contenedor: campoPassCont, input: campoPass } = campoContrasena({ placeholder: 'Contraseña' });
   const mensaje = el('p', { class: 'mensaje-login' });
   const btn = el('button', { type: 'button', class: 'btn-primario' }, 'Entrar');
 
@@ -119,7 +119,7 @@ function pintarLogin() {
     el('div', { class: 'panel panel-login' }, [
       el('h2', {}, '📝 Constructor de exámenes'),
       el('div', { class: 'campo' }, [el('label', {}, 'Correo'), campoEmail]),
-      el('div', { class: 'campo' }, [el('label', {}, 'Contraseña'), campoPass]),
+      el('div', { class: 'campo' }, [el('label', {}, 'Contraseña'), campoPassCont]),
       btn,
       mensaje,
     ]),

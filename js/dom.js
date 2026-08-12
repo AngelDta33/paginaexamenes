@@ -21,3 +21,22 @@ export function el(tag, attrs = {}, children = []) {
 export function clear(node) {
   while (node.firstChild) node.removeChild(node.firstChild);
 }
+
+// Campo de contraseña con botón de "mostrar/ocultar" — para que un maestro pueda
+// revisar lo que escribió antes de enviarlo, en vez de tener que confiar a ciegas.
+// Devuelve { contenedor, input } — usa `contenedor` para insertarlo y `input` para
+// leer/enfocar el valor como con cualquier <input>.
+export function campoContrasena(attrs = {}) {
+  const input = el('input', { type: 'password', ...attrs });
+  const boton = el('button', {
+    type: 'button', class: 'btn-ojo', title: 'Mostrar contraseña',
+    onclick: () => {
+      const vaAMostrar = input.type === 'password';
+      input.type = vaAMostrar ? 'text' : 'password';
+      boton.textContent = vaAMostrar ? '🙈' : '👁';
+      boton.title = vaAMostrar ? 'Ocultar contraseña' : 'Mostrar contraseña';
+    },
+  }, '👁');
+  const contenedor = el('div', { class: 'campo-contrasena' }, [input, boton]);
+  return { contenedor, input };
+}

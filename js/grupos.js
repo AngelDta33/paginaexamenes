@@ -93,26 +93,41 @@ export async function montarGrupo(contenedor, grupoId, { onVolver }) {
   }
 
   // --- Datos generales del grupo ---
+  // Ya con nombre y materia capturados, este panel se colapsa por defecto: casi
+  // siempre se abre el grupo para pasar lista o calificar, no para editar sus datos.
   const campoTexto = (etiqueta, valor, onInput) => el('div', { class: 'campo' }, [
     el('label', {}, etiqueta),
     el('input', { type: 'text', value: valor || '', oninput: (e) => { onInput(e.target.value); guardarConDebounce(); } }),
   ]);
 
-  const panelDatos = el('div', { class: 'panel' }, [
-    el('h2', {}, ['Datos del grupo ', estadoGuardado]),
-    el('div', { class: 'rejilla-campos' }, [
-      campoTexto('Nombre del grupo', grupo.nombre, (v) => { grupo.nombre = v; }),
-      campoTexto('Materia', grupo.materia, (v) => { grupo.materia = v; }),
-      campoTexto('Grado', grupo.grado, (v) => { grupo.grado = v; }),
-      campoTexto('Grupo', grupo.grupo, (v) => { grupo.grupo = v; }),
-      campoTexto('Ciclo escolar', grupo.cicloEscolar, (v) => { grupo.cicloEscolar = v; }),
-    ]),
+  let datosColapsado = !!(grupo.nombre && grupo.materia);
+  const cuerpoDatos = el('div', { class: 'rejilla-campos' }, [
+    campoTexto('Nombre del grupo', grupo.nombre, (v) => { grupo.nombre = v; }),
+    campoTexto('Materia', grupo.materia, (v) => { grupo.materia = v; }),
+    campoTexto('Grado', grupo.grado, (v) => { grupo.grado = v; }),
+    campoTexto('Grupo', grupo.grupo, (v) => { grupo.grupo = v; }),
+    campoTexto('Ciclo escolar', grupo.cicloEscolar, (v) => { grupo.cicloEscolar = v; }),
   ]);
+  const btnToggleDatos = el('button', {
+    type: 'button', class: 'btn-icono', title: 'Mostrar/ocultar datos del grupo',
+    onclick: () => { datosColapsado = !datosColapsado; actualizarColapsoDatos(); },
+  }, '▾');
+  function actualizarColapsoDatos() {
+    cuerpoDatos.classList.toggle('oculto', datosColapsado);
+    btnToggleDatos.textContent = datosColapsado ? '▸' : '▾';
+  }
+  const panelDatos = el('div', { class: 'panel' }, [
+    el('h2', { style: 'display:flex; align-items:center; gap:0.3rem;' }, [btnToggleDatos, 'Datos del grupo ', estadoGuardado]),
+    cuerpoDatos,
+  ]);
+  actualizarColapsoDatos();
 
   // --- Roster de alumnos ---
   const listaAlumnos = el('div', { class: 'lista-alumnos' });
+  const contadorAlumnos = el('span', {}, `(${(grupo.alumnos || []).length})`);
   function pintarAlumnos() {
     clear(listaAlumnos);
+    contadorAlumnos.textContent = `(${(grupo.alumnos || []).length})`;
     (grupo.alumnos || []).forEach((alumno) => {
       listaAlumnos.appendChild(el('div', { class: 'fila-usuario' }, [
         el('div', { class: 'info-usuario' }, [el('strong', {}, alumno.nombre)]),
@@ -148,12 +163,29 @@ export async function montarGrupo(contenedor, grupoId, { onVolver }) {
     },
   }, '+ Agregar todos');
 
-  const panelAlumnos = el('div', { class: 'panel' }, [
-    el('h2', {}, 'Alumnos'),
+  // Igual que "Datos del grupo": si ya hay alumnos capturados, se colapsa por
+  // defecto para no interponerse entre "Abrir grupo" y el pase de lista/rúbrica.
+  let alumnosColapsado = (grupo.alumnos || []).length > 0;
+  const cuerpoAlumnos = el('div', {}, [
     listaAlumnos,
     el('div', { class: 'barra-nueva' }, [campoAlumno, btnAgregarAlumno]),
     el('div', { class: 'campo', style: 'margin-top:0.6rem;' }, [campoPegado, btnAgregarPegado]),
   ]);
+  const btnToggleAlumnos = el('button', {
+    type: 'button', class: 'btn-icono', title: 'Mostrar/ocultar lista de alumnos',
+    onclick: () => { alumnosColapsado = !alumnosColapsado; actualizarColapsoAlumnos(); },
+  }, '▾');
+  function actualizarColapsoAlumnos() {
+    cuerpoAlumnos.classList.toggle('oculto', alumnosColapsado);
+    btnToggleAlumnos.textContent = alumnosColapsado ? '▸' : '▾';
+  }
+  const panelAlumnos = el('div', { class: 'panel' }, [
+    el('h2', { style: 'display:flex; align-items:center; gap:0.3rem;' }, [
+      btnToggleAlumnos, 'Alumnos ', contadorAlumnos,
+    ]),
+    cuerpoAlumnos,
+  ]);
+  actualizarColapsoAlumnos();
 
   // --- Pestañas ---
   const contenedorPestana = el('div', {});

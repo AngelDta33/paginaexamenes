@@ -97,6 +97,13 @@
   @page { size: letter; margin: 0; }
   body * { visibility: hidden; }
   .hoja-contenedor, .hoja-contenedor * { visibility: visible; }
+  /* .panel-preview usa position:sticky para la pantalla — eso lo convierte en el
+     "contenedor de referencia" de .hoja-contenedor (position:absolute), así que
+     top:0/left:0 terminaba anclado a la posición de ese panel dentro del formulario
+     (que en la hoja de impresión, más angosta, cae debajo de todos los reactivos)
+     en vez de anclarse a la esquina de la hoja — de ahí las páginas en blanco antes
+     del examen. Quitar el sticky solo en impresión corrige el punto de referencia. */
+  .panel-preview { position: static; }
   .hoja-contenedor {
     position: absolute; top: 0; left: 0; padding: 0; margin: 0;
     transform: none !important;

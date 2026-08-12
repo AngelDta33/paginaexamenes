@@ -35,6 +35,7 @@ function renderEncabezadoCompleto(examen, config, modoClave) {
   const filas = el('div', { class: 'encabezado-datos' }, [
     el('span', {}, `Grado: ${meta.grado || '____'}`),
     el('span', {}, `Grupo: ${meta.grupo || '____'}`),
+    el('span', {}, 'N.L.: ______'),
     el('span', {}, `Materia: ${meta.materia || '____'}`),
     el('span', {}, `Trimestre: ${meta.trimestre || '____'}`),
     el('span', {}, `Examen Tipo ${examen.tipoExamen || 'A'}`),
@@ -49,6 +50,10 @@ function renderEncabezadoCompleto(examen, config, modoClave) {
     el('span', {}, `Total de puntos: ${total}`),
     el('span', {}, `Valor del examen: ${meta.valorExamen}`),
   ]);
+  const filaCalificacion = el('div', { class: 'encabezado-datos' }, [
+    el('span', {}, 'Puntos obtenidos: ______________'),
+    el('span', {}, 'Porcentaje: ______________'),
+  ]);
   return el('div', { class: 'encabezado-completo' }, [
     el('div', { class: 'encabezado-escuela' }, [
       config.logoDataUrl ? el('img', { class: 'logo-escuela', src: config.logoDataUrl }) : null,
@@ -61,6 +66,7 @@ function renderEncabezadoCompleto(examen, config, modoClave) {
     filas,
     filaAlumno,
     filaProfesor,
+    filaCalificacion,
     examen.instruccionesGenerales ? el('div', { class: 'instrucciones-generales' }, examen.instruccionesGenerales) : null,
   ]);
 }

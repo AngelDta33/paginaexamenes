@@ -86,9 +86,9 @@ button {
 .panel h2 { font-size: 1rem; margin: 0 0 0.6rem 0; color: var(--azul); }
 
 .rejilla-campos { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
-.campo label { display: block; font-size: 0.82rem; color: var(--gris); margin-bottom: 0.15rem; }
+.campo label { display: block; font-size: 0.9rem; color: var(--gris); margin-bottom: 0.2rem; }
 .campo input, .campo select, .campo textarea, textarea, input[type=text], input[type=number], input[type=date], select {
-  width: 100%; padding: 0.4rem 0.5rem; border: 1px solid var(--borde); border-radius: 5px; font-size: 0.95rem; font-family: inherit;
+  width: 100%; padding: 0.45rem 0.55rem; border: 1px solid var(--borde); border-radius: 5px; font-size: 1rem; font-family: inherit;
 }
 
 .barra-validacion { border-radius: 8px; padding: 0.6rem 0.8rem; margin-bottom: 1rem; font-size: 0.9rem; }
@@ -146,6 +146,15 @@ button {
 .panel-login .btn-primario { width: 100%; margin-top: 0.3rem; }
 .mensaje-login { color: var(--rojo); font-size: 0.88rem; min-height: 1.2em; text-align: center; }
 .mensaje-login.ok { color: #1c6b3a; }
+
+.campo-contrasena { position: relative; }
+.campo-contrasena input { width: 100%; padding-right: 2.6rem; }
+.btn-ojo {
+  position: absolute; right: 0.3rem; top: 50%; transform: translateY(-50%);
+  background: none; border: none; font-size: 1.15rem; padding: 0.3rem 0.4rem;
+  line-height: 1; border-radius: 4px;
+}
+.btn-ojo:hover { background: #eee; }
 
 /* --- Modal genérico --- */
 .overlay-modal {
