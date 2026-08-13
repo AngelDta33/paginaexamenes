@@ -29,6 +29,21 @@ function renderFirma() {
   ]);
 }
 
+const ORDINALES_TRIMESTRE = { 1: 'PRIMER', 2: 'SEGUNDO', 3: 'TERCER' };
+
+// Punto II del formato oficial: "Colocar el tipo de examen según corresponda
+// (centrado)" — ejemplo: "EXAMEN PRIMER TRIMESTRE 2026-2027" / "TIPO A ó B".
+function renderTituloExamenCentrado(examen, config) {
+  const ordinal = ORDINALES_TRIMESTRE[Number(examen.meta.trimestre)];
+  const partes = ['EXAMEN'];
+  if (ordinal) partes.push(`${ordinal} TRIMESTRE`);
+  if (config.cicloEscolar) partes.push(config.cicloEscolar);
+  return el('div', { class: 'titulo-examen-centrado' }, [
+    el('div', {}, partes.join(' ')),
+    el('div', {}, `TIPO ${examen.tipoExamen || 'A'}`),
+  ]);
+}
+
 function renderEncabezadoCompleto(examen, config, modoClave) {
   const { meta } = examen;
   const total = totalExamen(examen);
@@ -67,14 +82,21 @@ function renderEncabezadoCompleto(examen, config, modoClave) {
     filaAlumno,
     filaProfesor,
     filaCalificacion,
+    renderTituloExamenCentrado(examen, config),
     examen.instruccionesGenerales ? el('div', { class: 'instrucciones-generales' }, examen.instruccionesGenerales) : null,
   ]);
 }
 
+// Punto VI del formato oficial: en páginas 2+ va, en la esquina superior
+// derecha, la materia y el grado — y, según el ejemplo, el tipo de examen en
+// una segunda línea (ej. "ESP 1°" / "TIPO A o B").
 function renderEncabezadoMini(examen, modoClave) {
   return el('div', { class: 'encabezado-mini' }, [
-    el('span', {}, `${examen.meta.materia || ''} · ${examen.meta.grado || ''}${examen.meta.grupo || ''}`),
-    modoClave ? el('span', { class: 'etiqueta-clave-mini' }, ' — CLAVE') : null,
+    el('div', { class: 'encabezado-mini-materia' }, [
+      `${examen.meta.materia || ''} ${examen.meta.grado || ''}${examen.meta.grupo || ''}`.trim(),
+      modoClave ? el('span', { class: 'etiqueta-clave-mini' }, ' — CLAVE') : null,
+    ]),
+    el('div', { class: 'encabezado-mini-tipo' }, `TIPO ${examen.tipoExamen || 'A'}`),
   ]);
 }
 

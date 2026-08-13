@@ -35,11 +35,17 @@
 .encabezado-alumno { font-size: 10pt; margin: 0.15cm 0; }
 .instrucciones-generales { margin-top: 0.25cm; font-style: italic; font-size: 10pt; }
 
+/* --- Título centrado "EXAMEN [trimestre] [ciclo]" / "TIPO A ó B" (punto II) --- */
+.titulo-examen-centrado {
+  text-align: center; font-weight: bold; font-size: 12pt; margin-top: 0.3cm; letter-spacing: 0.3pt;
+}
+
 /* --- Mini encabezado (páginas 2+) --- */
 .encabezado-mini {
-  display: flex; justify-content: flex-end; font-size: 9.5pt; color: #333;
+  display: flex; flex-direction: column; align-items: flex-end; font-size: 9.5pt; color: #333;
   border-bottom: 0.5pt solid #999; padding-bottom: 0.15cm; margin-bottom: 0.35cm;
 }
+.encabezado-mini-tipo { font-weight: bold; }
 .etiqueta-clave-mini { font-weight: bold; margin-left: 0.2cm; }
 
 /* --- Pie de página --- */
