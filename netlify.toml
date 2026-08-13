@@ -1,0 +1,26 @@
+[build]
+  publish = "."
+
+# Sin esto, Netlify (o el navegador) puede quedarse sirviendo una versión vieja
+# de main.js/app.css después de cada actualización — esta app no usa nombres de
+# archivo con hash, así que depende de estos headers para que los cambios se
+# vean de inmediato (mismo motivo por el que firebase.json ya traía esto).
+[[headers]]
+  for = "/"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/js/*"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/css/*"
+  [headers.values]
+    Cache-Control = "no-cache"
