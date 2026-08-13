@@ -117,7 +117,7 @@ function pintarLogin() {
 
   vistaLogin.appendChild(el('div', { class: 'pantalla-login' }, [
     el('div', { class: 'panel panel-login' }, [
-      el('h2', {}, '📝 Constructor de exámenes'),
+      el('h2', {}, '📋 Panel de control CCUMA'),
       el('div', { class: 'campo' }, [el('label', {}, 'Correo'), campoEmail]),
       el('div', { class: 'campo' }, [el('label', {}, 'Contraseña'), campoPassCont]),
       btn,
@@ -188,7 +188,7 @@ function renderGrupos() {
 function renderGrupo(grupoId) {
   marcarModuloActivo('grupos');
   mostrarVista(vistaGrupo);
-  montarGrupo(vistaGrupo, grupoId, { onVolver: irAGrupos });
+  montarGrupo(vistaGrupo, grupoId, sesion, { onVolver: irAGrupos });
 }
 
 // --- Lista de exámenes ---

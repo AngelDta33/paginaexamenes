@@ -14,10 +14,14 @@ can silently keep serving stale module graphs.
 """
 import functools
 import http.server
+import os
 import socketserver
 import sys
 
-PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8420
+# PORT env var (set by the preview runner when it assigns a free port) wins
+# over the positional arg, so this still works whether launched by hand
+# (`python3 serve.py 8420 <dir>`) or by the runner's autoPort assignment.
+PORT = int(os.environ.get("PORT") or (sys.argv[1] if len(sys.argv) > 1 else 8420))
 DIRECTORY = sys.argv[2] if len(sys.argv) > 2 else "."
 
 

@@ -9,7 +9,7 @@ import {
   nuevaEvaluacion, calificacionAlumno, sumaPorcentajesEvaluaciones, validarEvaluaciones,
 } from './gruposModel.js';
 
-export function montarEvaluacionesRubro(contenedor, grupo, rubroId, { onVolver }) {
+export function montarEvaluacionesRubro(contenedor, grupo, rubroId, { onVolver, soloLectura = false }) {
   clear(contenedor);
   const rubro = (grupo.rubros || []).find((r) => r.id === rubroId);
   if (!rubro) {
@@ -82,11 +82,11 @@ export function montarEvaluacionesRubro(contenedor, grupo, rubroId, { onVolver }
         ev.fecha ? el('div', { class: 'etiqueta-chica' }, ev.fecha) : null,
         el('div', { class: 'fila-porcentaje-rubro' }, [
           el('input', {
-            type: 'number', class: 'input-porcentaje-rubro', value: ev.porcentaje ?? 0, min: '0', max: '100',
+            type: 'number', class: 'input-porcentaje-rubro', value: ev.porcentaje ?? 0, min: '0', max: '100', disabled: soloLectura,
             oninput: (e) => { ev.porcentaje = parseFloat(e.target.value) || 0; pintarValidacion(); pintarTabla(); guardarConDebounce(); },
           }),
           '%',
-          el('button', {
+          soloLectura ? null : el('button', {
             type: 'button', class: 'btn-icono btn-eliminar', title: `Eliminar ${ev.nombre || 'esta evaluación'}`,
             onclick: () => {
               rubro.evaluaciones = rubro.evaluaciones.filter((e2) => e2.id !== ev.id);
@@ -119,7 +119,7 @@ export function montarEvaluacionesRubro(contenedor, grupo, rubroId, { onVolver }
 
       const celdas = evaluaciones.map((ev) => el('td', {}, [
         el('input', {
-          type: 'number', class: 'input-calificacion', min: '0', max: '10', step: '0.1',
+          type: 'number', class: 'input-calificacion', min: '0', max: '10', step: '0.1', disabled: soloLectura,
           value: cal.notasEvaluacion[ev.id] ?? '',
           oninput: (e) => {
             cal.notasEvaluacion[ev.id] = e.target.value === '' ? null : parseFloat(e.target.value);
@@ -157,13 +157,13 @@ export function montarEvaluacionesRubro(contenedor, grupo, rubroId, { onVolver }
   contenedor.appendChild(el('button', { type: 'button', class: 'btn-secundario', onclick: onVolver, style: 'margin-bottom:0.8rem;' }, '← Volver a la rúbrica'));
   contenedor.appendChild(el('div', { class: 'panel' }, [
     el('h2', {}, [`${nombreRubro} `, estadoGuardado]),
-    el('p', { class: 'etiqueta-chica' }, `Cada "${nombreRubro}" que agregues aquí (por ejemplo, cada examen) es una captura distinta, con su propio porcentaje — igual que los rubros de la rúbrica. El resultado alimenta sola la calificación de este rubro en "Rúbrica y calificaciones"; ya no se captura nada allá para "${nombreRubro}".`),
-    el('div', { class: 'rejilla-campos' }, [
+    el('p', { class: 'etiqueta-chica' }, soloLectura ? 'Solo lectura: no se puede editar esta captura.' : `Cada "${nombreRubro}" que agregues aquí (por ejemplo, cada examen) es una captura distinta, con su propio porcentaje — igual que los rubros de la rúbrica. El resultado alimenta sola la calificación de este rubro en "Rúbrica y calificaciones"; ya no se captura nada allá para "${nombreRubro}".`),
+    soloLectura ? null : el('div', { class: 'rejilla-campos' }, [
       el('div', { class: 'campo' }, [el('label', {}, 'Nombre'), campoNombre]),
       el('div', { class: 'campo' }, [el('label', {}, 'Descripción (opcional)'), campoDescripcion]),
       el('div', { class: 'campo' }, [el('label', {}, 'Fecha de aplicación'), campoFecha]),
     ]),
-    btnAgregar,
+    soloLectura ? null : btnAgregar,
     barraValidacion,
     contenedorTabla,
   ]));

@@ -12,7 +12,7 @@ import {
 const SIGUIENTE_ESTADO = { null: 'presente', presente: 'falta', falta: 'retardo', retardo: 'justificada', justificada: null };
 const INICIALES_ESTADO = INICIALES_ESTADO_ASISTENCIA;
 
-export async function montarListaAsistencia(contenedor, grupo) {
+export async function montarListaAsistencia(contenedor, grupo, { soloLectura = false } = {}) {
   clear(contenedor);
   contenedor.appendChild(el('p', {}, 'Cargando pase de lista…'));
 
@@ -61,8 +61,9 @@ export async function montarListaAsistencia(contenedor, grupo) {
         const reg = dia.registros[alumno.id] || { estado: null, nota: '' };
         const celda = el('td', { class: `celda-asistencia ${reg.estado ? `estado-${reg.estado}` : ''}` }, [
           el('button', {
-            type: 'button', class: 'btn-celda-estado', title: ETIQUETAS_ESTADO_ASISTENCIA[reg.estado] || 'Sin marcar',
-            onclick: async () => {
+            type: 'button', class: 'btn-celda-estado', disabled: soloLectura,
+            title: ETIQUETAS_ESTADO_ASISTENCIA[reg.estado] || 'Sin marcar',
+            onclick: soloLectura ? undefined : async () => {
               const actual = reg.estado || null;
               const siguiente = SIGUIENTE_ESTADO[actual === null ? 'null' : actual];
               reg.estado = siguiente;
@@ -76,8 +77,9 @@ export async function montarListaAsistencia(contenedor, grupo) {
             },
           }, reg.estado ? INICIALES_ESTADO[reg.estado] : '·'),
           el('button', {
-            type: 'button', class: `btn-nota-dia ${reg.nota ? 'tiene-nota' : ''}`, title: reg.nota ? `Nota: ${reg.nota}` : 'Agregar nota',
-            onclick: async () => {
+            type: 'button', class: `btn-nota-dia ${reg.nota ? 'tiene-nota' : ''}`, disabled: soloLectura,
+            title: reg.nota ? `Nota: ${reg.nota}` : 'Agregar nota',
+            onclick: soloLectura ? undefined : async () => {
               const nueva = prompt(`Nota para ${alumno.nombre} el ${fechaCortaMX(f)}:`, reg.nota || '');
               if (nueva === null) return;
               reg.nota = nueva.trim();
@@ -188,9 +190,9 @@ export async function montarListaAsistencia(contenedor, grupo) {
 
   contenedor.appendChild(el('div', { class: 'panel' }, [
     el('h2', {}, 'Pase de lista'),
-    el('p', { class: 'etiqueta-chica' }, 'Haz clic en una celda para marcar Presente → Falta → Retardo → Justificada. El ícono 📝 agrega una nota para ese alumno ese día.'),
+    el('p', { class: 'etiqueta-chica' }, soloLectura ? 'Solo lectura: no se puede editar la asistencia.' : 'Haz clic en una celda para marcar Presente → Falta → Retardo → Justificada. El ícono 📝 agrega una nota para ese alumno ese día.'),
     leyenda,
-    el('div', { class: 'barra-nueva' }, [campoFecha, btnAgregarFecha, btnValores]),
+    soloLectura ? null : el('div', { class: 'barra-nueva' }, [campoFecha, btnAgregarFecha, btnValores]),
     contenedorTabla,
   ]));
 

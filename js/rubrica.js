@@ -13,7 +13,7 @@ import {
   sumaPorcentajes, validarRubros, calcularPromedio, valorRubro,
 } from './gruposModel.js';
 
-export async function montarRubrica(contenedor, grupo, { onAbrirEvaluaciones } = {}) {
+export async function montarRubrica(contenedor, grupo, { onAbrirEvaluaciones, soloLectura = false } = {}) {
   clear(contenedor);
   contenedor.appendChild(el('p', {}, 'Cargando rúbrica…'));
 
@@ -93,18 +93,18 @@ export async function montarRubrica(contenedor, grupo, { onAbrirEvaluaciones } =
             ? el('div', { class: 'input-nombre-rubro' }, [rubro.nombre, el('span', { class: 'insignia-auto' }, 'auto')])
             : el('div', {}, [
               el('input', {
-                type: 'text', class: 'input-nombre-rubro', value: rubro.nombre, placeholder: 'Nombre del rubro',
+                type: 'text', class: 'input-nombre-rubro', value: rubro.nombre, placeholder: 'Nombre del rubro', disabled: soloLectura,
                 oninput: (e) => { rubro.nombre = e.target.value; pintarBotonesRubro(); guardarConDebounce(); },
               }),
               esAuto ? el('span', { class: 'insignia-auto' }, 'auto') : null,
             ]),
           el('div', { class: 'fila-porcentaje-rubro' }, [
             el('input', {
-              type: 'number', class: 'input-porcentaje-rubro', value: rubro.porcentaje, min: '0', max: '100',
+              type: 'number', class: 'input-porcentaje-rubro', value: rubro.porcentaje, min: '0', max: '100', disabled: soloLectura,
               oninput: (e) => { rubro.porcentaje = parseFloat(e.target.value) || 0; pintarValidacion(); pintarTabla(); guardarConDebounce(); },
             }),
             '%',
-            el('button', {
+            soloLectura ? null : el('button', {
               type: 'button', class: 'btn-icono btn-eliminar', title: 'Eliminar rubro',
               onclick: () => {
                 grupo.rubros = grupo.rubros.filter((r) => r.id !== rubro.id);
@@ -140,7 +140,7 @@ export async function montarRubrica(contenedor, grupo, { onAbrirEvaluaciones } =
         }
         return el('td', {}, [
           el('input', {
-            type: 'number', class: 'input-calificacion', min: '0', max: '10', step: '0.1',
+            type: 'number', class: 'input-calificacion', min: '0', max: '10', step: '0.1', disabled: soloLectura,
             value: cal.valores[rubro.id] ?? '',
             oninput: (e) => {
               cal.valores[rubro.id] = e.target.value === '' ? null : parseFloat(e.target.value);
@@ -153,7 +153,7 @@ export async function montarRubrica(contenedor, grupo, { onAbrirEvaluaciones } =
 
       const celdaExtra = el('td', {}, [
         el('input', {
-          type: 'number', class: 'input-calificacion', step: '0.1', value: cal.extra || 0,
+          type: 'number', class: 'input-calificacion', step: '0.1', value: cal.extra || 0, disabled: soloLectura,
           oninput: (e) => { cal.extra = parseFloat(e.target.value) || 0; actualizarPromedio(); guardarConDebounce(); },
         }),
       ]);
@@ -194,10 +194,10 @@ export async function montarRubrica(contenedor, grupo, { onAbrirEvaluaciones } =
 
   contenedor.appendChild(el('div', { class: 'panel' }, [
     el('h2', {}, ['Rúbrica y calificaciones ', estadoGuardado]),
-    el('p', { class: 'etiqueta-chica' }, 'Calificaciones en escala 0–10. Puedes agregar o quitar rubros y cambiar los porcentajes cuando quieras — el promedio se recalcula solo. Haz clic en el nombre de un rubro (abajo) para capturar varias evaluaciones dentro de él (ej. varios exámenes); su calificación se calcula sola, ya no se captura aquí.'),
+    el('p', { class: 'etiqueta-chica' }, soloLectura ? 'Solo lectura: no se puede editar la rúbrica ni las calificaciones.' : 'Calificaciones en escala 0–10. Puedes agregar o quitar rubros y cambiar los porcentajes cuando quieras — el promedio se recalcula solo. Haz clic en el nombre de un rubro (abajo) para capturar varias evaluaciones dentro de él (ej. varios exámenes); su calificación se calcula sola, ya no se captura aquí.'),
     barraValidacion,
     contenedorBotonesRubro,
-    el('div', { class: 'barra-nueva' }, [btnAgregarRubro, btnAgregarRubroAsistencia]),
+    soloLectura ? null : el('div', { class: 'barra-nueva' }, [btnAgregarRubro, btnAgregarRubroAsistencia]),
     contenedorTabla,
   ]));
 

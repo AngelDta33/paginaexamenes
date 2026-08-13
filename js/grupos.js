@@ -10,6 +10,7 @@ import { montarListaAsistencia } from './listaAsistencia.js';
 import { montarRubrica } from './rubrica.js';
 import { montarEvaluacionesRubro } from './evaluacionesRubro.js';
 import { exportarGrupoExcel } from './exportarExcel.js';
+import { esRevisorOAdmin } from './auth.js';
 
 function fechaCorta(iso) {
   if (!iso) return '';
@@ -18,16 +19,22 @@ function fechaCorta(iso) {
 
 export async function montarListaGrupos(contenedor, sesion, { onAbrirGrupo }) {
   clear(contenedor);
-  contenedor.appendChild(el('div', { class: 'barra-nueva' }, [
-    el('button', {
-      type: 'button', class: 'btn-primario',
-      onclick: async () => {
-        const grupo = nuevoGrupo(sesion);
-        await guardarGrupo(grupo);
-        onAbrirGrupo(grupo.id);
-      },
-    }, '+ Nuevo grupo'),
-  ]));
+  // Revisor/administrador solo consultan: ven los grupos de todos los maestros
+  // (con el nombre del profesor en la tarjeta) pero no crean ni eliminan ninguno.
+  const soloConsulta = esRevisorOAdmin(sesion);
+
+  if (!soloConsulta) {
+    contenedor.appendChild(el('div', { class: 'barra-nueva' }, [
+      el('button', {
+        type: 'button', class: 'btn-primario',
+        onclick: async () => {
+          const grupo = nuevoGrupo(sesion);
+          await guardarGrupo(grupo);
+          onAbrirGrupo(grupo.id);
+        },
+      }, '+ Nuevo grupo'),
+    ]));
+  }
 
   const cargando = el('p', { style: 'color:#666; margin-top:1.5rem;' }, 'Cargando grupos…');
   contenedor.appendChild(cargando);
@@ -42,16 +49,17 @@ export async function montarListaGrupos(contenedor, sesion, { onAbrirGrupo }) {
   cargando.remove();
 
   if (grupos.length === 0) {
-    contenedor.appendChild(el('p', { style: 'color:#666; margin-top:1.5rem;' }, 'Aún no tienes grupos. Crea uno para empezar a tomar asistencia y llevar tu rúbrica de calificaciones.'));
+    contenedor.appendChild(el('p', { style: 'color:#666; margin-top:1.5rem;' }, soloConsulta ? 'Todavía no hay grupos capturados.' : 'Aún no tienes grupos. Crea uno para empezar a tomar asistencia y llevar tu rúbrica de calificaciones.'));
     return;
   }
 
   contenedor.appendChild(el('div', { class: 'lista-examenes' }, grupos.map((grupo) => el('div', { class: 'tarjeta-examen' }, [
     el('h3', {}, grupo.nombre || 'Grupo sin nombre'),
     el('div', { class: 'meta-chica' }, `${grupo.materia || 'sin materia'} · ${grupo.grado || ''}${grupo.grupo || ''} · ${(grupo.alumnos || []).length} alumnos · editado ${fechaCorta(grupo.updatedAt)}`),
+    soloConsulta ? el('div', { class: 'meta-chica' }, `Profesor(a): ${grupo.profesorNombre || 'sin nombre'}`) : null,
     el('div', { class: 'acciones-tarjeta' }, [
       el('button', { type: 'button', class: 'btn-primario', onclick: () => onAbrirGrupo(grupo.id) }, 'Abrir'),
-      el('button', {
+      soloConsulta ? null : el('button', {
         type: 'button', class: 'btn-peligro',
         onclick: async () => {
           if (confirm(`¿Eliminar el grupo "${grupo.nombre || 'sin nombre'}"? Se perderá el pase de lista y las calificaciones. Esta acción no se puede deshacer.`)) {
@@ -64,7 +72,7 @@ export async function montarListaGrupos(contenedor, sesion, { onAbrirGrupo }) {
   ]))));
 }
 
-export async function montarGrupo(contenedor, grupoId, { onVolver }) {
+export async function montarGrupo(contenedor, grupoId, sesion, { onVolver }) {
   clear(contenedor);
   contenedor.appendChild(el('p', {}, 'Cargando grupo…'));
 
@@ -74,6 +82,10 @@ export async function montarGrupo(contenedor, grupoId, { onVolver }) {
     contenedor.appendChild(el('p', {}, 'No se encontró el grupo.'));
     return;
   }
+
+  // Solo el dueño del grupo puede editar; revisor/administrador pueden consultarlo
+  // pero no cambiar nada (a menos que el grupo sea suyo, ej. un admin con su propio grupo).
+  const soloLectura = esRevisorOAdmin(sesion) && grupo.profesorId !== sesion.uid;
 
   clear(contenedor);
   let pestanaActiva = 'lista'; // 'lista' | 'rubrica' | 'evaluaciones'
@@ -97,7 +109,10 @@ export async function montarGrupo(contenedor, grupoId, { onVolver }) {
   // siempre se abre el grupo para pasar lista o calificar, no para editar sus datos.
   const campoTexto = (etiqueta, valor, onInput) => el('div', { class: 'campo' }, [
     el('label', {}, etiqueta),
-    el('input', { type: 'text', value: valor || '', oninput: (e) => { onInput(e.target.value); guardarConDebounce(); } }),
+    el('input', {
+      type: 'text', value: valor || '', disabled: soloLectura,
+      oninput: (e) => { onInput(e.target.value); guardarConDebounce(); },
+    }),
   ]);
 
   let datosColapsado = !!(grupo.nombre && grupo.materia);
@@ -132,7 +147,7 @@ export async function montarGrupo(contenedor, grupoId, { onVolver }) {
       listaAlumnos.appendChild(el('div', { class: 'fila-usuario' }, [
         el('div', { class: 'info-usuario' }, [el('strong', {}, alumno.nombre)]),
         el('span', { class: alumno.activo !== false ? 'estado-activo' : 'estado-inactivo' }, alumno.activo !== false ? 'Activo' : 'Inactivo'),
-        el('button', {
+        soloLectura ? null : el('button', {
           type: 'button', class: 'btn-secundario',
           onclick: () => { alumno.activo = alumno.activo === false; pintarAlumnos(); pintarPestana(); guardarConDebounce(); },
         }, alumno.activo !== false ? 'Desactivar' : 'Activar'),
@@ -168,8 +183,8 @@ export async function montarGrupo(contenedor, grupoId, { onVolver }) {
   let alumnosColapsado = (grupo.alumnos || []).length > 0;
   const cuerpoAlumnos = el('div', {}, [
     listaAlumnos,
-    el('div', { class: 'barra-nueva' }, [campoAlumno, btnAgregarAlumno]),
-    el('div', { class: 'campo', style: 'margin-top:0.6rem;' }, [campoPegado, btnAgregarPegado]),
+    soloLectura ? null : el('div', { class: 'barra-nueva' }, [campoAlumno, btnAgregarAlumno]),
+    soloLectura ? null : el('div', { class: 'campo', style: 'margin-top:0.6rem;' }, [campoPegado, btnAgregarPegado]),
   ]);
   const btnToggleAlumnos = el('button', {
     type: 'button', class: 'btn-icono', title: 'Mostrar/ocultar lista de alumnos',
@@ -199,13 +214,15 @@ export async function montarGrupo(contenedor, grupoId, { onVolver }) {
   function pintarPestana() {
     actualizarBotonesTab();
     if (pestanaActiva === 'lista') {
-      montarListaAsistencia(contenedorPestana, grupo);
+      montarListaAsistencia(contenedorPestana, grupo, { soloLectura });
     } else if (pestanaActiva === 'evaluaciones') {
       montarEvaluacionesRubro(contenedorPestana, grupo, rubroDetalleId, {
+        soloLectura,
         onVolver: () => { pestanaActiva = 'rubrica'; pintarPestana(); },
       });
     } else {
       montarRubrica(contenedorPestana, grupo, {
+        soloLectura,
         onAbrirEvaluaciones: (rubroId) => { pestanaActiva = 'evaluaciones'; rubroDetalleId = rubroId; pintarPestana(); },
       });
     }
@@ -227,7 +244,10 @@ export async function montarGrupo(contenedor, grupoId, { onVolver }) {
     },
   }, '⬇ Exportar a Excel');
 
-  contenedor.appendChild(el('button', { type: 'button', class: 'btn-secundario', onclick: onVolver, style: 'margin-bottom:0.8rem;' }, '← Volver a mis grupos'));
+  contenedor.appendChild(el('button', { type: 'button', class: 'btn-secundario', onclick: onVolver, style: 'margin-bottom:0.8rem;' }, soloLectura ? '← Volver a la lista de grupos' : '← Volver a mis grupos'));
+  if (soloLectura) {
+    contenedor.appendChild(el('p', { class: 'aviso-solo-lectura', style: 'margin-top:-0.4rem;' }, `Consultando el grupo de ${grupo.profesorNombre || 'otro profesor'} — solo lectura, no se puede editar.`));
+  }
   contenedor.appendChild(panelDatos);
   contenedor.appendChild(panelAlumnos);
   contenedor.appendChild(el('div', { class: 'selector-pestanas' }, [btnTabLista, btnTabRubrica, btnExportarExcel]));

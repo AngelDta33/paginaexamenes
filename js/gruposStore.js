@@ -9,8 +9,10 @@ import { idAsistencia, nuevaAsistencia } from './gruposModel.js';
 const COL_GRUPOS = 'grupos';
 const COL_ASISTENCIAS = 'asistencias';
 
+// El maestro solo ve los suyos; revisor/administrador ven todos (solo consulta).
 export async function listarGrupos(sesion) {
-  const consulta = query(collection(db, COL_GRUPOS), where('profesorId', '==', sesion.uid));
+  const col = collection(db, COL_GRUPOS);
+  const consulta = sesion.rol === 'maestro' ? query(col, where('profesorId', '==', sesion.uid)) : query(col);
   const snap = await getDocs(consulta);
   const grupos = snap.docs.map((d) => d.data());
   grupos.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));

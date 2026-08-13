@@ -46,11 +46,12 @@ service cloud.firestore {
         (request.resource.data.profesorId == request.auth.uid || esRevisorOAdmin());
     }
 
-    // grupos/{id} y asistencias/{id}: pase de lista y rúbricas — privado por maestro,
-    // sin acceso de revisor/administrador (a diferencia de examenes, aquí no se pidió
-    // que nadie más los vea).
+    // grupos/{id} y asistencias/{id}: pase de lista y rúbricas — privado por maestro
+    // para escribir; revisor/administrador pueden leer cualquiera (solo consulta, para
+    // revisar rúbrica y calificaciones), igual que ven exámenes pero sin poder editarlos.
     match /grupos/{grupoId} {
-      allow read, update, delete: if autenticado() && resource.data.profesorId == request.auth.uid;
+      allow read: if autenticado() && (resource.data.profesorId == request.auth.uid || esRevisorOAdmin());
+      allow update, delete: if autenticado() && resource.data.profesorId == request.auth.uid;
       allow create: if autenticado() && request.resource.data.profesorId == request.auth.uid;
     }
     match /asistencias/{docId} {
@@ -59,7 +60,8 @@ service cloud.firestore {
       // así que la lectura tiene que permitirse aunque no haya nada que leer todavía.
       allow read: if autenticado() && (
         resource == null ||
-        get(/databases/$(database)/documents/grupos/$(resource.data.grupoId)).data.profesorId == request.auth.uid
+        get(/databases/$(database)/documents/grupos/$(resource.data.grupoId)).data.profesorId == request.auth.uid ||
+        esRevisorOAdmin()
       );
       allow update, delete: if autenticado() &&
         get(/databases/$(database)/documents/grupos/$(resource.data.grupoId)).data.profesorId == request.auth.uid;

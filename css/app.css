@@ -108,6 +108,36 @@ button {
 .input-valor { width: 4.5rem !important; }
 .input-enunciado { margin-bottom: 0.4rem; }
 
+/* --- Campo de texto con fórmulas matemáticas (editor visual MathLive) --- */
+.campo-formulas { margin-bottom: 0.4rem; }
+.btn-alternar-formulas { margin-bottom: 0.3rem; font-size: 0.85rem; padding: 0.3rem 0.7rem; }
+.campo-editable-formulas {
+  border: 1px solid var(--borde); border-radius: 5px; padding: 0.4rem 0.5rem;
+  min-height: calc(var(--filas-min, 2) * 1.4em + 0.6rem); font-size: 1rem; font-family: inherit;
+  white-space: pre-wrap; word-wrap: break-word; outline: none; background: #fff;
+}
+.campo-editable-formulas:focus { border-color: var(--azul); box-shadow: 0 0 0 2px var(--azul-suave); }
+.campo-editable-formulas:empty::before { content: attr(data-placeholder); color: var(--gris); }
+.formula-katex { margin: 0 0.1rem; }
+.formula-katex.formula-editable { cursor: pointer; border-radius: 4px; padding: 0.05rem 0.15rem; }
+.formula-katex.formula-editable:hover { background: var(--azul-suave); outline: 1px dashed var(--azul); }
+.formula-katex.formula-editable { cursor: pointer; border-radius: 4px; padding: 0.05rem 0.15rem; }
+.formula-katex.formula-editable:hover { background: var(--azul-suave); outline: 1px dashed var(--azul); }
+
+/* --- Modal del editor visual de fórmulas --- */
+.modal-formula { width: 100%; max-width: 540px; }
+.barra-plantillas-formula { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.5rem; }
+.barra-plantillas-formula .btn-formula {
+  background: #fff; border: 1px solid var(--borde); border-radius: 6px;
+  padding: 0.35rem 0.6rem; font-size: 1rem;
+}
+.barra-plantillas-formula .btn-formula:hover { background: var(--azul-suave); border-color: var(--azul); }
+.campo-mathlive {
+  display: block; width: 100%; min-height: 3rem; font-size: 1.4rem;
+  border: 1px solid var(--borde); border-radius: 8px; padding: 0.6rem;
+  margin: 0.6rem 0; box-sizing: border-box;
+}
+
 .fila-opcion, .fila-relacion { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.3rem; }
 .fila-opcion input[type=text], .fila-relacion input[type=text] { flex: 1; }
 .fila-relacion select { width: auto; flex: 0 0 auto; }

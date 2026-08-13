@@ -2,6 +2,7 @@
 
 import { el, clear } from './dom.js';
 import { nuevaSubpregunta } from './model.js';
+import { renderTextoFormulas, campoTextoConFormulas } from './formulas.js';
 
 const LETRAS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
@@ -85,10 +86,11 @@ function campoImagen(pregunta, onChange) {
 }
 
 function campoEnunciado(pregunta, onChange, placeholder = 'Enunciado del reactivo…') {
-  return el('textarea', {
-    class: 'input-enunciado', rows: '2', placeholder,
-    oninput: (e) => { pregunta.enunciado = e.target.value; onChange(); },
-  }, pregunta.enunciado);
+  const { contenedor } = campoTextoConFormulas({
+    placeholder, valor: pregunta.enunciado, filas: '2',
+    oninput: (valor) => { pregunta.enunciado = valor; onChange(); },
+  });
+  return contenedor;
 }
 
 function editorOpcionMultiple(pregunta, onChange) {
@@ -188,6 +190,10 @@ function editorRelacionColumnas(pregunta, onChange) {
 }
 
 function editorAbierta(pregunta, onChange) {
+  const { contenedor: campoRespuesta } = campoTextoConFormulas({
+    valor: pregunta.respuestaModelo, filas: '2',
+    oninput: (valor) => { pregunta.respuestaModelo = valor; onChange(); },
+  });
   return el('div', { class: 'editor-tipo' }, [
     el('label', {}, [
       'Líneas para responder: ',
@@ -196,12 +202,9 @@ function editorAbierta(pregunta, onChange) {
         oninput: (e) => { pregunta.lineasRespuesta = parseInt(e.target.value, 10) || 1; onChange(); },
       }),
     ]),
-    el('label', {}, [
-      'Respuesta modelo (solo para la clave):',
-      el('textarea', {
-        rows: '2', value: pregunta.respuestaModelo,
-        oninput: (e) => { pregunta.respuestaModelo = e.target.value; onChange(); },
-      }, pregunta.respuestaModelo),
+    el('div', { class: 'campo' }, [
+      el('label', {}, 'Respuesta modelo (solo para la clave):'),
+      campoRespuesta,
     ]),
   ]);
 }
@@ -244,12 +247,13 @@ function editorLecturaComprension(pregunta, onChange) {
 
   const selectorTipo = el('select', {}, TIPOS_SUBPREGUNTA.map((t) => el('option', { value: t.valor }, t.etiqueta)));
 
-  cont.appendChild(el('label', {}, [
-    'Texto de lectura:',
-    el('textarea', {
-      rows: '5', placeholder: 'Pega o escribe el texto de comprensión de lectura…',
-      oninput: (e) => { pregunta.textoLectura = e.target.value; onChange(); },
-    }, pregunta.textoLectura),
+  const { contenedor: campoTexto } = campoTextoConFormulas({
+    placeholder: 'Pega o escribe el texto de comprensión de lectura…', valor: pregunta.textoLectura, filas: '5',
+    oninput: (valor) => { pregunta.textoLectura = valor; onChange(); },
+  });
+  cont.appendChild(el('div', { class: 'campo' }, [
+    el('label', {}, 'Texto de lectura:'),
+    campoTexto,
   ]));
   cont.appendChild(subCont);
   cont.appendChild(el('div', { class: 'agregar-sub' }, [
@@ -309,7 +313,7 @@ export function crearEditorPregunta(pregunta, { onChange, onDelete, subEtiqueta 
 function encabezadoReactivo(numero, pregunta, valor) {
   return el('div', { class: 'reactivo-encabezado' }, [
     el('span', { class: 'num-reactivo' }, `${numero}. `),
-    el('span', { class: 'enunciado-texto' }, pregunta.enunciado || ''),
+    el('span', { class: 'enunciado-texto' }, renderTextoFormulas(pregunta.enunciado || '')),
     valor !== null ? el('span', { class: 'valor-reactivo' }, ` (${valor} pts)`) : null,
   ]);
 }
@@ -324,7 +328,10 @@ function renderOpcionMultiple(pregunta, numero, modoClave) {
     bloqueImagen(pregunta),
     el('div', { class: 'lista-opciones-examen' }, pregunta.opciones.map((op, i) => el('div', {
       class: modoClave && i === pregunta.respuestaCorrecta ? 'opcion-examen opcion-correcta' : 'opcion-examen',
-    }, `${modoClave && i === pregunta.respuestaCorrecta ? '● ' : '○ '}${LETRAS[i]}) ${op}`))),
+    }, [
+      `${modoClave && i === pregunta.respuestaCorrecta ? '● ' : '○ '}${LETRAS[i]}) `,
+      ...renderTextoFormulas(op),
+    ]))),
   ]);
 }
 
@@ -336,9 +343,13 @@ function renderRelacionColumnas(pregunta, numero, modoClave) {
 
   const celdasA = pregunta.columnaA.map((valA, i) => el('td', { class: 'celda-relacion celda-a' }, [
     el('span', { class: modoClave ? 'resp-relacion resp-correcta' : 'resp-relacion' }, modoClave ? `(${letraPorIndiceOriginal[pregunta.relaciones[i]]}) ` : '(   ) '),
-    `${i + 1}. ${valA}`,
+    `${i + 1}. `,
+    ...renderTextoFormulas(valA),
   ]));
-  const celdasB = permutado.map(([valB], pos) => el('td', { class: 'celda-relacion celda-b' }, `${LETRAS[pos]}. ${valB}`));
+  const celdasB = permutado.map(([valB], pos) => el('td', { class: 'celda-relacion celda-b' }, [
+    `${LETRAS[pos]}. `,
+    ...renderTextoFormulas(valB),
+  ]));
 
   const maxFilas = Math.max(celdasA.length, celdasB.length);
   const tabla = el('table', { class: 'tabla-relacion' }, [
@@ -358,7 +369,10 @@ function renderRelacionColumnas(pregunta, numero, modoClave) {
 function renderAbierta(pregunta, numero, modoClave) {
   const cuerpo = [encabezadoReactivo(numero, pregunta, pregunta.valor), bloqueImagen(pregunta)];
   if (modoClave) {
-    cuerpo.push(el('div', { class: 'respuesta-modelo' }, `Respuesta modelo: ${pregunta.respuestaModelo || '(no se capturó respuesta modelo)'}`));
+    cuerpo.push(el('div', { class: 'respuesta-modelo' }, [
+      'Respuesta modelo: ',
+      ...(pregunta.respuestaModelo ? renderTextoFormulas(pregunta.respuestaModelo) : ['(no se capturó respuesta modelo)']),
+    ]));
   } else {
     for (let i = 0; i < pregunta.lineasRespuesta; i++) cuerpo.push(el('div', { class: 'linea-respuesta' }));
   }
@@ -391,7 +405,7 @@ export function renderPregunta(pregunta, numero, modoClave) {
 
 export function renderLectura(pregunta, numerosPorId) {
   return el('div', { class: 'reactivo reactivo-lectura' }, [
-    pregunta.enunciado ? el('p', { class: 'instrucciones-lectura' }, pregunta.enunciado) : null,
-    el('div', { class: 'texto-lectura' }, pregunta.textoLectura),
+    pregunta.enunciado ? el('p', { class: 'instrucciones-lectura' }, renderTextoFormulas(pregunta.enunciado)) : null,
+    el('div', { class: 'texto-lectura' }, renderTextoFormulas(pregunta.textoLectura)),
   ]);
 }

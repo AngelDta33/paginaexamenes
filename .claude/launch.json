@@ -4,8 +4,9 @@
     {
       "name": "paginaexamenes",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["-c", "import functools,http.server,socketserver; socketserver.TCPServer.allow_reuse_address=True; Handler=functools.partial(http.server.SimpleHTTPRequestHandler, directory='/Users/revertdata/Documents/paginaexamenes'); socketserver.TCPServer(('', 8420), Handler).serve_forever()"],
-      "port": 8420
+      "runtimeArgs": ["/Users/revertdata/Documents/paginaexamenes/.claude/serve.py", "8420", "/Users/revertdata/Documents/paginaexamenes"],
+      "port": 8420,
+      "autoPort": true
     }
   ]
 }
