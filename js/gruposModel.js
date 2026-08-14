@@ -81,16 +81,46 @@ export function crearRubrosEstandar() {
 
 // Una "evaluación" es una captura dentro de un rubro (ej. cada examen dentro del
 // rubro "Examen"), con su propio porcentaje — igual que los rubros de la rúbrica.
-// Empieza en 0% (como un rubro nuevo); el maestro reparte el 100% entre todas.
+// Su porcentaje se reparte solo entre el 100% junto con las demás evaluaciones del
+// mismo rubro (ver redistribuirPorcentajesEvaluaciones) hasta que el maestro lo
+// edite a mano, momento en el que queda fijo (porcentajeManual: true).
 // totalAciertos (opcional): si se captura, la evaluación se califica por número de
 // aciertos y el programa saca la calificación en base 10 automáticamente
 // (calificación = aciertos / totalAciertos × 10). Si se deja vacío, se captura la
 // calificación 0-10 directamente, como siempre.
 export function nuevaEvaluacion(nombre, descripcion, fecha, totalAciertos = null) {
   return {
-    id: uid('ev'), nombre, descripcion, fecha, porcentaje: 0,
+    id: uid('ev'), nombre, descripcion, fecha, porcentaje: 0, porcentajeManual: false,
     totalAciertos: totalAciertos && Number(totalAciertos) > 0 ? Number(totalAciertos) : null,
   };
+}
+
+// Evaluaciones guardadas antes de que existiera "porcentajeManual" no lo tienen —
+// se asume que ya estaba fijado a mano si tiene un porcentaje distinto de 0 (esa
+// era la única forma de ponerlo antes de este reparto automático).
+function porcentajeEsManual(ev) {
+  return ev.porcentajeManual === true || (ev.porcentajeManual === undefined && Number(ev.porcentaje) > 0);
+}
+
+// Reparte el 100% entre las evaluaciones de un rubro cuyo porcentaje no haya sido
+// fijado a mano por el maestro, dejando intactas las que sí — se llama al agregar,
+// eliminar, o justo después de que el maestro edite una a mano (para acomodar el
+// resto). Si todas están fijadas a mano no hace nada (la suma la valida
+// validarEvaluaciones aparte).
+export function redistribuirPorcentajesEvaluaciones(rubro) {
+  const evaluaciones = rubro.evaluaciones || [];
+  const automaticas = evaluaciones.filter((ev) => !porcentajeEsManual(ev));
+  if (automaticas.length === 0) return;
+  const sumaManual = evaluaciones
+    .filter((ev) => porcentajeEsManual(ev))
+    .reduce((acc, ev) => acc + (Number(ev.porcentaje) || 0), 0);
+  const restante = Math.max(0, 100 - sumaManual);
+  const base = Math.floor((restante / automaticas.length) * 100) / 100;
+  automaticas.forEach((ev, i) => {
+    ev.porcentaje = i === automaticas.length - 1
+      ? Math.round((restante - base * (automaticas.length - 1)) * 100) / 100
+      : base;
+  });
 }
 
 // Convierte el valor crudo capturado para un alumno en una evaluación a la
@@ -245,4 +275,35 @@ export function fechaCortaMX(iso) {
   const [anio, mes, dia] = iso.split('-');
   const meses = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
   return `${dia} ${meses[parseInt(mes, 10) - 1]}`;
+}
+
+// --- Calendario del curso (opcional): días de clase, ciclo escolar y, si el
+// maestro quiere, trimestres — usado para dividir el pase de lista exportado a
+// Excel en una tabla general y una tabla por trimestre. Nada de esto es
+// obligatorio: un grupo sin calendario configurado sigue funcionando igual.
+export const DIAS_SEMANA_NOMBRES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+
+// Grupos creados antes de que existiera este campo no lo tienen guardado.
+export function calendarioDeGrupo(grupo) {
+  return {
+    diasClase: [], inicioCiclo: '', finCiclo: '', trimestres: [],
+    ...(grupo.calendario || {}),
+  };
+}
+
+export function nuevoTrimestre(nombre = '', inicio = '', fin = '') {
+  return { id: uid('tri'), nombre, inicio, fin };
+}
+
+export const TRIMESTRES_ESTANDAR = ['Primer trimestre', 'Segundo trimestre', 'Tercer trimestre'];
+
+export function crearTrimestresEstandar() {
+  return TRIMESTRES_ESTANDAR.map((nombre) => nuevoTrimestre(nombre));
+}
+
+// Fechas (ISO) de un arreglo de días de asistencia que caen dentro de un
+// trimestre (comparación de strings "YYYY-MM-DD", válida porque son fechas ISO).
+export function fechasEnTrimestre(fechas, trimestre) {
+  if (!trimestre.inicio || !trimestre.fin) return [];
+  return fechas.filter((f) => f >= trimestre.inicio && f <= trimestre.fin);
 }

@@ -218,6 +218,14 @@ button {
 .acciones-modal { display: flex; gap: 0.5rem; margin-top: 0.4rem; }
 .acciones-modal .btn-primario, .acciones-modal .btn-secundario { flex: 1; }
 
+.modal-calendario { width: 100%; max-width: 520px; max-height: 85vh; overflow-y: auto; }
+.fila-dias-clase { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.3rem; }
+.chip-dia-clase {
+  display: flex; align-items: center; gap: 0.3rem; border: 1px solid var(--borde);
+  border-radius: 6px; padding: 0.3rem 0.6rem; font-size: 0.9rem; cursor: pointer;
+}
+.fila-trimestre { display: grid; grid-template-columns: 1.4fr 1fr 1fr auto; gap: 0.4rem; align-items: center; margin-bottom: 0.4rem; }
+
 /* --- Estado del examen (flujo de revisión) --- */
 .panel-estado { padding: 0.7rem 1rem; }
 .fila-estado { display: flex; align-items: center; gap: 0.7rem; flex-wrap: wrap; }
@@ -267,6 +275,19 @@ button {
 .tabla-excel thead .celda-nombre-alumno { z-index: 3; background: var(--azul-suave); }
 .col-fecha { min-width: 4.2rem; }
 .col-rubro { min-width: 8rem; }
+.dia-semana-corto { font-size: 0.75rem; font-weight: normal; opacity: 0.75; }
+
+.barra-navegacion-fechas {
+  display: flex; align-items: center; justify-content: center; gap: 0.8rem;
+  padding: 0.4rem; font-size: 0.85rem; color: var(--gris);
+}
+.btn-nav-fechas {
+  background: var(--azul); color: #fff; border: none; border-radius: 6px;
+  padding: 0.35rem 0.8rem; font-size: 0.85rem;
+}
+.btn-nav-fechas:hover:not(:disabled) { background: var(--azul-oscuro); }
+.btn-nav-fechas:disabled { opacity: 0.4; cursor: default; }
+.etiqueta-nav-fechas { white-space: nowrap; }
 
 .celda-asistencia { padding: 0.2rem !important; }
 .btn-celda-estado {

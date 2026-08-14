@@ -6,7 +6,7 @@
 import { listarAsistencias } from './gruposStore.js';
 import {
   fechaCortaMX, calcularPromedio, valorRubro, INICIALES_ESTADO_ASISTENCIA,
-  esRubroAsistencia, tieneEvaluaciones,
+  esRubroAsistencia, tieneEvaluaciones, calendarioDeGrupo, fechasEnTrimestre,
 } from './gruposModel.js';
 
 function nombreArchivoSeguro(texto) {
@@ -122,25 +122,18 @@ function filasDesgloseRubro(grupo, rubro, alumnosActivos, dias) {
   return filas;
 }
 
-export async function exportarGrupoExcel(grupo) {
-  if (!window.XLSX) {
-    alert('No se pudo cargar el motor de Excel. Revisa tu conexión a internet e intenta de nuevo.');
-    return;
-  }
-
-  const alumnosActivos = (grupo.alumnos || []).filter((a) => a.activo !== false);
-  const libro = XLSX.utils.book_new();
-
-  // --- Hoja: Pase de lista ---
-  const dias = await listarAsistencias(grupo.id);
-  const encabezadoLista = [
+// Arma la hoja de pase de lista (Alumno | fechas... | Faltas) a partir de un
+// subconjunto de días — se reutiliza tal cual para la tabla general y para cada
+// tabla por trimestre, solo cambian los días que se le pasan.
+function hojaPaseDeLista(diasIncluidos, alumnosActivos) {
+  const encabezado = [
     celda('Alumno', ESTILO_ENCABEZADO),
-    ...dias.map((d) => celda(fechaCortaMX(d.fecha), ESTILO_ENCABEZADO)),
+    ...diasIncluidos.map((d) => celda(fechaCortaMX(d.fecha), ESTILO_ENCABEZADO)),
     celda('Faltas', ESTILO_ENCABEZADO),
   ];
-  const filasLista = alumnosActivos.map((alumno) => {
+  const filas = alumnosActivos.map((alumno) => {
     let faltas = 0;
-    const celdasDias = dias.map((dia) => {
+    const celdasDias = diasIncluidos.map((dia) => {
       const reg = dia.registros[alumno.id];
       const estado = reg && reg.estado;
       if (estado === 'falta') faltas += 1;
@@ -152,11 +145,49 @@ export async function exportarGrupoExcel(grupo) {
       celda(faltas, ESTILO_CELDA_DESTACADA),
     ];
   });
-  const hojaLista = hojaDesdeFilas(
-    [encabezadoLista, ...filasLista],
-    [24, ...dias.map(() => 10), 9],
-  );
-  XLSX.utils.book_append_sheet(libro, hojaLista, 'Pase de lista');
+  return hojaDesdeFilas([encabezado, ...filas], [24, ...diasIncluidos.map(() => 10), 9]);
+}
+
+// Los nombres de hoja de Excel no aceptan : \ / ? * [ ] y tienen que medir 31
+// caracteres o menos; si dos trimestres terminan con el mismo nombre recortado,
+// se les agrega un número para que no choquen.
+function nombreHojaUnico(nombresUsados, base) {
+  const limpio = (base || 'Trimestre').replace(/[:\\/?*[\]]/g, '').trim() || 'Trimestre';
+  let nombre = limpio.slice(0, 31);
+  let sufijo = 1;
+  while (nombresUsados.has(nombre)) {
+    sufijo += 1;
+    const marcador = ` (${sufijo})`;
+    nombre = `${limpio.slice(0, 31 - marcador.length)}${marcador}`;
+  }
+  nombresUsados.add(nombre);
+  return nombre;
+}
+
+export async function exportarGrupoExcel(grupo) {
+  if (!window.XLSX) {
+    alert('No se pudo cargar el motor de Excel. Revisa tu conexión a internet e intenta de nuevo.');
+    return;
+  }
+
+  const alumnosActivos = (grupo.alumnos || []).filter((a) => a.activo !== false);
+  const libro = XLSX.utils.book_new();
+  // Reservados de antemano para que ningún trimestre choque con ellos.
+  const nombresHojas = new Set(['Rúbrica y calificaciones', 'Desglose']);
+
+  // --- Hoja: Pase de lista (tabla general, con todos los días) ---
+  const dias = await listarAsistencias(grupo.id);
+  XLSX.utils.book_append_sheet(libro, hojaPaseDeLista(dias, alumnosActivos), nombreHojaUnico(nombresHojas, 'Pase de lista'));
+
+  // --- Hojas por trimestre (solo si el calendario del curso los tiene configurados) ---
+  const calendario = calendarioDeGrupo(grupo);
+  for (const trimestre of calendario.trimestres) {
+    const fechasDelTrimestre = fechasEnTrimestre(dias.map((d) => d.fecha), trimestre);
+    if (fechasDelTrimestre.length === 0) continue; // sin fechas capturadas en ese rango, no vale la pena la hoja
+    const diasDelTrimestre = dias.filter((d) => fechasDelTrimestre.includes(d.fecha));
+    const nombreHoja = nombreHojaUnico(nombresHojas, trimestre.nombre || 'Trimestre');
+    XLSX.utils.book_append_sheet(libro, hojaPaseDeLista(diasDelTrimestre, alumnosActivos), nombreHoja);
+  }
 
   // --- Hoja: Rúbrica y calificaciones ---
   const rubros = grupo.rubros || [];

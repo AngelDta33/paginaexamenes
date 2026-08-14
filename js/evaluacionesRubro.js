@@ -7,7 +7,7 @@ import { el, clear } from './dom.js';
 import { guardarGrupo } from './gruposStore.js';
 import {
   nuevaEvaluacion, calificacionAlumno, sumaPorcentajesEvaluaciones, validarEvaluaciones,
-  notaDeEvaluacion,
+  notaDeEvaluacion, redistribuirPorcentajesEvaluaciones,
 } from './gruposModel.js';
 
 export function montarEvaluacionesRubro(contenedor, grupo, rubroId, { onVolver, soloLectura = false }) {
@@ -87,17 +87,32 @@ export function montarEvaluacionesRubro(contenedor, grupo, rubroId, { onVolver, 
     // Ver rubrica.js: recalcular promedios en vivo sin reconstruir la tabla, para
     // que el input de porcentaje no pierda el foco entre teclas.
     const actualizadoresPromedio = [];
+    // Referencia a cada <input> de porcentaje para poder actualizar el valor de las
+    // OTRAS evaluaciones (las que se redistribuyen solas) sin reconstruir toda la
+    // tabla — si no, se pierde el foco de la que el maestro está escribiendo.
+    const inputsPorcentaje = new Map();
 
-    const encabezado = el('tr', {}, [
-      el('th', { class: 'celda-nombre-alumno' }, 'Alumno'),
-      ...evaluaciones.map((ev) => el('th', { class: 'col-rubro' }, [
+    function construirEncabezadoEvaluacion(ev) {
+      const campoPorcentaje = el('input', {
+        type: 'number', class: 'input-porcentaje-rubro', value: ev.porcentaje ?? 0, min: '0', max: '100', disabled: soloLectura,
+        oninput: (e) => {
+          ev.porcentaje = parseFloat(e.target.value) || 0;
+          ev.porcentajeManual = true;
+          redistribuirPorcentajesEvaluaciones(rubro);
+          evaluaciones.forEach((otra) => {
+            if (otra.id === ev.id) return;
+            const otroInput = inputsPorcentaje.get(otra.id);
+            if (otroInput) otroInput.value = otra.porcentaje;
+          });
+          pintarValidacion(); actualizadoresPromedio.forEach((fn) => fn()); guardarConDebounce();
+        },
+      });
+      inputsPorcentaje.set(ev.id, campoPorcentaje);
+      return el('th', { class: 'col-rubro' }, [
         el('div', {}, ev.nombre || 'Sin nombre'),
         ev.fecha ? el('div', { class: 'etiqueta-chica' }, ev.fecha) : null,
         el('div', { class: 'fila-porcentaje-rubro' }, [
-          el('input', {
-            type: 'number', class: 'input-porcentaje-rubro', value: ev.porcentaje ?? 0, min: '0', max: '100', disabled: soloLectura,
-            oninput: (e) => { ev.porcentaje = parseFloat(e.target.value) || 0; pintarValidacion(); actualizadoresPromedio.forEach((fn) => fn()); guardarConDebounce(); },
-          }),
+          campoPorcentaje,
           '%',
           soloLectura ? null : el('button', {
             type: 'button', class: 'btn-icono btn-eliminar', title: `Eliminar ${ev.nombre || 'esta evaluación'}`,
@@ -106,6 +121,7 @@ export function montarEvaluacionesRubro(contenedor, grupo, rubroId, { onVolver, 
               for (const cal of Object.values(grupo.calificaciones)) {
                 if (cal.notasEvaluacion) delete cal.notasEvaluacion[ev.id];
               }
+              redistribuirPorcentajesEvaluaciones(rubro);
               pintarValidacion(); pintarTabla(); guardarConDebounce();
             },
           }, '✕'),
@@ -126,7 +142,12 @@ export function montarEvaluacionesRubro(contenedor, grupo, rubroId, { onVolver, 
           }),
           ' aciertos',
         ]),
-      ])),
+      ]);
+    }
+
+    const encabezado = el('tr', {}, [
+      el('th', { class: 'celda-nombre-alumno' }, 'Alumno'),
+      ...evaluaciones.map((ev) => construirEncabezadoEvaluacion(ev)),
       el('th', {}, 'Promedio'),
     ]);
 
@@ -184,6 +205,7 @@ export function montarEvaluacionesRubro(contenedor, grupo, rubroId, { onVolver, 
     if (!campoNombre.value.trim()) { alert(`Ponle un nombre (ej. "${nombreRubro} 1").`); return; }
     rubro.evaluaciones = rubro.evaluaciones || [];
     rubro.evaluaciones.push(nuevaEvaluacion(campoNombre.value.trim(), campoDescripcion.value.trim(), campoFecha.value, campoTotalAciertos.value));
+    redistribuirPorcentajesEvaluaciones(rubro);
     campoNombre.value = '';
     campoDescripcion.value = '';
     campoFecha.value = '';
