@@ -1,9 +1,9 @@
 /* Estilos de la "hoja" — compartidos entre vista previa en pantalla e impresión.
-   Las medidas (21.59 x 27.94cm, padding 1.8cm) deben coincidir con las constantes de js/paginate.js */
+   Las medidas (21.59 x 33.02cm oficio, padding 1.8cm) deben coincidir con las constantes de js/paginate.js */
 
 .page {
   width: 21.59cm;
-  height: 27.94cm;
+  height: 33.02cm;
   padding: 1.8cm;
   box-sizing: border-box;
   background: #fff;
@@ -81,6 +81,22 @@
 .vf-opciones { display: flex; gap: 0.6cm; margin-top: 0.1cm; margin-left: 0.6cm; }
 .vf-correcta { font-weight: bold; }
 
+/* --- Identificar en imagen: imagen con marcadores numerados + banco de palabras --- */
+.identificar-imagen-wrap { position: relative; display: inline-block; margin: 0.15cm 0; max-width: 100%; }
+.identificar-imagen-wrap img { max-width: 100%; max-height: 9cm; display: block; }
+.marcador-num {
+  position: absolute; transform: translate(-50%, -50%);
+  min-width: 0.55cm; height: 0.55cm; box-sizing: border-box;
+  background: #fff; color: #111; border: 1.2pt solid #111; border-radius: 50%;
+  font-size: 9pt; font-weight: bold; line-height: 0.5cm; text-align: center;
+}
+.banco-palabras { display: flex; flex-wrap: wrap; gap: 0.15cm 0.3cm; border: 0.5pt solid #999; padding: 0.2cm; margin: 0.15cm 0; background: #fafafa; }
+.palabra-banco { border: 0.5pt solid #666; border-radius: 3pt; padding: 0.03cm 0.2cm; font-size: 10pt; }
+.respuestas-identificar { margin: 0.15cm 0 0 0.4cm; }
+.fila-resp-identificar { display: flex; align-items: baseline; gap: 0.2cm; margin-bottom: 0.12cm; }
+.num-resp { font-weight: bold; }
+.linea-resp-inline { flex: 1 1 auto; border-bottom: 0.5pt solid #333; min-width: 5cm; height: 0.5cm; }
+
 .reactivo-lectura { margin-bottom: 0.3cm; }
 .instrucciones-lectura { font-style: italic; margin: 0 0 0.15cm 0; }
 .texto-lectura { border: 0.5pt solid #999; padding: 0.3cm; background: #fafafa; white-space: pre-wrap; }
@@ -100,7 +116,7 @@
 }
 
 @media print {
-  @page { size: letter; margin: 0; }
+  @page { size: 21.59cm 33.02cm; margin: 0; }
   body * { visibility: hidden; }
   .hoja-contenedor, .hoja-contenedor * { visibility: visible; }
   /* .panel-preview usa position:sticky para la pantalla — eso lo convierte en el

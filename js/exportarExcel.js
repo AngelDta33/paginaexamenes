@@ -6,6 +6,7 @@
 import { listarAsistencias } from './gruposStore.js';
 import {
   fechaCortaMX, calcularPromedio, valorRubro, INICIALES_ESTADO_ASISTENCIA,
+  esRubroAsistencia, tieneEvaluaciones,
 } from './gruposModel.js';
 
 function nombreArchivoSeguro(texto) {
@@ -47,6 +48,11 @@ const ESTILO_CELDA_DESTACADA = {
   border: BORDES,
 };
 
+const ESTILO_TITULO_DESGLOSE = {
+  font: { bold: true, sz: 12, color: { rgb: VERDE } },
+  alignment: { horizontal: 'left', vertical: 'center' },
+};
+
 function celda(valor, estilo) {
   const tipo = typeof valor === 'number' ? 'n' : 's';
   return { v: valor === '' || valor === null || valor === undefined ? '' : valor, t: valor === '' || valor === null || valor === undefined ? 's' : tipo, s: estilo };
@@ -70,6 +76,50 @@ function hojaDesdeFilas(filas, anchos) {
   hoja['!cols'] = anchos.map((wch) => ({ wch }));
   hoja['!rows'] = [{ hpt: 24 }];
   return hoja;
+}
+
+// Filas (celdas estilizadas) del bloque de un rubro para la hoja "Desglose":
+// un título con el nombre y %, un encabezado y una fila por alumno. Según el tipo
+// de rubro muestra sus evaluaciones desglosadas (ej. cada examen), la asistencia
+// o la única calificación manual. Termina con una fila en blanco separadora.
+function filasDesgloseRubro(grupo, rubro, alumnosActivos, dias) {
+  const filas = [];
+  filas.push([celda(`${rubro.nombre || 'Rubro'} — ${rubro.porcentaje || 0}%`, ESTILO_TITULO_DESGLOSE)]);
+
+  if (tieneEvaluaciones(rubro)) {
+    const evs = rubro.evaluaciones || [];
+    filas.push([
+      celda('Alumno', ESTILO_ENCABEZADO),
+      ...evs.map((ev) => celda(ev.totalAciertos ? `${ev.nombre || 'Evaluación'} (/${ev.totalAciertos})` : (ev.nombre || 'Evaluación'), ESTILO_ENCABEZADO)),
+      celda('Calif. del rubro (0-10)', ESTILO_ENCABEZADO),
+    ]);
+    alumnosActivos.forEach((alumno) => {
+      const cal = grupo.calificaciones[alumno.id] || { notasEvaluacion: {} };
+      const notas = cal.notasEvaluacion || {};
+      const v = valorRubro(grupo, rubro, alumno.id, dias);
+      filas.push([
+        celda(alumno.nombre, ESTILO_CELDA_NOMBRE),
+        ...evs.map((ev) => {
+          const raw = notas[ev.id];
+          return celda(raw === null || raw === undefined || raw === '' ? '' : Number(raw), ESTILO_CELDA_CENTRADA);
+        }),
+        celda(v === null ? '' : Number(v.toFixed(2)), ESTILO_CELDA_DESTACADA),
+      ]);
+    });
+  } else {
+    const etiqueta = esRubroAsistencia(rubro) ? 'Asistencia (0-10)' : 'Calificación (0-10)';
+    filas.push([celda('Alumno', ESTILO_ENCABEZADO), celda(etiqueta, ESTILO_ENCABEZADO)]);
+    alumnosActivos.forEach((alumno) => {
+      const v = valorRubro(grupo, rubro, alumno.id, dias);
+      filas.push([
+        celda(alumno.nombre, ESTILO_CELDA_NOMBRE),
+        celda(v === null ? '' : Number(v.toFixed(2)), esRubroAsistencia(rubro) ? ESTILO_CELDA_CENTRADA : ESTILO_CELDA_CENTRADA),
+      ]);
+    });
+  }
+
+  filas.push([]); // separador entre tablas
+  return filas;
 }
 
 export async function exportarGrupoExcel(grupo) {
@@ -135,6 +185,18 @@ export async function exportarGrupoExcel(grupo) {
     [24, ...rubros.map(() => 18), 9, 11],
   );
   XLSX.utils.book_append_sheet(libro, hojaRubrica, 'Rúbrica y calificaciones');
+
+  // --- Hoja: Desglose (una tabla por rubro, apiladas) ---
+  if (rubros.length > 0) {
+    const filasDesglose = [];
+    for (const rubro of rubros) {
+      filasDesglose.push(...filasDesgloseRubro(grupo, rubro, alumnosActivos, dias));
+    }
+    const maxCols = filasDesglose.reduce((m, f) => Math.max(m, f.length), 1);
+    const anchos = [24, ...Array(Math.max(0, maxCols - 1)).fill(16)];
+    const hojaDesglose = hojaDesdeFilas(filasDesglose, anchos);
+    XLSX.utils.book_append_sheet(libro, hojaDesglose, 'Desglose');
+  }
 
   XLSX.writeFile(libro, `${nombreArchivoSeguro(grupo.nombre)}.xlsx`);
 }

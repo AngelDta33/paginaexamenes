@@ -1,7 +1,7 @@
 // Por cada tipo de reactivo: editor de captura, render para el examen y render para la clave.
 
 import { el, clear } from './dom.js';
-import { nuevaSubpregunta } from './model.js';
+import { nuevaSubpregunta, uid } from './model.js';
 import { renderTextoFormulas, campoTextoConFormulas } from './formulas.js';
 
 const LETRAS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -56,32 +56,113 @@ function campoValor(pregunta, onChange) {
   ]);
 }
 
+// Lee la primera imagen que haya en el portapapeles del sistema (por ejemplo, una
+// imagen copiada de internet con "clic derecho → Copiar imagen"). Devuelve un Blob
+// o null. Requiere la API de Portapapeles (Chrome/Edge/Firefox modernos).
+async function leerImagenDelPortapapeles() {
+  if (!navigator.clipboard || !navigator.clipboard.read) return null;
+  const items = await navigator.clipboard.read();
+  for (const item of items) {
+    const tipo = item.types.find((t) => t.startsWith('image/'));
+    if (tipo) return item.getType(tipo);
+  }
+  return null;
+}
+
 function campoImagen(pregunta, onChange) {
   const preview = el('div', { class: 'imagen-preview' });
+  const ajusteCont = el('div', { class: 'ajuste-imagen' });
+
+  async function aplicarImagen(blobOFile) {
+    if (!blobOFile) return;
+    pregunta.imagen = await redimensionarImagen(blobOFile);
+    pintarPreview();
+    pintarAjuste();
+    onChange();
+  }
+
   function pintarPreview() {
     clear(preview);
     if (pregunta.imagen) {
       preview.appendChild(el('img', { src: pregunta.imagen, alt: 'Imagen del reactivo' }));
       preview.appendChild(el('button', {
         type: 'button', class: 'btn-quitar-imagen',
-        onclick: () => { pregunta.imagen = null; pintarPreview(); onChange(); },
+        onclick: () => { pregunta.imagen = null; pintarPreview(); pintarAjuste(); onChange(); },
       }, 'Quitar imagen'));
     }
   }
+
+  // Controles de tamaño/posición: ocultos hasta que el docente active "modificar
+  // orientación". Por defecto la imagen sigue el formato normal; solo si se activa
+  // se pueden cambiar ancho y alineación (útil cuando una imagen sale de contexto).
+  function pintarAjuste() {
+    clear(ajusteCont);
+    if (!pregunta.imagen) return;
+    const chkModificar = el('label', { class: 'campo-checkbox' }, [
+      el('input', {
+        type: 'checkbox', checked: !!pregunta.imagenModificar,
+        onchange: (e) => { pregunta.imagenModificar = e.target.checked; pintarAjuste(); onChange(); },
+      }),
+      ' Modificar orientación (tamaño y posición)',
+    ]);
+    ajusteCont.appendChild(chkModificar);
+    if (!pregunta.imagenModificar) return;
+
+    const anchoActual = Number(pregunta.imagenAncho) || 100;
+    const valorAncho = el('span', { class: 'valor-ancho' }, `${anchoActual}%`);
+    const sliderAncho = el('input', {
+      type: 'range', min: '10', max: '100', step: '5', value: anchoActual,
+      oninput: (e) => {
+        pregunta.imagenAncho = parseInt(e.target.value, 10);
+        valorAncho.textContent = `${pregunta.imagenAncho}%`;
+        onChange();
+      },
+    });
+    const selAlineacion = el('select', {
+      onchange: (e) => { pregunta.imagenAlineacion = e.target.value; onChange(); },
+    }, [
+      ['left', 'Izquierda'], ['center', 'Centro'], ['right', 'Derecha'],
+    ].map(([v, t]) => el('option', { value: v, selected: (pregunta.imagenAlineacion || 'center') === v }, t)));
+
+    ajusteCont.appendChild(el('div', { class: 'controles-ajuste-imagen' }, [
+      el('label', {}, ['Ancho: ', sliderAncho, valorAncho]),
+      el('label', {}, ['Posición: ', selAlineacion]),
+    ]));
+  }
+
   pintarPreview();
+  pintarAjuste();
+
   const input = el('input', {
     type: 'file', accept: 'image/*',
     onchange: async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-      pregunta.imagen = await redimensionarImagen(file);
-      pintarPreview();
-      onChange();
+      await aplicarImagen(file);
     },
   });
+
+  const btnPegar = el('button', {
+    type: 'button', class: 'btn-secundario btn-pegar-imagen',
+    onclick: async () => {
+      try {
+        const blob = await leerImagenDelPortapapeles();
+        if (!blob) {
+          alert('No hay ninguna imagen en el portapapeles. Copia una imagen (por ejemplo, clic derecho → Copiar imagen) e inténtalo de nuevo.');
+          return;
+        }
+        await aplicarImagen(blob);
+      } catch (err) {
+        alert('No se pudo leer el portapapeles. Copia la imagen de nuevo o usa el botón de subir archivo.');
+      }
+    },
+  }, '📋 Pegar imagen copiada');
+
   return el('div', { class: 'campo-imagen' }, [
     el('label', {}, ['Imagen (opcional): ', input]),
+    btnPegar,
     preview,
+    ajusteCont,
   ]);
 }
 
@@ -153,15 +234,32 @@ function editorRelacionColumnas(pregunta, onChange) {
       ]));
     });
     cont.appendChild(filas);
-    cont.appendChild(el('button', {
-      type: 'button', class: 'btn-secundario',
-      onclick: () => {
-        pregunta.columnaA.push('');
-        pregunta.columnaB.push('');
-        pregunta.relaciones.push(pregunta.columnaB.length - 1);
-        pintar(); onChange();
-      },
-    }, '+ Agregar par'));
+
+    // Tres botones juntos: agregar solo una fila de la columna A, solo una opción
+    // de la columna B (distractores), o un par completo A+B ya relacionado.
+    cont.appendChild(el('div', { class: 'barra-nueva barra-relacion' }, [
+      el('button', {
+        type: 'button', class: 'btn-secundario',
+        onclick: () => {
+          pregunta.columnaA.push('');
+          pregunta.relaciones.push(0); // apunta a la primera opción de B por defecto
+          pintar(); onChange();
+        },
+      }, '+ Fila en columna A'),
+      el('button', {
+        type: 'button', class: 'btn-secundario',
+        onclick: () => { pregunta.columnaB.push(''); pintar(); onChange(); },
+      }, '+ Opción en columna B'),
+      el('button', {
+        type: 'button', class: 'btn-secundario',
+        onclick: () => {
+          pregunta.columnaA.push('');
+          pregunta.columnaB.push('');
+          pregunta.relaciones.push(pregunta.columnaB.length - 1);
+          pintar(); onChange();
+        },
+      }, '+ Par (A + B)'),
+    ]));
 
     cont.appendChild(el('div', { class: 'columna-b-editor' }, [
       el('span', { class: 'etiqueta-chica' }, 'Columna B (opciones que verá el alumno; puedes agregar distractores extra):'),
@@ -179,10 +277,6 @@ function editorRelacionColumnas(pregunta, onChange) {
           },
         }, '✕'),
       ])),
-      el('button', {
-        type: 'button', class: 'btn-secundario',
-        onclick: () => { pregunta.columnaB.push(''); pintar(); onChange(); },
-      }, '+ Agregar distractor a columna B'),
     ]));
   }
   pintar();
@@ -210,17 +304,121 @@ function editorAbierta(pregunta, onChange) {
 }
 
 function editorVerdaderoFalso(pregunta, onChange) {
+  const etiquetaV = pregunta.formatoIngles ? 'True' : 'Verdadero';
+  const etiquetaF = pregunta.formatoIngles ? 'False' : 'Falso';
+  const selectResp = el('select', {
+    onchange: (e) => { pregunta.respuestaCorrecta = e.target.value === 'true'; onChange(); },
+  }, [
+    el('option', { value: 'true', selected: pregunta.respuestaCorrecta === true }, etiquetaV),
+    el('option', { value: 'false', selected: pregunta.respuestaCorrecta === false }, etiquetaF),
+  ]);
   return el('div', { class: 'editor-tipo' }, [
-    el('label', {}, [
-      'Respuesta correcta: ',
-      el('select', {
-        onchange: (e) => { pregunta.respuestaCorrecta = e.target.value === 'true'; onChange(); },
-      }, [
-        el('option', { value: 'true', selected: pregunta.respuestaCorrecta === true }, 'Verdadero'),
-        el('option', { value: 'false', selected: pregunta.respuestaCorrecta === false }, 'Falso'),
-      ]),
+    el('label', {}, ['Respuesta correcta: ', selectResp]),
+    el('label', { class: 'campo-checkbox', style: 'margin-left:0.8rem;' }, [
+      el('input', {
+        type: 'checkbox', checked: !!pregunta.formatoIngles,
+        onchange: (e) => {
+          pregunta.formatoIngles = e.target.checked;
+          // Repinta las etiquetas del selector (Verdadero/Falso ↔ True/False).
+          selectResp.options[0].textContent = pregunta.formatoIngles ? 'True' : 'Verdadero';
+          selectResp.options[1].textContent = pregunta.formatoIngles ? 'False' : 'Falso';
+          onChange();
+        },
+      }),
+      ' Formato inglés (True / False)',
     ]),
   ]);
+}
+
+// Editor de "Identificar en imagen": maneja su propia imagen (con pegado) y una
+// zona donde se hace clic para colocar marcadores numerados, arrastrables, cada
+// uno con el nombre correcto de la parte. La imagen se maneja aquí (no con el
+// campoImagen compartido) para poder repintar los marcadores al cambiarla.
+function editorIdentificarImagen(pregunta, onChange) {
+  if (!pregunta.marcadores) pregunta.marcadores = [];
+  const cont = el('div', { class: 'editor-tipo editor-identificar' });
+  const zonaImagen = el('div', { class: 'zona-marcadores' });
+  const listaMarcadores = el('div', { class: 'lista-marcadores' });
+
+  function repintarTodo() { pintarZona(); pintarLista(); }
+
+  const campoImg = campoImagen(pregunta, () => { onChange(); repintarTodo(); });
+
+  function arrastrar(badge, wrap, m) {
+    badge.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      badge.setPointerCapture(e.pointerId);
+      const mover = (ev) => {
+        const rect = wrap.getBoundingClientRect();
+        m.x = Math.max(0, Math.min(100, ((ev.clientX - rect.left) / rect.width) * 100));
+        m.y = Math.max(0, Math.min(100, ((ev.clientY - rect.top) / rect.height) * 100));
+        badge.style.left = `${m.x}%`;
+        badge.style.top = `${m.y}%`;
+      };
+      const soltar = () => {
+        badge.releasePointerCapture(e.pointerId);
+        badge.removeEventListener('pointermove', mover);
+        badge.removeEventListener('pointerup', soltar);
+        m.x = Math.round(m.x * 10) / 10;
+        m.y = Math.round(m.y * 10) / 10;
+        onChange();
+      };
+      badge.addEventListener('pointermove', mover);
+      badge.addEventListener('pointerup', soltar);
+    });
+  }
+
+  function pintarZona() {
+    clear(zonaImagen);
+    if (!pregunta.imagen) {
+      zonaImagen.appendChild(el('p', { class: 'etiqueta-chica' }, 'Sube o pega una imagen arriba; luego haz clic sobre ella para colocar cada número donde va una parte a identificar.'));
+      return;
+    }
+    const wrap = el('div', { class: 'marcadores-wrap' }, [el('img', { src: pregunta.imagen, draggable: 'false' })]);
+    wrap.addEventListener('click', (e) => {
+      if (e.target.closest('.marcador-badge')) return; // no crear otro al tocar uno existente
+      const rect = wrap.getBoundingClientRect();
+      pregunta.marcadores.push({
+        id: uid('mrk'),
+        x: Math.round(((e.clientX - rect.left) / rect.width) * 1000) / 10,
+        y: Math.round(((e.clientY - rect.top) / rect.height) * 1000) / 10,
+        etiqueta: '',
+      });
+      onChange(); repintarTodo();
+    });
+    pregunta.marcadores.forEach((m, i) => {
+      const badge = el('div', {
+        class: 'marcador-badge', style: `left:${m.x}%; top:${m.y}%;`, title: 'Arrastra para mover',
+      }, String(i + 1));
+      arrastrar(badge, wrap, m);
+      wrap.appendChild(badge);
+    });
+    zonaImagen.appendChild(wrap);
+  }
+
+  function pintarLista() {
+    clear(listaMarcadores);
+    pregunta.marcadores.forEach((m, i) => {
+      listaMarcadores.appendChild(el('div', { class: 'fila-marcador' }, [
+        el('span', { class: 'num-marcador' }, `${i + 1}.`),
+        el('input', {
+          type: 'text', value: m.etiqueta, placeholder: `Nombre de la parte ${i + 1}`,
+          oninput: (e) => { m.etiqueta = e.target.value; onChange(); },
+        }),
+        el('button', {
+          type: 'button', class: 'btn-icono', title: 'Quitar marcador',
+          onclick: () => { pregunta.marcadores.splice(i, 1); onChange(); repintarTodo(); },
+        }, '✕'),
+      ]));
+    });
+  }
+
+  repintarTodo();
+  cont.appendChild(campoImg);
+  cont.appendChild(zonaImagen);
+  cont.appendChild(el('p', { class: 'etiqueta-chica' }, 'Cada número es una parte a identificar; escribe su nombre correcto abajo. En el examen aparecerá la imagen con los números y un banco de palabras para que el alumno los relacione.'));
+  cont.appendChild(listaMarcadores);
+  return cont;
 }
 
 const TIPOS_SUBPREGUNTA = [
@@ -250,10 +448,12 @@ function editorLecturaComprension(pregunta, onChange) {
   const { contenedor: campoTexto } = campoTextoConFormulas({
     placeholder: 'Pega o escribe el texto de comprensión de lectura…', valor: pregunta.textoLectura, filas: '5',
     oninput: (valor) => { pregunta.textoLectura = valor; onChange(); },
+    permitirSangria: true,
   });
   cont.appendChild(el('div', { class: 'campo' }, [
     el('label', {}, 'Texto de lectura:'),
     campoTexto,
+    el('p', { class: 'etiqueta-chica' }, 'Consejo: usa la tecla Tab para agregar sangría (por ejemplo, para separar el diálogo de un personaje); Shift+Tab la quita.'),
   ]));
   cont.appendChild(subCont);
   cont.appendChild(el('div', { class: 'agregar-sub' }, [
@@ -275,6 +475,7 @@ const EDITORES_TIPO = {
   relacion_columnas: editorRelacionColumnas,
   abierta: editorAbierta,
   verdadero_falso: editorVerdaderoFalso,
+  identificar_imagen: editorIdentificarImagen,
   lectura_comprension: editorLecturaComprension,
 };
 
@@ -283,8 +484,13 @@ const ETIQUETAS_TIPO = {
   relacion_columnas: 'Relación de columnas',
   abierta: 'Respuesta abierta',
   verdadero_falso: 'Verdadero / Falso',
+  identificar_imagen: 'Identificar en imagen',
   lectura_comprension: 'Lectura de comprensión',
 };
+
+// Tipos que manejan su propia imagen dentro del editor (no usan el campoImagen
+// compartido que agrega crearEditorPregunta).
+const TIPOS_IMAGEN_PROPIA = new Set(['identificar_imagen']);
 
 export function crearEditorPregunta(pregunta, { onChange, onDelete, subEtiqueta }) {
   const cabecera = el('div', { class: 'cabecera-pregunta' }, [
@@ -299,7 +505,7 @@ export function crearEditorPregunta(pregunta, { onChange, onDelete, subEtiqueta 
   }
   const editorFn = EDITORES_TIPO[pregunta.tipo] || editorAbierta;
   cuerpo.push(editorFn(pregunta, onChange));
-  if (pregunta.tipo !== 'lectura_comprension') {
+  if (pregunta.tipo !== 'lectura_comprension' && !TIPOS_IMAGEN_PROPIA.has(pregunta.tipo)) {
     cuerpo.push(campoImagen(pregunta, onChange));
   }
 
@@ -319,7 +525,19 @@ function encabezadoReactivo(numero, pregunta, valor) {
 }
 
 function bloqueImagen(pregunta) {
-  return pregunta.imagen ? el('div', { class: 'imagen-reactivo' }, [el('img', { src: pregunta.imagen })]) : null;
+  if (!pregunta.imagen) return null;
+  const img = el('img', { src: pregunta.imagen });
+  // Por defecto la imagen usa el formato normal (CSS). Solo si el docente activó
+  // "modificar orientación" se aplica el ancho y la alineación elegidos.
+  if (pregunta.imagenModificar) {
+    const ancho = Math.max(10, Math.min(100, Number(pregunta.imagenAncho) || 100));
+    img.style.width = `${ancho}%`;
+    img.style.maxHeight = 'none';
+    const align = pregunta.imagenAlineacion || 'center';
+    img.style.marginLeft = align === 'left' ? '0' : 'auto';
+    img.style.marginRight = align === 'right' ? '0' : 'auto';
+  }
+  return el('div', { class: 'imagen-reactivo' }, [img]);
 }
 
 function renderOpcionMultiple(pregunta, numero, modoClave) {
@@ -380,14 +598,44 @@ function renderAbierta(pregunta, numero, modoClave) {
 }
 
 function renderVerdaderoFalso(pregunta, numero, modoClave) {
+  const inV = pregunta.formatoIngles ? 'T' : 'V';
+  const inF = pregunta.formatoIngles ? 'F' : 'F';
   return el('div', { class: 'reactivo' }, [
     encabezadoReactivo(numero, pregunta, pregunta.valor),
     bloqueImagen(pregunta),
     el('div', { class: 'vf-opciones' }, [
-      el('span', { class: modoClave && pregunta.respuestaCorrecta ? 'vf-opcion vf-correcta' : 'vf-opcion' }, `V (${modoClave && pregunta.respuestaCorrecta ? '✔' : '  '})`),
-      el('span', { class: modoClave && !pregunta.respuestaCorrecta ? 'vf-opcion vf-correcta' : 'vf-opcion' }, `F (${modoClave && !pregunta.respuestaCorrecta ? '✔' : '  '})`),
+      el('span', { class: modoClave && pregunta.respuestaCorrecta ? 'vf-opcion vf-correcta' : 'vf-opcion' }, `${inV} (${modoClave && pregunta.respuestaCorrecta ? '✔' : '  '})`),
+      el('span', { class: modoClave && !pregunta.respuestaCorrecta ? 'vf-opcion vf-correcta' : 'vf-opcion' }, `${inF} (${modoClave && !pregunta.respuestaCorrecta ? '✔' : '  '})`),
     ]),
   ]);
+}
+
+function renderIdentificarImagen(pregunta, numero, modoClave) {
+  const marcadores = pregunta.marcadores || [];
+  const cuerpo = [encabezadoReactivo(numero, pregunta, pregunta.valor)];
+
+  if (pregunta.imagen) {
+    const wrap = el('div', { class: 'identificar-imagen-wrap' }, [el('img', { src: pregunta.imagen })]);
+    marcadores.forEach((m, i) => {
+      wrap.appendChild(el('span', { class: 'marcador-num', style: `left:${m.x}%; top:${m.y}%;` }, String(i + 1)));
+    });
+    cuerpo.push(wrap);
+  }
+
+  // Banco de palabras barajado (solo en el examen; en la clave se ven las respuestas).
+  if (!modoClave && marcadores.length) {
+    const permutado = shuffleDeterminista(marcadores.map((m) => m.etiqueta), pregunta.id);
+    cuerpo.push(el('div', { class: 'banco-palabras' }, permutado.map(([et]) => el('span', { class: 'palabra-banco' }, et || '—'))));
+  }
+
+  cuerpo.push(el('div', { class: 'respuestas-identificar' }, marcadores.map((m, i) => el('div', { class: 'fila-resp-identificar' }, [
+    el('span', { class: 'num-resp' }, `${i + 1}. `),
+    modoClave
+      ? el('span', { class: 'resp-relacion resp-correcta' }, m.etiqueta || '(sin nombre)')
+      : el('span', { class: 'linea-resp-inline' }),
+  ]))));
+
+  return el('div', { class: 'reactivo' }, cuerpo);
 }
 
 const RENDER_TIPO = {
@@ -395,6 +643,7 @@ const RENDER_TIPO = {
   relacion_columnas: renderRelacionColumnas,
   abierta: renderAbierta,
   verdadero_falso: renderVerdaderoFalso,
+  identificar_imagen: renderIdentificarImagen,
 };
 
 export function renderPregunta(pregunta, numero, modoClave) {

@@ -10,7 +10,7 @@ import { el, clear } from './dom.js';
 import { guardarGrupo, listarAsistencias } from './gruposStore.js';
 import {
   nuevoRubro, nuevoRubroAsistencia, esRubroAsistencia, tieneEvaluaciones, calificacionAlumno,
-  sumaPorcentajes, validarRubros, calcularPromedio, valorRubro,
+  sumaPorcentajes, validarRubros, calcularPromedio, valorRubro, crearRubrosEstandar,
 } from './gruposModel.js';
 
 export async function montarRubrica(contenedor, grupo, { onAbrirEvaluaciones, soloLectura = false } = {}) {
@@ -84,6 +84,11 @@ export async function montarRubrica(contenedor, grupo, { onAbrirEvaluaciones, so
       return;
     }
 
+    // Recalcular el promedio de cada alumno sin reconstruir la tabla — así el
+    // input de porcentaje no pierde el foco entre teclas (antes se llamaba a
+    // pintarTabla() en cada oninput y solo se alcanzaba a escribir un dígito).
+    const actualizadoresPromedio = [];
+
     const encabezado = el('tr', {}, [
       el('th', { class: 'celda-nombre-alumno' }, 'Alumno'),
       ...grupo.rubros.map((rubro) => {
@@ -101,7 +106,7 @@ export async function montarRubrica(contenedor, grupo, { onAbrirEvaluaciones, so
           el('div', { class: 'fila-porcentaje-rubro' }, [
             el('input', {
               type: 'number', class: 'input-porcentaje-rubro', value: rubro.porcentaje, min: '0', max: '100', disabled: soloLectura,
-              oninput: (e) => { rubro.porcentaje = parseFloat(e.target.value) || 0; pintarValidacion(); pintarTabla(); guardarConDebounce(); },
+              oninput: (e) => { rubro.porcentaje = parseFloat(e.target.value) || 0; pintarValidacion(); actualizadoresPromedio.forEach((fn) => fn()); guardarConDebounce(); },
             }),
             '%',
             soloLectura ? null : el('button', {
@@ -132,6 +137,7 @@ export async function montarRubrica(contenedor, grupo, { onAbrirEvaluaciones, so
         celdaPromedio.textContent = p === null ? '—' : p.toFixed(2);
       }
       actualizarPromedio();
+      actualizadoresPromedio.push(actualizarPromedio);
 
       const celdasRubro = grupo.rubros.map((rubro) => {
         if (esRubroAsistencia(rubro) || tieneEvaluaciones(rubro)) {
@@ -192,12 +198,26 @@ export async function montarRubrica(contenedor, grupo, { onAbrirEvaluaciones, so
     },
   }, '+ Agregar rubro de asistencia');
 
+  // Genera de un golpe las 5 rúbricas estándar (Examen, Tareas, Actividades,
+  // Proyectos, Participación). No duplica las que ya existan por nombre, así que
+  // se puede usar aunque ya haya algún rubro capturado.
+  const btnRubrosEstandar = el('button', {
+    type: 'button', class: 'btn-secundario',
+    onclick: () => {
+      const existentes = new Set((grupo.rubros || []).map((r) => (r.nombre || '').trim().toLowerCase()));
+      const nuevos = crearRubrosEstandar().filter((r) => !existentes.has(r.nombre.toLowerCase()));
+      if (nuevos.length === 0) { alert('Ya tienes las 5 rúbricas estándar.'); return; }
+      grupo.rubros.push(...nuevos);
+      pintarValidacion(); pintarBotonesRubro(); pintarTabla(); guardarConDebounce();
+    },
+  }, '✨ Generar rúbricas estándar');
+
   contenedor.appendChild(el('div', { class: 'panel' }, [
     el('h2', {}, ['Rúbrica y calificaciones ', estadoGuardado]),
     el('p', { class: 'etiqueta-chica' }, soloLectura ? 'Solo lectura: no se puede editar la rúbrica ni las calificaciones.' : 'Calificaciones en escala 0–10. Puedes agregar o quitar rubros y cambiar los porcentajes cuando quieras — el promedio se recalcula solo. Haz clic en el nombre de un rubro (abajo) para capturar varias evaluaciones dentro de él (ej. varios exámenes); su calificación se calcula sola, ya no se captura aquí.'),
     barraValidacion,
     contenedorBotonesRubro,
-    soloLectura ? null : el('div', { class: 'barra-nueva' }, [btnAgregarRubro, btnAgregarRubroAsistencia]),
+    soloLectura ? null : el('div', { class: 'barra-nueva' }, [btnRubrosEstandar, btnAgregarRubro, btnAgregarRubroAsistencia]),
     contenedorTabla,
   ]));
 

@@ -71,6 +71,19 @@ export function montarEditor(contenedor, examen, { sesion, onVolver }) {
         },
       }, 'Enviar a revisión'));
     }
+    // El docente puede retirar su examen de revisión si se equivocó al enviarlo,
+    // para poder corregirlo y volverlo a mandar.
+    if (sesion.rol === 'maestro' && examen.estado === 'en_revision') {
+      botones.push(el('button', {
+        type: 'button', class: 'btn-secundario',
+        onclick: async () => {
+          if (!confirm('¿Cancelar la revisión y regresar el examen a borrador para poder editarlo?')) return;
+          examen.estado = 'borrador';
+          await guardarExamen(examen);
+          montarEditor(contenedor, examen, { sesion, onVolver });
+        },
+      }, 'Cancelar revisión'));
+    }
     if (esRevisorOAdmin) {
       if (examen.estado !== 'aprobado') {
         botones.push(el('button', {
@@ -88,6 +101,14 @@ export function montarEditor(contenedor, examen, { sesion, onVolver }) {
         botones.push(el('button', {
           type: 'button', class: 'btn-secundario',
           onclick: async () => {
+            const texto = prompt('Comentarios para el docente: ¿qué cambios necesita hacer? (Puedes dejarlo vacío.)', '');
+            if (texto === null) return; // canceló el diálogo: no se regresa nada
+            if (texto.trim()) {
+              examen.comentariosRevision = examen.comentariosRevision || [];
+              examen.comentariosRevision.push({
+                autor: sesion.nombre, fecha: new Date().toISOString(), texto: texto.trim(),
+              });
+            }
             examen.estado = 'borrador';
             examen.revisadoPor = null;
             examen.revisadoEn = null;
@@ -105,6 +126,32 @@ export function montarEditor(contenedor, examen, { sesion, onVolver }) {
     ]));
   }
   pintarPanelEstado();
+
+  // --- Panel de comentarios de revisión (lo que el revisor pidió corregir) ---
+  const panelComentarios = el('div', {});
+  function pintarComentarios() {
+    clear(panelComentarios);
+    const comentarios = examen.comentariosRevision || [];
+    if (comentarios.length === 0) return;
+    const puedeQuitar = sesion.rol === 'maestro' && examen.estado === 'borrador';
+    panelComentarios.appendChild(el('div', { class: 'panel panel-comentarios' }, [
+      el('h2', {}, '📝 Comentarios de revisión'),
+      el('p', { class: 'etiqueta-chica' }, 'Cambios que el revisor pide antes de aprobar el examen.'),
+      el('ul', { class: 'lista-comentarios' }, comentarios.map((c, i) => el('li', {}, [
+        el('div', { class: 'comentario-texto' }, c.texto),
+        el('div', { class: 'comentario-meta' }, `— ${c.autor || 'Revisor'}${c.fecha ? `, ${fechaCorta(c.fecha)}` : ''}`),
+        puedeQuitar ? el('button', {
+          type: 'button', class: 'btn-icono', title: 'Marcar como resuelto y quitar',
+          onclick: () => {
+            examen.comentariosRevision.splice(i, 1);
+            guardarExamen(examen).catch(console.error);
+            pintarComentarios();
+          },
+        }, '✓') : null,
+      ]))),
+    ]));
+  }
+  pintarComentarios();
 
   // --- Panel encabezado + Reactivos (solo si se puede editar) ---
   let panelEncabezado;
@@ -269,6 +316,7 @@ export function montarEditor(contenedor, examen, { sesion, onVolver }) {
   if (avisoTipoB) contenedor.appendChild(avisoTipoB);
   contenedor.appendChild(el('button', { type: 'button', class: 'btn-secundario', onclick: onVolver, style: 'margin-bottom:0.8rem;' }, '← Volver a mis exámenes'));
   contenedor.appendChild(panelEstado);
+  contenedor.appendChild(panelComentarios);
   contenedor.appendChild(barraValidacion);
   contenedor.appendChild(layout);
 
