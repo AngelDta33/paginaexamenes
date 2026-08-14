@@ -9,7 +9,10 @@ import {
   valoresAsistenciaDeGrupo, promedioAsistenciaAlumno,
 } from './gruposModel.js';
 
-const SIGUIENTE_ESTADO = { null: 'presente', presente: 'falta', falta: 'retardo', retardo: 'justificada', justificada: null };
+// Ciclo al hacer clic: sin marcar → presente → falta → justificada → sin marcar.
+// "retardo" ya no forma parte del ciclo (se quitó); si una celda vieja lo tiene,
+// un clic la limpia (retardo → null).
+const SIGUIENTE_ESTADO = { null: 'presente', presente: 'falta', falta: 'justificada', justificada: null, retardo: null };
 const INICIALES_ESTADO = INICIALES_ESTADO_ASISTENCIA;
 
 export async function montarListaAsistencia(contenedor, grupo, { soloLectura = false } = {}) {

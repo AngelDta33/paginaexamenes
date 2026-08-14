@@ -6,8 +6,8 @@ import { numerarReactivos, subtotalSeccion, totalExamen } from './model.js';
 import { renderPregunta, renderLectura } from './questionTypes.js';
 
 const PX_POR_CM = 96 / 2.54;
-const PAGINA_ANCHO_CM = 21.59; // carta
-const PAGINA_ALTO_CM = 27.94;
+const PAGINA_ANCHO_CM = 21.59; // oficio/folio 8.5×13"
+const PAGINA_ALTO_CM = 33.02;
 const PADDING_CM = 1.8;
 const MIN_RESTANTE_PARA_TITULO_CM = 4;
 

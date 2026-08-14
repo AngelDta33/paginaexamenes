@@ -160,6 +160,28 @@ button {
 
 .campo-imagen { margin-top: 0.4rem; font-size: 0.85rem; }
 .imagen-preview img { max-width: 100%; max-height: 5rem; display: block; margin-top: 0.3rem; }
+.btn-pegar-imagen { margin-left: 0.4rem; padding: 0.15rem 0.5rem; font-size: 0.8rem; }
+.campo-checkbox { display: inline-flex; align-items: center; gap: 0.25rem; cursor: pointer; }
+.ajuste-imagen { margin-top: 0.4rem; }
+.controles-ajuste-imagen { display: flex; flex-wrap: wrap; gap: 0.8rem; align-items: center; margin-top: 0.3rem; }
+.controles-ajuste-imagen label { display: inline-flex; align-items: center; gap: 0.3rem; }
+.valor-ancho { min-width: 2.6rem; font-weight: bold; }
+
+/* Editor "Identificar en imagen": colocar marcadores numerados sobre la imagen */
+.zona-marcadores { margin-top: 0.5rem; }
+.marcadores-wrap { position: relative; display: inline-block; max-width: 100%; line-height: 0; cursor: crosshair; border: 1px dashed var(--borde); }
+.marcadores-wrap img { max-width: 100%; max-height: 22rem; display: block; }
+.marcador-badge {
+  position: absolute; transform: translate(-50%, -50%);
+  min-width: 1.3rem; height: 1.3rem; padding: 0 0.15rem; box-sizing: border-box;
+  background: var(--rojo, #d13); color: #fff; border: 2px solid #fff; border-radius: 50%;
+  font-size: 0.8rem; font-weight: bold; line-height: 1.15rem; text-align: center;
+  cursor: move; touch-action: none; box-shadow: 0 0 2px rgba(0,0,0,0.5);
+}
+.lista-marcadores { margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.3rem; }
+.fila-marcador { display: flex; align-items: center; gap: 0.4rem; }
+.fila-marcador input { flex: 1 1 auto; }
+.num-marcador { font-weight: bold; min-width: 1.3rem; }
 
 .pantalla-config .panel { max-width: 520px; }
 .logo-config-preview img { max-height: 4rem; margin-top: 0.4rem; }
@@ -278,3 +300,17 @@ button {
 .celda-promedio { font-weight: bold; color: var(--azul); }
 .insignia-auto { display: inline-block; background: var(--azul-suave); color: var(--azul); border-radius: 4px; padding: 0 0.3rem; font-size: 0.7rem; font-weight: normal; margin-left: 0.3rem; vertical-align: middle; }
 .celda-asistencia-auto { font-weight: bold; color: var(--azul); background: var(--azul-suave); }
+
+/* Calificar una evaluación por número de aciertos (→ base 10 automática) */
+.fila-aciertos-rubro { display: flex; align-items: center; gap: 0.15rem; justify-content: center; font-weight: normal; font-size: 0.75rem; color: var(--texto-suave, #666); margin-top: 0.2rem; }
+.input-total-aciertos { width: 3rem !important; padding: 0.1rem !important; text-align: center; }
+.celda-aciertos { white-space: nowrap; }
+.hint-nota-aciertos { display: inline-block; margin-left: 0.25rem; font-size: 0.75rem; font-weight: bold; color: var(--azul); }
+
+/* Comentarios de revisión hacia el docente */
+.panel-comentarios { border-left: 4px solid #e0a800; background: #fff9e6; }
+.lista-comentarios { list-style: none; padding: 0; margin: 0.4rem 0 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.lista-comentarios li { background: #fff; border: 1px solid var(--borde); border-radius: 6px; padding: 0.5rem 1.8rem 0.5rem 0.6rem; position: relative; }
+.comentario-texto { white-space: pre-wrap; }
+.comentario-meta { font-size: 0.78rem; color: #888; margin-top: 0.2rem; }
+.lista-comentarios .btn-icono { position: absolute; top: 0.35rem; right: 0.35rem; }

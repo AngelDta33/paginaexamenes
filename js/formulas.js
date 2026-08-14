@@ -139,7 +139,7 @@ function crearRangoAlFinal(contenedor) {
 // Devuelve { contenedor, textarea } — igual patrón que campoContrasena
 // (`textarea` aquí es el campo editable, no un <textarea> real).
 export function campoTextoConFormulas({
-  placeholder = '', valor = '', filas = '2', oninput,
+  placeholder = '', valor = '', filas = '2', oninput, permitirSangria = false,
 } = {}) {
   const editor = el('div', {
     class: 'input-enunciado campo-editable-formulas', contenteditable: 'true', 'data-placeholder': placeholder,
@@ -187,6 +187,44 @@ export function campoTextoConFormulas({
   // navegadores por defecto en contenteditable, para que serializar() no
   // tenga que lidiar con estructuras anidadas.
   editor.addEventListener('keydown', (e) => {
+    // Sangría con Tab (solo en textos que lo permiten, ej. comprensión lectora):
+    // inserta 4 espacios no separables en el cursor para desplazar un diálogo o
+    // el nombre de un personaje. Shift+Tab quita una sangría. Se usan espacios
+    // " " para que no se colapsen y se conserven tal cual en el examen.
+    if (permitirSangria && e.key === 'Tab') {
+      e.preventDefault();
+      const seleccion = window.getSelection();
+      const rango = seleccion.rangeCount > 0 ? seleccion.getRangeAt(0) : crearRangoAlFinal(editor);
+      if (e.shiftKey) {
+        // Quitar hasta 4 espacios de sangría justo antes del cursor.
+        const nodo = rango.startContainer;
+        if (nodo.nodeType === Node.TEXT_NODE && rango.startOffset > 0) {
+          let quitar = 0;
+          while (quitar < 4 && rango.startOffset - quitar - 1 >= 0
+            && nodo.textContent[rango.startOffset - quitar - 1] === ' ') quitar += 1;
+          if (quitar > 0) {
+            const pos = rango.startOffset;
+            nodo.textContent = nodo.textContent.slice(0, pos - quitar) + nodo.textContent.slice(pos);
+            const nuevo = document.createRange();
+            nuevo.setStart(nodo, pos - quitar);
+            nuevo.collapse(true);
+            seleccion.removeAllRanges();
+            seleccion.addRange(nuevo);
+            dispararCambio();
+          }
+        }
+        return;
+      }
+      rango.deleteContents();
+      const nodo = document.createTextNode('    ');
+      rango.insertNode(nodo);
+      rango.setStartAfter(nodo);
+      rango.collapse(true);
+      seleccion.removeAllRanges();
+      seleccion.addRange(rango);
+      dispararCambio();
+      return;
+    }
     if (e.key !== 'Enter') return;
     e.preventDefault();
     const seleccion = window.getSelection();

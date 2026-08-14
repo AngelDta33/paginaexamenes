@@ -19,6 +19,9 @@ export function nuevoExamen(sesion) {
     estado: 'borrador', // 'borrador' | 'en_revision' | 'aprobado'
     revisadoPor: null,
     revisadoEn: null,
+    // Comentarios que el revisor/administrador deja al regresar el examen a
+    // borrador (qué debe corregir el docente). Cada uno: { autor, fecha, texto }.
+    comentariosRevision: [],
     meta: {
       grado: '',
       grupo: '',
@@ -70,6 +73,7 @@ const DEFAULTS_POR_TIPO = {
     valor: 1,
     imagen: null,
     respuestaCorrecta: true,
+    formatoIngles: false, // muestra True/False en vez de Verdadero/Falso
   }),
   lectura_comprension: () => ({
     enunciado: '',
@@ -77,6 +81,15 @@ const DEFAULTS_POR_TIPO = {
     imagen: null,
     textoLectura: '',
     subpreguntas: [],
+  }),
+  // Identificar partes señaladas en una imagen: el docente coloca marcadores
+  // numerados sobre la imagen (x,y en % relativo) y escribe el nombre correcto de
+  // cada uno. En el examen se ve la imagen con los números + un banco de palabras.
+  identificar_imagen: () => ({
+    enunciado: 'Escribe el nombre de cada parte señalada.',
+    valor: 1,
+    imagen: null,
+    marcadores: [], // { id, x, y, etiqueta }
   }),
 };
 
@@ -97,6 +110,7 @@ export const TIPOS_PREGUNTA = [
   { valor: 'relacion_columnas', etiqueta: 'Relación de columnas' },
   { valor: 'abierta', etiqueta: 'Respuesta abierta/restringida' },
   { valor: 'verdadero_falso', etiqueta: 'Verdadero / Falso' },
+  { valor: 'identificar_imagen', etiqueta: 'Identificar en imagen' },
   { valor: 'lectura_comprension', etiqueta: 'Lectura de comprensión' },
 ];
 

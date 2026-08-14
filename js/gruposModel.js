@@ -2,7 +2,10 @@
 
 import { uid } from './model.js';
 
-export const ESTADOS_ASISTENCIA = ['presente', 'falta', 'retardo', 'justificada'];
+// Estados activos del pase de lista (sin "retardo": se quitó a pedido de la escuela).
+// Los mapas de abajo conservan "retardo" para que grupos viejos con ese estado
+// sigan mostrándose y calculando bien, aunque ya no se pueda asignar de nuevo.
+export const ESTADOS_ASISTENCIA = ['presente', 'falta', 'justificada'];
 
 export const ETIQUETAS_ESTADO_ASISTENCIA = {
   presente: 'Presente',
@@ -62,13 +65,45 @@ export function esRubroAsistencia(rubro) {
   return rubro.tipoEspecial === 'asistencia';
 }
 
+// Las 5 rúbricas estándar de la escuela (se generan con un botón). El porcentaje es
+// un reparto sugerido que suma 100; el maestro lo puede cambiar cuando quiera.
+export const RUBROS_ESTANDAR = [
+  { nombre: 'Examen', porcentaje: 40 },
+  { nombre: 'Tareas', porcentaje: 20 },
+  { nombre: 'Actividades', porcentaje: 20 },
+  { nombre: 'Proyectos', porcentaje: 10 },
+  { nombre: 'Participación', porcentaje: 10 },
+];
+
+export function crearRubrosEstandar() {
+  return RUBROS_ESTANDAR.map((r) => nuevoRubro(r.nombre, r.porcentaje));
+}
+
 // Una "evaluación" es una captura dentro de un rubro (ej. cada examen dentro del
 // rubro "Examen"), con su propio porcentaje — igual que los rubros de la rúbrica.
 // Empieza en 0% (como un rubro nuevo); el maestro reparte el 100% entre todas.
-export function nuevaEvaluacion(nombre, descripcion, fecha) {
+// totalAciertos (opcional): si se captura, la evaluación se califica por número de
+// aciertos y el programa saca la calificación en base 10 automáticamente
+// (calificación = aciertos / totalAciertos × 10). Si se deja vacío, se captura la
+// calificación 0-10 directamente, como siempre.
+export function nuevaEvaluacion(nombre, descripcion, fecha, totalAciertos = null) {
   return {
     id: uid('ev'), nombre, descripcion, fecha, porcentaje: 0,
+    totalAciertos: totalAciertos && Number(totalAciertos) > 0 ? Number(totalAciertos) : null,
   };
+}
+
+// Convierte el valor crudo capturado para un alumno en una evaluación a la
+// calificación 0-10 que se usa para promediar: si la evaluación se califica por
+// aciertos (totalAciertos), reescala aciertos → base 10; si no, el valor ya ES la
+// calificación. Devuelve null cuando no hay nada capturado.
+export function notaDeEvaluacion(ev, valorCrudo) {
+  if (valorCrudo === null || valorCrudo === undefined || valorCrudo === '') return null;
+  const n = Number(valorCrudo);
+  if (!Number.isFinite(n)) return null;
+  const total = Number(ev.totalAciertos) || 0;
+  if (total > 0) return Math.max(0, Math.min(10, (n / total) * 10));
+  return n;
 }
 
 export function tieneEvaluaciones(rubro) {
@@ -135,9 +170,9 @@ export function valorRubroDetallado(grupo, rubro, alumnoId) {
   let suma = 0;
   let porcentajeCapturado = 0;
   for (const ev of rubro.evaluaciones || []) {
-    const nota = cal.notasEvaluacion[ev.id];
-    if (nota === null || nota === undefined || nota === '') continue;
-    suma += Number(nota) * (Number(ev.porcentaje) || 0) / 100;
+    const nota = notaDeEvaluacion(ev, cal.notasEvaluacion[ev.id]);
+    if (nota === null) continue;
+    suma += nota * (Number(ev.porcentaje) || 0) / 100;
     porcentajeCapturado += Number(ev.porcentaje) || 0;
   }
   if (porcentajeCapturado === 0) return null;

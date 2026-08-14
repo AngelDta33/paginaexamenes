@@ -7,6 +7,7 @@ import { el, clear } from './dom.js';
 import { guardarGrupo } from './gruposStore.js';
 import {
   nuevaEvaluacion, calificacionAlumno, sumaPorcentajesEvaluaciones, validarEvaluaciones,
+  notaDeEvaluacion,
 } from './gruposModel.js';
 
 export function montarEvaluacionesRubro(contenedor, grupo, rubroId, { onVolver, soloLectura = false }) {
@@ -37,7 +38,15 @@ export function montarEvaluacionesRubro(contenedor, grupo, rubroId, { onVolver, 
   const campoNombre = el('input', { type: 'text', placeholder: `Ej. "${nombreRubro} 1"` });
   const campoDescripcion = el('input', { type: 'text', placeholder: 'Descripción breve (opcional)' });
   const campoFecha = el('input', { type: 'date' });
+  const campoTotalAciertos = el('input', { type: 'number', min: '1', step: '1', placeholder: 'Ej. 20' });
   const btnAgregar = el('button', { type: 'button', class: 'btn-primario' }, `+ Agregar ${nombreRubro}`);
+
+  // Actualiza el "= 8.5" que aparece junto a la casilla de aciertos, mostrando la
+  // calificación en base 10 que se está calculando en vivo para ese alumno.
+  function actualizarHintNota(ev, hint, cal) {
+    const nota = notaDeEvaluacion(ev, cal.notasEvaluacion[ev.id]);
+    hint.textContent = nota === null ? '' : `= ${nota.toFixed(1)}`;
+  }
 
   const barraValidacion = el('div', { class: 'barra-validacion' });
   function pintarValidacion() {
@@ -75,6 +84,10 @@ export function montarEvaluacionesRubro(contenedor, grupo, rubroId, { onVolver, 
       return;
     }
 
+    // Ver rubrica.js: recalcular promedios en vivo sin reconstruir la tabla, para
+    // que el input de porcentaje no pierda el foco entre teclas.
+    const actualizadoresPromedio = [];
+
     const encabezado = el('tr', {}, [
       el('th', { class: 'celda-nombre-alumno' }, 'Alumno'),
       ...evaluaciones.map((ev) => el('th', { class: 'col-rubro' }, [
@@ -83,7 +96,7 @@ export function montarEvaluacionesRubro(contenedor, grupo, rubroId, { onVolver, 
         el('div', { class: 'fila-porcentaje-rubro' }, [
           el('input', {
             type: 'number', class: 'input-porcentaje-rubro', value: ev.porcentaje ?? 0, min: '0', max: '100', disabled: soloLectura,
-            oninput: (e) => { ev.porcentaje = parseFloat(e.target.value) || 0; pintarValidacion(); pintarTabla(); guardarConDebounce(); },
+            oninput: (e) => { ev.porcentaje = parseFloat(e.target.value) || 0; pintarValidacion(); actualizadoresPromedio.forEach((fn) => fn()); guardarConDebounce(); },
           }),
           '%',
           soloLectura ? null : el('button', {
@@ -97,6 +110,22 @@ export function montarEvaluacionesRubro(contenedor, grupo, rubroId, { onVolver, 
             },
           }, '✕'),
         ]),
+        // Calificar por aciertos (opcional): si se pone un total, las casillas de
+        // abajo piden aciertos y la calificación 0-10 se saca sola. Usa onchange
+        // (al salir del campo) para no reconstruir la tabla en cada tecla.
+        el('label', { class: 'fila-aciertos-rubro', title: 'Deja vacío para capturar la calificación 0-10 directamente' }, [
+          '/ ',
+          el('input', {
+            type: 'number', class: 'input-total-aciertos', min: '1', step: '1',
+            value: ev.totalAciertos ?? '', placeholder: '—', disabled: soloLectura,
+            onchange: (e) => {
+              const v = parseInt(e.target.value, 10);
+              ev.totalAciertos = Number.isFinite(v) && v > 0 ? v : null;
+              pintarTabla(); guardarConDebounce();
+            },
+          }),
+          ' aciertos',
+        ]),
       ])),
       el('th', {}, 'Promedio'),
     ]);
@@ -108,26 +137,35 @@ export function montarEvaluacionesRubro(contenedor, grupo, rubroId, { onVolver, 
         let suma = 0;
         let porcentajeCapturado = 0;
         for (const ev of evaluaciones) {
-          const nota = cal.notasEvaluacion[ev.id];
-          if (nota === null || nota === undefined || nota === '') continue;
-          suma += Number(nota) * (Number(ev.porcentaje) || 0) / 100;
+          const nota = notaDeEvaluacion(ev, cal.notasEvaluacion[ev.id]);
+          if (nota === null) continue;
+          suma += nota * (Number(ev.porcentaje) || 0) / 100;
           porcentajeCapturado += Number(ev.porcentaje) || 0;
         }
         celdaPromedio.textContent = porcentajeCapturado === 0 ? '—' : suma.toFixed(2);
       }
       actualizarPromedio();
+      actualizadoresPromedio.push(actualizarPromedio);
 
-      const celdas = evaluaciones.map((ev) => el('td', {}, [
-        el('input', {
-          type: 'number', class: 'input-calificacion', min: '0', max: '10', step: '0.1', disabled: soloLectura,
+      const celdas = evaluaciones.map((ev) => {
+        const total = Number(ev.totalAciertos) || 0;
+        const hint = total > 0 ? el('span', { class: 'hint-nota-aciertos' }) : null;
+        const input = el('input', {
+          type: 'number', class: 'input-calificacion',
+          min: '0', max: total > 0 ? String(total) : '10', step: total > 0 ? '1' : '0.1',
+          disabled: soloLectura,
           value: cal.notasEvaluacion[ev.id] ?? '',
+          title: total > 0 ? `Escribe los aciertos (de ${total}); la calificación se calcula sola.` : 'Calificación 0-10',
           oninput: (e) => {
             cal.notasEvaluacion[ev.id] = e.target.value === '' ? null : parseFloat(e.target.value);
+            if (hint) actualizarHintNota(ev, hint, cal);
             actualizarPromedio();
             guardarConDebounce();
           },
-        }),
-      ]));
+        });
+        if (hint) actualizarHintNota(ev, hint, cal);
+        return el('td', { class: total > 0 ? 'celda-aciertos' : '' }, [input, hint]);
+      });
 
       return el('tr', {}, [
         el('td', { class: 'celda-nombre-alumno' }, alumno.nombre),
@@ -145,10 +183,11 @@ export function montarEvaluacionesRubro(contenedor, grupo, rubroId, { onVolver, 
   btnAgregar.onclick = () => {
     if (!campoNombre.value.trim()) { alert(`Ponle un nombre (ej. "${nombreRubro} 1").`); return; }
     rubro.evaluaciones = rubro.evaluaciones || [];
-    rubro.evaluaciones.push(nuevaEvaluacion(campoNombre.value.trim(), campoDescripcion.value.trim(), campoFecha.value));
+    rubro.evaluaciones.push(nuevaEvaluacion(campoNombre.value.trim(), campoDescripcion.value.trim(), campoFecha.value, campoTotalAciertos.value));
     campoNombre.value = '';
     campoDescripcion.value = '';
     campoFecha.value = '';
+    campoTotalAciertos.value = '';
     pintarValidacion();
     pintarTabla();
     guardarConDebounce();
@@ -157,11 +196,12 @@ export function montarEvaluacionesRubro(contenedor, grupo, rubroId, { onVolver, 
   contenedor.appendChild(el('button', { type: 'button', class: 'btn-secundario', onclick: onVolver, style: 'margin-bottom:0.8rem;' }, '← Volver a la rúbrica'));
   contenedor.appendChild(el('div', { class: 'panel' }, [
     el('h2', {}, [`${nombreRubro} `, estadoGuardado]),
-    el('p', { class: 'etiqueta-chica' }, soloLectura ? 'Solo lectura: no se puede editar esta captura.' : `Cada "${nombreRubro}" que agregues aquí (por ejemplo, cada examen) es una captura distinta, con su propio porcentaje — igual que los rubros de la rúbrica. El resultado alimenta sola la calificación de este rubro en "Rúbrica y calificaciones"; ya no se captura nada allá para "${nombreRubro}".`),
+    el('p', { class: 'etiqueta-chica' }, soloLectura ? 'Solo lectura: no se puede editar esta captura.' : `Cada "${nombreRubro}" que agregues aquí (por ejemplo, cada examen) es una captura distinta, con su propio porcentaje — igual que los rubros de la rúbrica. El resultado alimenta sola la calificación de este rubro en "Rúbrica y calificaciones"; ya no se captura nada allá para "${nombreRubro}". Si pones un "total de aciertos", captura los aciertos de cada alumno y la calificación en base 10 se calcula sola.`),
     soloLectura ? null : el('div', { class: 'rejilla-campos' }, [
       el('div', { class: 'campo' }, [el('label', {}, 'Nombre'), campoNombre]),
       el('div', { class: 'campo' }, [el('label', {}, 'Descripción (opcional)'), campoDescripcion]),
-      el('div', { class: 'campo' }, [el('label', {}, 'Fecha de aplicación'), campoFecha]),
+      el('div', { class: 'campo' }, [el('label', {}, 'Fecha (opcional)'), campoFecha]),
+      el('div', { class: 'campo' }, [el('label', {}, 'Total de aciertos (opcional)'), campoTotalAciertos]),
     ]),
     soloLectura ? null : btnAgregar,
     barraValidacion,
