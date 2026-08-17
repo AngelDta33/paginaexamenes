@@ -3,7 +3,7 @@
 
 import { el, clear } from './dom.js';
 import { numerarReactivos, subtotalSeccion, totalExamen } from './model.js';
-import { renderPregunta, renderLectura } from './questionTypes.js';
+import { renderPreguntaBloques, renderLecturaBloques } from './questionTypes.js';
 
 const PX_POR_CM = 96 / 2.54;
 const PAGINA_ANCHO_CM = 21.59; // oficio/folio 8.5×13"
@@ -116,12 +116,12 @@ function construirBloques(examen, modoClave) {
     }
     for (const p of seccion.preguntas || []) {
       if (p.tipo === 'lectura_comprension') {
-        bloques.push({ tipo: 'lectura-intro', el: renderLectura(p) });
+        bloques.push(...renderLecturaBloques(p));
         for (const sp of p.subpreguntas || []) {
-          bloques.push({ tipo: 'pregunta', el: renderPregunta(sp, numeros[sp.id], modoClave) });
+          bloques.push(...renderPreguntaBloques(sp, numeros[sp.id], modoClave));
         }
       } else {
-        bloques.push({ tipo: 'pregunta', el: renderPregunta(p, numeros[p.id], modoClave) });
+        bloques.push(...renderPreguntaBloques(p, numeros[p.id], modoClave));
       }
     }
     if ((seccion.preguntas || []).length > 0) {

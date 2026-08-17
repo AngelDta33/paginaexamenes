@@ -178,9 +178,11 @@ button {
   font-size: 0.8rem; font-weight: bold; line-height: 1.15rem; text-align: center;
   cursor: move; touch-action: none; box-shadow: 0 0 2px rgba(0,0,0,0.5);
 }
+.marcador-badge-inactivo { background: #999; opacity: 0.55; }
 .lista-marcadores { margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.3rem; }
 .fila-marcador { display: flex; align-items: center; gap: 0.4rem; }
 .fila-marcador input { flex: 1 1 auto; }
+.fila-marcador-inactiva input { opacity: 0.55; }
 .num-marcador { font-weight: bold; min-width: 1.3rem; }
 
 .pantalla-config .panel { max-width: 520px; }

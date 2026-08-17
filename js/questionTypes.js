@@ -6,6 +6,19 @@ import { renderTextoFormulas, campoTextoConFormulas } from './formulas.js';
 
 const LETRAS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
+// Letra de una opción/par a partir de su índice (0=A, 25=Z, 26=AA, 27=AB, …
+// como las columnas de una hoja de cálculo) para que las listas con más de
+// 26 elementos no muestren "undefined" en vez de una letra.
+function letraOpcion(indice) {
+  let i = indice;
+  let letra = '';
+  do {
+    letra = LETRAS[i % 26] + letra;
+    i = Math.floor(i / 26) - 1;
+  } while (i >= 0);
+  return letra;
+}
+
 export function redimensionarImagen(file, maxAncho = 800) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -185,7 +198,7 @@ function editorOpcionMultiple(pregunta, onChange) {
           onchange: () => { pregunta.respuestaCorrecta = i; onChange(); },
         }),
         el('input', {
-          type: 'text', value: op, placeholder: `Opción ${LETRAS[i]}`,
+          type: 'text', value: op, placeholder: `Opción ${letraOpcion(i)}`,
           oninput: (e) => { pregunta.opciones[i] = e.target.value; onChange(); },
         }),
         el('button', {
@@ -219,7 +232,7 @@ function editorRelacionColumnas(pregunta, onChange) {
         onchange: (e) => { pregunta.relaciones[i] = parseInt(e.target.value, 10); onChange(); },
       }, pregunta.columnaB.map((valB, j) => el('option', {
         value: j, selected: pregunta.relaciones[i] === j,
-      }, `${LETRAS[j] || j} — ${valB || '(vacío)'}`)));
+      }, `${letraOpcion(j)} — ${valB || '(vacío)'}`)));
       filas.appendChild(el('div', { class: 'fila-relacion' }, [
         el('input', {
           type: 'text', value: valA, placeholder: `Columna A #${i + 1}`,
@@ -383,12 +396,16 @@ function editorIdentificarImagen(pregunta, onChange) {
         x: Math.round(((e.clientX - rect.left) / rect.width) * 1000) / 10,
         y: Math.round(((e.clientY - rect.top) / rect.height) * 1000) / 10,
         etiqueta: '',
+        activo: true,
       });
       onChange(); repintarTodo();
     });
     pregunta.marcadores.forEach((m, i) => {
+      const activo = m.activo !== false;
       const badge = el('div', {
-        class: 'marcador-badge', style: `left:${m.x}%; top:${m.y}%;`, title: 'Arrastra para mover',
+        class: activo ? 'marcador-badge' : 'marcador-badge marcador-badge-inactivo',
+        style: `left:${m.x}%; top:${m.y}%;`,
+        title: activo ? 'Arrastra para mover' : 'Parte desactivada — arrastra para mover',
       }, String(i + 1));
       arrastrar(badge, wrap, m);
       wrap.appendChild(badge);
@@ -399,12 +416,18 @@ function editorIdentificarImagen(pregunta, onChange) {
   function pintarLista() {
     clear(listaMarcadores);
     pregunta.marcadores.forEach((m, i) => {
-      listaMarcadores.appendChild(el('div', { class: 'fila-marcador' }, [
+      const activo = m.activo !== false;
+      listaMarcadores.appendChild(el('div', { class: activo ? 'fila-marcador' : 'fila-marcador fila-marcador-inactiva' }, [
         el('span', { class: 'num-marcador' }, `${i + 1}.`),
         el('input', {
           type: 'text', value: m.etiqueta, placeholder: `Nombre de la parte ${i + 1}`,
           oninput: (e) => { m.etiqueta = e.target.value; onChange(); },
         }),
+        el('span', { class: activo ? 'estado-activo' : 'estado-inactivo' }, activo ? 'Activo' : 'Inactivo'),
+        el('button', {
+          type: 'button', class: 'btn-secundario', title: activo ? 'No incluir esta parte en el examen' : 'Volver a incluir esta parte en el examen',
+          onclick: () => { m.activo = m.activo === false; onChange(); repintarTodo(); },
+        }, activo ? 'Desactivar' : 'Activar'),
         el('button', {
           type: 'button', class: 'btn-icono', title: 'Quitar marcador',
           onclick: () => { pregunta.marcadores.splice(i, 1); onChange(); repintarTodo(); },
@@ -416,7 +439,7 @@ function editorIdentificarImagen(pregunta, onChange) {
   repintarTodo();
   cont.appendChild(campoImg);
   cont.appendChild(zonaImagen);
-  cont.appendChild(el('p', { class: 'etiqueta-chica' }, 'Cada número es una parte a identificar; escribe su nombre correcto abajo. En el examen aparecerá la imagen con los números y un banco de palabras para que el alumno los relacione.'));
+  cont.appendChild(el('p', { class: 'etiqueta-chica' }, 'Haz clic en la imagen para agregar cada parte a identificar; puedes agregar tantas como quieras. Arrastra un número para moverlo. Escribe el nombre correcto de cada parte abajo; con "Desactivar" puedes ocultar una parte del examen sin borrarla. En el examen aparecerá la imagen con los números de las partes activas y un banco de palabras para que el alumno los relacione.'));
   cont.appendChild(listaMarcadores);
   return cont;
 }
@@ -540,24 +563,37 @@ function bloqueImagen(pregunta) {
   return el('div', { class: 'imagen-reactivo' }, [img]);
 }
 
-function renderOpcionMultiple(pregunta, numero, modoClave) {
-  return el('div', { class: 'reactivo' }, [
-    encabezadoReactivo(numero, pregunta, pregunta.valor),
-    bloqueImagen(pregunta),
-    el('div', { class: 'lista-opciones-examen' }, pregunta.opciones.map((op, i) => el('div', {
-      class: modoClave && i === pregunta.respuestaCorrecta ? 'opcion-examen opcion-correcta' : 'opcion-examen',
-    }, [
-      `${modoClave && i === pregunta.respuestaCorrecta ? '● ' : '○ '}${LETRAS[i]}) `,
-      ...renderTextoFormulas(op),
-    ]))),
-  ]);
+// Devuelve la pregunta como varios bloques — el encabezado y una por opción — en
+// vez de un solo div con todas las opciones adentro, para que el paginador pueda
+// cortar la lista entre opciones si un reactivo con muchas no cabe completo en
+// una página (mismo motivo que renderLecturaBloques).
+function renderOpcionMultipleBloques(pregunta, numero, modoClave) {
+  const bloques = [{
+    tipo: 'pregunta-inicio',
+    el: el('div', { class: 'reactivo' }, [encabezadoReactivo(numero, pregunta, pregunta.valor), bloqueImagen(pregunta)]),
+  }];
+  pregunta.opciones.forEach((op, i) => {
+    const clases = ['opcion-examen'];
+    if (i === 0) clases.push('opcion-examen-primera');
+    if (modoClave && i === pregunta.respuestaCorrecta) clases.push('opcion-correcta');
+    bloques.push({
+      tipo: 'pregunta-opcion',
+      el: el('div', { class: clases.join(' ') }, [
+        `${modoClave && i === pregunta.respuestaCorrecta ? '● ' : '○ '}${letraOpcion(i)}) `,
+        ...renderTextoFormulas(op),
+      ]),
+    });
+  });
+  return bloques;
 }
 
-function renderRelacionColumnas(pregunta, numero, modoClave) {
+// Mismo motivo que arriba: el encabezado y una mini-tabla de una sola fila por
+// cada par, en vez de una tabla gigante con todas las filas adentro.
+function renderRelacionColumnasBloques(pregunta, numero, modoClave) {
   const permutado = shuffleDeterminista(pregunta.columnaB, pregunta.id);
   // indiceOriginal -> letra mostrada
   const letraPorIndiceOriginal = {};
-  permutado.forEach(([, idxOriginal], posMostrada) => { letraPorIndiceOriginal[idxOriginal] = LETRAS[posMostrada]; });
+  permutado.forEach(([, idxOriginal], posMostrada) => { letraPorIndiceOriginal[idxOriginal] = letraOpcion(posMostrada); });
 
   const celdasA = pregunta.columnaA.map((valA, i) => el('td', { class: 'celda-relacion celda-a' }, [
     el('span', { class: modoClave ? 'resp-relacion resp-correcta' : 'resp-relacion' }, modoClave ? `(${letraPorIndiceOriginal[pregunta.relaciones[i]]}) ` : '(   ) '),
@@ -565,23 +601,27 @@ function renderRelacionColumnas(pregunta, numero, modoClave) {
     ...renderTextoFormulas(valA),
   ]));
   const celdasB = permutado.map(([valB], pos) => el('td', { class: 'celda-relacion celda-b' }, [
-    `${LETRAS[pos]}. `,
+    `${letraOpcion(pos)}. `,
     ...renderTextoFormulas(valB),
   ]));
 
   const maxFilas = Math.max(celdasA.length, celdasB.length);
-  const tabla = el('table', { class: 'tabla-relacion' }, [
-    el('tbody', {}, Array.from({ length: maxFilas }, (_, i) => el('tr', {}, [
-      celdasA[i] || el('td', { class: 'celda-relacion celda-a' }, ''),
-      celdasB[i] || el('td', { class: 'celda-relacion celda-b' }, ''),
-    ]))),
-  ]);
-
-  return el('div', { class: 'reactivo' }, [
-    encabezadoReactivo(numero, pregunta, pregunta.valor),
-    bloqueImagen(pregunta),
-    tabla,
-  ]);
+  const bloques = [{
+    tipo: 'pregunta-inicio',
+    el: el('div', { class: 'reactivo' }, [encabezadoReactivo(numero, pregunta, pregunta.valor), bloqueImagen(pregunta)]),
+  }];
+  for (let i = 0; i < maxFilas; i++) {
+    bloques.push({
+      tipo: 'pregunta-fila',
+      el: el('table', { class: `tabla-relacion${i === 0 ? ' tabla-relacion-primera' : ''}` }, [
+        el('tbody', {}, [el('tr', {}, [
+          celdasA[i] || el('td', { class: 'celda-relacion celda-a' }, ''),
+          celdasB[i] || el('td', { class: 'celda-relacion celda-b' }, ''),
+        ])]),
+      ]),
+    });
+  }
+  return bloques;
 }
 
 function renderAbierta(pregunta, numero, modoClave) {
@@ -610,8 +650,15 @@ function renderVerdaderoFalso(pregunta, numero, modoClave) {
   ]);
 }
 
-function renderIdentificarImagen(pregunta, numero, modoClave) {
-  const marcadores = pregunta.marcadores || [];
+// Mismo motivo que arriba: la imagen (acotada a 9cm, los marcadores no le suman
+// alto porque van encima) y el banco de palabras quedan en un solo bloque inicial,
+// pero la lista de respuestas numeradas —la parte que crece con la cantidad de
+// marcadores— se parte en un bloque por renglón.
+function renderIdentificarImagenBloques(pregunta, numero, modoClave) {
+  // Las partes desactivadas por el docente no cuentan en el examen: no llevan
+  // número sobre la imagen, no aparecen en el banco de palabras ni en la lista
+  // de respuestas — mismo criterio que un alumno inactivo en Grupos.
+  const marcadores = (pregunta.marcadores || []).filter((m) => m.activo !== false);
   const cuerpo = [encabezadoReactivo(numero, pregunta, pregunta.valor)];
 
   if (pregunta.imagen) {
@@ -628,22 +675,27 @@ function renderIdentificarImagen(pregunta, numero, modoClave) {
     cuerpo.push(el('div', { class: 'banco-palabras' }, permutado.map(([et]) => el('span', { class: 'palabra-banco' }, et || '—'))));
   }
 
-  cuerpo.push(el('div', { class: 'respuestas-identificar' }, marcadores.map((m, i) => el('div', { class: 'fila-resp-identificar' }, [
-    el('span', { class: 'num-resp' }, `${i + 1}. `),
-    modoClave
-      ? el('span', { class: 'resp-relacion resp-correcta' }, m.etiqueta || '(sin nombre)')
-      : el('span', { class: 'linea-resp-inline' }),
-  ]))));
-
-  return el('div', { class: 'reactivo' }, cuerpo);
+  const bloques = [{ tipo: 'pregunta-inicio', el: el('div', { class: 'reactivo' }, cuerpo) }];
+  marcadores.forEach((m, i) => {
+    bloques.push({
+      tipo: 'pregunta-fila',
+      el: el('div', { class: `fila-resp-identificar${i === 0 ? ' fila-resp-identificar-primera' : ''}` }, [
+        el('span', { class: 'num-resp' }, `${i + 1}. `),
+        modoClave
+          ? el('span', { class: 'resp-relacion resp-correcta' }, m.etiqueta || '(sin nombre)')
+          : el('span', { class: 'linea-resp-inline' }),
+      ]),
+    });
+  });
+  return bloques;
 }
 
+// Tipos cuyo contenido está acotado por diseño (verdadero_falso: dos opciones fijas;
+// abierta: máximo 15 líneas de respuesta) — se quedan como un solo bloque, no
+// necesitan poder partirse entre páginas.
 const RENDER_TIPO = {
-  opcion_multiple: renderOpcionMultiple,
-  relacion_columnas: renderRelacionColumnas,
   abierta: renderAbierta,
   verdadero_falso: renderVerdaderoFalso,
-  identificar_imagen: renderIdentificarImagen,
 };
 
 export function renderPregunta(pregunta, numero, modoClave) {
@@ -652,9 +704,44 @@ export function renderPregunta(pregunta, numero, modoClave) {
   return el('div', { class: 'reactivo' }, [encabezadoReactivo(numero, pregunta, pregunta.valor)]);
 }
 
-export function renderLectura(pregunta, numerosPorId) {
-  return el('div', { class: 'reactivo reactivo-lectura' }, [
-    pregunta.enunciado ? el('p', { class: 'instrucciones-lectura' }, renderTextoFormulas(pregunta.enunciado)) : null,
-    el('div', { class: 'texto-lectura' }, renderTextoFormulas(pregunta.textoLectura)),
-  ]);
+// Tipos cuyo contenido crece con lo que capture el maestro (opciones, filas de
+// relación, marcadores) y por eso se devuelven como varios bloques repartibles.
+const RENDER_TIPO_BLOQUES = {
+  opcion_multiple: renderOpcionMultipleBloques,
+  relacion_columnas: renderRelacionColumnasBloques,
+  identificar_imagen: renderIdentificarImagenBloques,
+};
+
+// Punto de entrada único para el paginador: siempre devuelve un arreglo de
+// bloques, sea uno solo (renderPregunta) o varios (tipos con listas que pueden
+// crecer sin límite).
+export function renderPreguntaBloques(pregunta, numero, modoClave) {
+  const fn = RENDER_TIPO_BLOQUES[pregunta.tipo];
+  if (fn) return fn(pregunta, numero, modoClave);
+  return [{ tipo: 'pregunta', el: renderPregunta(pregunta, numero, modoClave) }];
+}
+
+// Devuelve el texto de lectura como una lista de bloques — uno por línea — en vez
+// de un solo div gigante, para que el paginador pueda cortar entre líneas cuando
+// el texto no cabe completo en una página (si fuera un solo bloque, uno más alto
+// que la página se saldría del margen sin que el paginador pudiera partirlo).
+// Cada línea comparte el mismo fondo y bordes laterales, y solo la primera/última
+// línea llevan borde arriba/abajo, para que se vea como un solo recuadro continuo
+// aunque quede repartido en dos páginas.
+export function renderLecturaBloques(pregunta) {
+  const bloques = [];
+  if (pregunta.enunciado) {
+    bloques.push({ tipo: 'lectura-intro', el: el('p', { class: 'instrucciones-lectura' }, renderTextoFormulas(pregunta.enunciado)) });
+  }
+  const lineas = (pregunta.textoLectura || '').split('\n');
+  lineas.forEach((linea, i) => {
+    const clases = ['texto-lectura-linea'];
+    if (i === 0) clases.push('texto-lectura-linea-primera');
+    if (i === lineas.length - 1) clases.push('texto-lectura-linea-ultima');
+    bloques.push({
+      tipo: 'lectura-linea',
+      el: el('div', { class: clases.join(' ') }, linea ? renderTextoFormulas(linea) : ' '),
+    });
+  });
+  return bloques;
 }

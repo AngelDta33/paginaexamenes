@@ -64,11 +64,19 @@
 .imagen-reactivo { margin: 0.15cm 0; }
 .imagen-reactivo img { max-width: 100%; max-height: 6cm; display: block; }
 
-.lista-opciones-examen { margin: 0.1cm 0 0 0.6cm; }
-.opcion-examen { display: block; }
+/* Cada opción es su propio bloque (ver renderOpcionMultipleBloques), no un hijo de
+   un contenedor común, para que el paginador pueda cortar la lista entre opciones
+   si no caben todas en la página; por eso el margen que antes tenía el contenedor
+   ahora vive en cada opción, con un poco más arriba solo en la primera. */
+.opcion-examen { display: block; margin: 0.02cm 0 0.02cm 0.6cm; }
+.opcion-examen-primera { margin-top: 0.1cm; }
 .opcion-correcta { font-weight: bold; }
 
-.tabla-relacion { border-collapse: collapse; width: 100%; margin: 0.15cm 0 0 0; }
+/* Cada fila es su propia mini-tabla de una sola fila (ver renderRelacionColumnasBloques)
+   para que el paginador pueda cortar entre filas; como no llevan borde entre celdas,
+   varias tablas apiladas se ven exactamente igual que una sola tabla continua. */
+.tabla-relacion { border-collapse: collapse; width: 100%; margin: 0; }
+.tabla-relacion-primera { margin-top: 0.15cm; }
 .tabla-relacion td { border: none; padding: 0.08cm 0.3cm; vertical-align: top; }
 .celda-a { width: 55%; }
 .celda-b { width: 45%; }
@@ -92,14 +100,26 @@
 }
 .banco-palabras { display: flex; flex-wrap: wrap; gap: 0.15cm 0.3cm; border: 0.5pt solid #999; padding: 0.2cm; margin: 0.15cm 0; background: #fafafa; }
 .palabra-banco { border: 0.5pt solid #666; border-radius: 3pt; padding: 0.03cm 0.2cm; font-size: 10pt; }
-.respuestas-identificar { margin: 0.15cm 0 0 0.4cm; }
-.fila-resp-identificar { display: flex; align-items: baseline; gap: 0.2cm; margin-bottom: 0.12cm; }
+/* Cada fila es su propio bloque (ver renderIdentificarImagenBloques), mismo motivo
+   que las opciones y la relación de columnas: que el paginador pueda cortar la
+   lista de respuestas entre renglones si no caben todos en la página. */
+.fila-resp-identificar { display: flex; align-items: baseline; gap: 0.2cm; margin: 0 0 0.12cm 0.4cm; }
+.fila-resp-identificar-primera { margin-top: 0.15cm; }
 .num-resp { font-weight: bold; }
 .linea-resp-inline { flex: 1 1 auto; border-bottom: 0.5pt solid #333; min-width: 5cm; height: 0.5cm; }
 
-.reactivo-lectura { margin-bottom: 0.3cm; }
 .instrucciones-lectura { font-style: italic; margin: 0 0 0.15cm 0; }
-.texto-lectura { border: 0.5pt solid #999; padding: 0.3cm; background: #fafafa; white-space: pre-wrap; }
+/* Una línea por bloque (ver renderLecturaBloques) para que el paginador pueda
+   cortar el texto de lectura entre líneas si no cabe completo en una página —
+   los bordes izq/der y el fondo se repiten en cada línea para que, aunque quede
+   partido en dos páginas, se siga viendo como un solo recuadro continuo; el
+   borde de arriba/abajo solo lo llevan la primera y la última línea. */
+.texto-lectura-linea {
+  border-left: 0.5pt solid #999; border-right: 0.5pt solid #999;
+  padding: 0.05cm 0.3cm; background: #fafafa; white-space: pre-wrap;
+}
+.texto-lectura-linea-primera { border-top: 0.5pt solid #999; padding-top: 0.25cm; }
+.texto-lectura-linea-ultima { border-bottom: 0.5pt solid #999; padding-bottom: 0.25cm; margin-bottom: 0.3cm; }
 
 .subtotal-seccion { text-align: right; font-weight: bold; font-size: 10pt; margin: 0.1cm 0 0.3cm 0; border-top: 0.5pt solid #ccc; padding-top: 0.1cm; }
 
