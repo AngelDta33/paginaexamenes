@@ -179,6 +179,7 @@ button {
   cursor: move; touch-action: none; box-shadow: 0 0 2px rgba(0,0,0,0.5);
 }
 .marcador-badge-inactivo { background: #999; opacity: 0.55; }
+.acciones-marcadores { margin-top: 0.5rem; display: flex; gap: 0.4rem; }
 .lista-marcadores { margin-top: 0.5rem; display: flex; flex-direction: column; gap: 0.3rem; }
 .fila-marcador { display: flex; align-items: center; gap: 0.4rem; }
 .fila-marcador input { flex: 1 1 auto; }

@@ -351,9 +351,10 @@ function editorIdentificarImagen(pregunta, onChange) {
   if (!pregunta.marcadores) pregunta.marcadores = [];
   const cont = el('div', { class: 'editor-tipo editor-identificar' });
   const zonaImagen = el('div', { class: 'zona-marcadores' });
+  const accionesMarcadores = el('div', { class: 'acciones-marcadores' });
   const listaMarcadores = el('div', { class: 'lista-marcadores' });
 
-  function repintarTodo() { pintarZona(); pintarLista(); }
+  function repintarTodo() { pintarZona(); pintarAccionesMarcadores(); pintarLista(); }
 
   const campoImg = campoImagen(pregunta, () => { onChange(); repintarTodo(); });
 
@@ -413,6 +414,19 @@ function editorIdentificarImagen(pregunta, onChange) {
     zonaImagen.appendChild(wrap);
   }
 
+  function pintarAccionesMarcadores() {
+    clear(accionesMarcadores);
+    if (pregunta.marcadores.length < 2) return; // no aporta con 0 o 1 parte
+    accionesMarcadores.appendChild(el('button', {
+      type: 'button', class: 'btn-secundario',
+      onclick: () => { pregunta.marcadores.forEach((m) => { m.activo = false; }); onChange(); repintarTodo(); },
+    }, 'Desactivar todas'));
+    accionesMarcadores.appendChild(el('button', {
+      type: 'button', class: 'btn-secundario',
+      onclick: () => { pregunta.marcadores.forEach((m) => { m.activo = true; }); onChange(); repintarTodo(); },
+    }, 'Activar todas'));
+  }
+
   function pintarLista() {
     clear(listaMarcadores);
     pregunta.marcadores.forEach((m, i) => {
@@ -440,6 +454,7 @@ function editorIdentificarImagen(pregunta, onChange) {
   cont.appendChild(campoImg);
   cont.appendChild(zonaImagen);
   cont.appendChild(el('p', { class: 'etiqueta-chica' }, 'Haz clic en la imagen para agregar cada parte a identificar; puedes agregar tantas como quieras. Arrastra un número para moverlo. Escribe el nombre correcto de cada parte abajo; con "Desactivar" puedes ocultar una parte del examen sin borrarla. En el examen aparecerá la imagen con los números de las partes activas y un banco de palabras para que el alumno los relacione.'));
+  cont.appendChild(accionesMarcadores);
   cont.appendChild(listaMarcadores);
   return cont;
 }
