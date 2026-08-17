@@ -401,12 +401,12 @@ function editorIdentificarImagen(pregunta, onChange) {
       });
       onChange(); repintarTodo();
     });
+    // El número se ve igual en la imagen esté activa o no la parte — el estado
+    // activo/inactivo solo se refleja en la lista de abajo (ver pintarLista);
+    // así el docente sigue viendo todos los números con claridad al editar.
     pregunta.marcadores.forEach((m, i) => {
-      const activo = m.activo !== false;
       const badge = el('div', {
-        class: activo ? 'marcador-badge' : 'marcador-badge marcador-badge-inactivo',
-        style: `left:${m.x}%; top:${m.y}%;`,
-        title: activo ? 'Arrastra para mover' : 'Parte desactivada — arrastra para mover',
+        class: 'marcador-badge', style: `left:${m.x}%; top:${m.y}%;`, title: 'Arrastra para mover',
       }, String(i + 1));
       arrastrar(badge, wrap, m);
       wrap.appendChild(badge);
