@@ -670,10 +670,11 @@ function renderVerdaderoFalso(pregunta, numero, modoClave) {
 // pero la lista de respuestas numeradas —la parte que crece con la cantidad de
 // marcadores— se parte en un bloque por renglón.
 function renderIdentificarImagenBloques(pregunta, numero, modoClave) {
-  // Las partes desactivadas por el docente no cuentan en el examen: no llevan
-  // número sobre la imagen, no aparecen en el banco de palabras ni en la lista
-  // de respuestas — mismo criterio que un alumno inactivo en Grupos.
-  const marcadores = (pregunta.marcadores || []).filter((m) => m.activo !== false);
+  // Desactivar una parte solo la quita del banco de palabras (para no darle esa
+  // ayuda al alumno) — el número sigue en la imagen y su renglón de respuesta
+  // se sigue preguntando igual que las partes activas.
+  const marcadores = pregunta.marcadores || [];
+  const activas = marcadores.filter((m) => m.activo !== false);
   const cuerpo = [encabezadoReactivo(numero, pregunta, pregunta.valor)];
 
   if (pregunta.imagen) {
@@ -685,8 +686,8 @@ function renderIdentificarImagenBloques(pregunta, numero, modoClave) {
   }
 
   // Banco de palabras barajado (solo en el examen; en la clave se ven las respuestas).
-  if (!modoClave && marcadores.length) {
-    const permutado = shuffleDeterminista(marcadores.map((m) => m.etiqueta), pregunta.id);
+  if (!modoClave && activas.length) {
+    const permutado = shuffleDeterminista(activas.map((m) => m.etiqueta), pregunta.id);
     cuerpo.push(el('div', { class: 'banco-palabras' }, permutado.map(([et]) => el('span', { class: 'palabra-banco' }, et || '—'))));
   }
 
