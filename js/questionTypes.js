@@ -83,6 +83,90 @@ async function leerImagenDelPortapapeles() {
   return null;
 }
 
+// --- Tamaño y posición de la imagen de un reactivo -------------------------
+//
+// Dos números guardados en la pregunta describen cómo se coloca la imagen en la
+// hoja, y los usan por igual el ajustador del editor y el render del examen:
+//   imagenAncho  10..100  — ancho como % del ancho útil de la hoja.
+//   imagenOffset -100..100 — dónde queda dentro del espacio que le sobra:
+//                            -100 pegada a la izquierda, 0 centrada, 100 a la derecha.
+// Los reactivos guardados antes de que existiera imagenOffset traen en su lugar
+// imagenAlineacion ('left' | 'center' | 'right'); se traduce al vuelo.
+
+const ANCHO_MIN_IMAGEN = 10;
+
+function anchoDeImagen(pregunta) {
+  return Math.max(ANCHO_MIN_IMAGEN, Math.min(100, Number(pregunta.imagenAncho) || 100));
+}
+
+function offsetDeImagen(pregunta) {
+  const guardado = Number(pregunta.imagenOffset);
+  if (Number.isFinite(guardado)) return Math.max(-100, Math.min(100, guardado));
+  const alineacion = pregunta.imagenAlineacion || 'center';
+  if (alineacion === 'left') return -100;
+  if (alineacion === 'right') return 100;
+  return 0;
+}
+
+// Margen izquierdo (% del ancho útil) que le toca a la imagen con ese ancho y ese
+// offset: la mitad del espacio sobrante es el centro, y el offset la corre de ahí
+// hacia cualquiera de los dos lados.
+function margenIzquierdoImagen(ancho, offset) {
+  const libre = 100 - ancho;
+  return (libre / 2) * (1 + offset / 100);
+}
+
+// Inversa de la anterior: qué offset deja la imagen con ese margen izquierdo —
+// se usa al redimensionar con el mouse, para que la esquina que NO se está
+// arrastrando se quede quieta.
+function offsetDesdeMargen(ancho, margenIzquierdo) {
+  const libre = 100 - ancho;
+  if (libre <= 0) return 0;
+  return Math.max(-100, Math.min(100, (margenIzquierdo / (libre / 2) - 1) * 100));
+}
+
+// Aplica el ancho y la posición al elemento que representa la imagen en la hoja.
+// Si el maestro no activó "modificar orientación", no toca nada y la imagen sigue
+// el formato normal del CSS.
+function aplicarAjusteImagen(elemento, pregunta) {
+  if (!pregunta.imagenModificar) return elemento;
+  const ancho = anchoDeImagen(pregunta);
+  elemento.style.width = `${ancho}%`;
+  elemento.style.maxWidth = '100%';
+  elemento.style.maxHeight = 'none';
+  elemento.style.marginLeft = `${margenIzquierdoImagen(ancho, offsetDeImagen(pregunta))}%`;
+  elemento.style.marginRight = '0';
+  return elemento;
+}
+
+// Arrastre con el mouse/dedo sobre un elemento: llama a alMover con cuánto se
+// movió el puntero en horizontal, medido como % del ancho de `referencia`.
+// Usa pointer capture para que el arrastre siga funcionando aunque el puntero se
+// salga del elemento (que es justo lo que pasa al agrandar una imagen).
+function arrastreHorizontal(elemento, referencia, { alEmpezar, alMover, alSoltar }) {
+  elemento.addEventListener('pointerdown', (e) => {
+    if (e.button !== undefined && e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const anchoRef = referencia.getBoundingClientRect().width || 1;
+    const inicioX = e.clientX;
+    elemento.setPointerCapture(e.pointerId);
+    if (alEmpezar) alEmpezar();
+
+    const mover = (ev) => alMover(((ev.clientX - inicioX) / anchoRef) * 100);
+    const soltar = () => {
+      elemento.releasePointerCapture(e.pointerId);
+      elemento.removeEventListener('pointermove', mover);
+      elemento.removeEventListener('pointerup', soltar);
+      elemento.removeEventListener('pointercancel', soltar);
+      if (alSoltar) alSoltar();
+    };
+    elemento.addEventListener('pointermove', mover);
+    elemento.addEventListener('pointerup', soltar);
+    elemento.addEventListener('pointercancel', soltar);
+  });
+}
+
 function campoImagen(pregunta, onChange) {
   const preview = el('div', { class: 'imagen-preview' });
   const ajusteCont = el('div', { class: 'ajuste-imagen' });
@@ -108,7 +192,12 @@ function campoImagen(pregunta, onChange) {
 
   // Controles de tamaño/posición: ocultos hasta que el docente active "modificar
   // orientación". Por defecto la imagen sigue el formato normal; solo si se activa
-  // se pueden cambiar ancho y alineación (útil cuando una imagen sale de contexto).
+  // se puede cambiar (útil cuando una imagen sale de contexto).
+  //
+  // Hay dos formas de hacerlo y las dos escriben los mismos dos números
+  // (imagenAncho / imagenOffset): el lienzo de arriba, donde se arrastra la imagen
+  // para moverla y la esquina para agrandarla o achicarla, y los controles de
+  // abajo (slider y botones), que siguen ahí para ajustar con precisión o sin mouse.
   function pintarAjuste() {
     clear(ajusteCont);
     if (!pregunta.imagen) return;
@@ -122,26 +211,87 @@ function campoImagen(pregunta, onChange) {
     ajusteCont.appendChild(chkModificar);
     if (!pregunta.imagenModificar) return;
 
-    const anchoActual = Number(pregunta.imagenAncho) || 100;
-    const valorAncho = el('span', { class: 'valor-ancho' }, `${anchoActual}%`);
-    const sliderAncho = el('input', {
-      type: 'range', min: '10', max: '100', step: '5', value: anchoActual,
-      oninput: (e) => {
-        pregunta.imagenAncho = parseInt(e.target.value, 10);
-        valorAncho.textContent = `${pregunta.imagenAncho}%`;
-        onChange();
-      },
-    });
-    const selAlineacion = el('select', {
-      onchange: (e) => { pregunta.imagenAlineacion = e.target.value; onChange(); },
-    }, [
-      ['left', 'Izquierda'], ['center', 'Centro'], ['right', 'Derecha'],
-    ].map(([v, t]) => el('option', { value: v, selected: (pregunta.imagenAlineacion || 'center') === v }, t)));
+    if (!Number.isFinite(Number(pregunta.imagenAncho))) pregunta.imagenAncho = 100;
+    if (!Number.isFinite(Number(pregunta.imagenOffset))) pregunta.imagenOffset = offsetDeImagen(pregunta);
 
+    // El lienzo representa el ancho útil de la hoja: lo que se ve aquí adentro es
+    // proporcionalmente lo mismo que va a salir impreso.
+    const lienzo = el('div', { class: 'lienzo-ajuste-imagen', title: 'Arrastra la imagen para moverla; jala la esquina para cambiar su tamaño' });
+    const marco = el('div', { class: 'imagen-ajustable' }, [
+      el('img', { src: pregunta.imagen, draggable: 'false', alt: '' }),
+    ]);
+    const tirador = el('div', { class: 'tirador-ajuste', title: 'Arrastra para cambiar el tamaño' });
+    marco.appendChild(tirador);
+    lienzo.appendChild(marco);
+
+    const valorAncho = el('span', { class: 'valor-ancho' });
+    const sliderAncho = el('input', { type: 'range', min: String(ANCHO_MIN_IMAGEN), max: '100', step: '1' });
+
+    function pintarMarco() {
+      const ancho = anchoDeImagen(pregunta);
+      marco.style.width = `${ancho}%`;
+      marco.style.marginLeft = `${margenIzquierdoImagen(ancho, offsetDeImagen(pregunta))}%`;
+      valorAncho.textContent = `${Math.round(ancho)}%`;
+      sliderAncho.value = String(Math.round(ancho));
+    }
+
+    function fijarAncho(nuevoAncho, margenFijo) {
+      const ancho = Math.max(ANCHO_MIN_IMAGEN, Math.min(100, nuevoAncho));
+      pregunta.imagenAncho = Math.round(ancho * 10) / 10;
+      // Al redimensionar, la orilla izquierda se queda donde estaba (se jala la
+      // esquina derecha); si no, la imagen "salta" mientras se agranda.
+      if (margenFijo !== undefined) pregunta.imagenOffset = offsetDesdeMargen(pregunta.imagenAncho, margenFijo);
+      pintarMarco();
+    }
+
+    function fijarOffset(nuevoOffset) {
+      pregunta.imagenOffset = Math.round(Math.max(-100, Math.min(100, nuevoOffset)) * 10) / 10;
+      pintarMarco();
+    }
+
+    // Mover: arrastrar la imagen. El desplazamiento del puntero (% del lienzo) se
+    // convierte a offset dividiéndolo entre el espacio libre a cada lado.
+    let offsetInicial = 0;
+    arrastreHorizontal(marco, lienzo, {
+      alEmpezar: () => { offsetInicial = offsetDeImagen(pregunta); marco.classList.add('arrastrando'); },
+      alMover: (deltaPct) => {
+        const libre = 100 - anchoDeImagen(pregunta);
+        if (libre <= 0) return; // ocupa todo el ancho: no hay a dónde moverla
+        fijarOffset(offsetInicial + (deltaPct / (libre / 2)) * 100);
+      },
+      alSoltar: () => { marco.classList.remove('arrastrando'); onChange(); },
+    });
+
+    // Redimensionar: arrastrar el tirador de la esquina.
+    let anchoInicial = 100;
+    let margenInicial = 0;
+    arrastreHorizontal(tirador, lienzo, {
+      alEmpezar: () => {
+        anchoInicial = anchoDeImagen(pregunta);
+        margenInicial = margenIzquierdoImagen(anchoInicial, offsetDeImagen(pregunta));
+        marco.classList.add('arrastrando');
+      },
+      alMover: (deltaPct) => fijarAncho(anchoInicial + deltaPct, margenInicial),
+      alSoltar: () => { marco.classList.remove('arrastrando'); onChange(); },
+    });
+
+    sliderAncho.oninput = (e) => {
+      fijarAncho(parseInt(e.target.value, 10), margenIzquierdoImagen(anchoDeImagen(pregunta), offsetDeImagen(pregunta)));
+      onChange();
+    };
+
+    const botonesPosicion = [['⇤ Izquierda', -100], ['⇔ Centro', 0], ['Derecha ⇥', 100]].map(([texto, valor]) => el('button', {
+      type: 'button', class: 'btn-secundario btn-posicion-imagen',
+      onclick: () => { fijarOffset(valor); onChange(); },
+    }, texto));
+
+    pintarMarco();
+    ajusteCont.appendChild(lienzo);
     ajusteCont.appendChild(el('div', { class: 'controles-ajuste-imagen' }, [
       el('label', {}, ['Ancho: ', sliderAncho, valorAncho]),
-      el('label', {}, ['Posición: ', selAlineacion]),
+      el('span', { class: 'botones-posicion-imagen' }, botonesPosicion),
     ]));
+    ajusteCont.appendChild(el('p', { class: 'etiqueta-chica' }, 'Arrastra la imagen dentro del recuadro para moverla y jala la esquina de abajo a la derecha para cambiar su tamaño. El recuadro representa el ancho de la hoja, así que se verá impresa igual que aquí.'));
   }
 
   pintarPreview();
@@ -569,15 +719,8 @@ function bloqueImagen(pregunta) {
   // que se decodifique y le sale altura 0 (ver js/imagenes.js).
   const img = el('img', { src: pregunta.imagen, ...atributosTamano(pregunta.imagen) });
   // Por defecto la imagen usa el formato normal (CSS). Solo si el docente activó
-  // "modificar orientación" se aplica el ancho y la alineación elegidos.
-  if (pregunta.imagenModificar) {
-    const ancho = Math.max(10, Math.min(100, Number(pregunta.imagenAncho) || 100));
-    img.style.width = `${ancho}%`;
-    img.style.maxHeight = 'none';
-    const align = pregunta.imagenAlineacion || 'center';
-    img.style.marginLeft = align === 'left' ? '0' : 'auto';
-    img.style.marginRight = align === 'right' ? '0' : 'auto';
-  }
+  // "modificar orientación" se aplican el ancho y la posición elegidos.
+  aplicarAjusteImagen(img, pregunta);
   return el('div', { class: 'imagen-reactivo' }, [img]);
 }
 
@@ -684,6 +827,10 @@ function renderIdentificarImagenBloques(pregunta, numero, modoClave) {
     const wrap = el('div', { class: 'identificar-imagen-wrap' }, [
       el('img', { src: pregunta.imagen, ...atributosTamano(pregunta.imagen) }),
     ]);
+    // El ajuste va sobre el contenedor, no sobre la imagen: los marcadores están
+    // posicionados en % dentro de él, así crecen y se mueven junto con ella.
+    aplicarAjusteImagen(wrap, pregunta);
+    if (pregunta.imagenModificar) wrap.classList.add('identificar-imagen-ajustada');
     marcadores.forEach((m, i) => {
       wrap.appendChild(el('span', { class: 'marcador-num', style: `left:${m.x}%; top:${m.y}%;` }, String(i + 1)));
     });

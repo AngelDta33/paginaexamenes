@@ -95,6 +95,11 @@
 /* --- Identificar en imagen: imagen con marcadores numerados + banco de palabras --- */
 .identificar-imagen-wrap { position: relative; display: inline-block; margin: 0.15cm 0; max-width: 100%; }
 .identificar-imagen-wrap img { max-width: 100%; max-height: 9cm; display: block; }
+/* Con "modificar orientación" el ancho lo fija el contenedor (ver aplicarAjusteImagen).
+   La imagen tiene que llenarlo exactamente: los marcadores van posicionados en % del
+   contenedor, así que si el max-height la dejara más angosta, se saldrían de lugar. */
+.identificar-imagen-ajustada { display: block; }
+.identificar-imagen-ajustada img { width: 100%; height: auto; max-height: none; }
 .marcador-num {
   position: absolute; transform: translate(-50%, -50%);
   min-width: 0.55cm; height: 0.55cm; box-sizing: border-box;

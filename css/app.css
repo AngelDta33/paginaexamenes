@@ -166,9 +166,30 @@ button {
 .btn-pegar-imagen { margin-left: 0.4rem; padding: 0.15rem 0.5rem; font-size: 0.8rem; }
 .campo-checkbox { display: inline-flex; align-items: center; gap: 0.25rem; cursor: pointer; }
 .ajuste-imagen { margin-top: 0.4rem; }
-.controles-ajuste-imagen { display: flex; flex-wrap: wrap; gap: 0.8rem; align-items: center; margin-top: 0.3rem; }
+.controles-ajuste-imagen { display: flex; flex-wrap: wrap; gap: 0.8rem; align-items: center; margin-top: 0.4rem; }
 .controles-ajuste-imagen label { display: inline-flex; align-items: center; gap: 0.3rem; }
 .valor-ancho { min-width: 2.6rem; font-weight: bold; }
+.botones-posicion-imagen { display: inline-flex; gap: 0.25rem; }
+.btn-posicion-imagen { padding: 0.2rem 0.45rem; font-size: 0.75rem; }
+
+/* Lienzo para mover/redimensionar la imagen con el mouse: su ancho representa el
+   ancho útil de la hoja, así que lo que se acomoda aquí es lo que sale impreso. */
+.lienzo-ajuste-imagen {
+  position: relative; margin-top: 0.4rem; padding: 0.3rem 0;
+  background: repeating-linear-gradient(45deg, #f7f8fb, #f7f8fb 6px, #eef1f7 6px, #eef1f7 12px);
+  border: 1px dashed var(--borde); border-radius: 6px; overflow: hidden;
+}
+.imagen-ajustable {
+  position: relative; display: block; cursor: grab; touch-action: none;
+  outline: 2px solid var(--azul); outline-offset: -1px; background: #fff;
+}
+.imagen-ajustable.arrastrando { cursor: grabbing; outline-color: var(--azul-oscuro); }
+.imagen-ajustable img { display: block; width: 100%; height: auto; user-select: none; -webkit-user-drag: none; }
+.tirador-ajuste {
+  position: absolute; right: -6px; bottom: -6px; width: 14px; height: 14px;
+  background: var(--azul); border: 2px solid #fff; border-radius: 3px;
+  cursor: nwse-resize; touch-action: none; box-shadow: 0 0 3px rgba(0, 0, 0, 0.4);
+}
 
 /* Editor "Identificar en imagen": colocar marcadores numerados sobre la imagen */
 .zona-marcadores { margin-top: 0.5rem; }
