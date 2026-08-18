@@ -7,7 +7,7 @@ import { el, clear } from './dom.js';
 import { guardarGrupo } from './gruposStore.js';
 import {
   nuevaEvaluacion, calificacionAlumno, sumaPorcentajesEvaluaciones, validarEvaluaciones,
-  notaDeEvaluacion, redistribuirPorcentajesEvaluaciones,
+  notaDeEvaluacion, redistribuirPorcentajesEvaluaciones, esRubroExamen,
 } from './gruposModel.js';
 
 export function montarEvaluacionesRubro(contenedor, grupo, rubroId, { onVolver, soloLectura = false }) {
@@ -34,6 +34,19 @@ export function montarEvaluacionesRubro(contenedor, grupo, rubroId, { onVolver, 
 
   const alumnosActivos = (grupo.alumnos || []).filter((a) => a.activo !== false);
   const nombreRubro = rubro.nombre || 'este rubro';
+
+  // Calificar por aciertos solo se ofrece en los rubros de examen; el resto va
+  // siempre en base 10 (ver esRubroExamen). Si el rubro se renombró y dejó de ser
+  // de examen, se limpian los totales que hubieran quedado guardados: si no, las
+  // casillas seguirían reescalando aciertos → base 10 sin que se vea por qué.
+  const permiteAciertos = esRubroExamen(rubro);
+  if (!permiteAciertos && !soloLectura) {
+    const conAciertos = (rubro.evaluaciones || []).filter((ev) => ev.totalAciertos);
+    if (conAciertos.length > 0) {
+      conAciertos.forEach((ev) => { ev.totalAciertos = null; });
+      guardarGrupo(grupo).catch(console.error);
+    }
+  }
 
   const campoNombre = el('input', { type: 'text', placeholder: `Ej. "${nombreRubro} 1"` });
   const campoDescripcion = el('input', { type: 'text', placeholder: 'Descripción breve (opcional)' });
@@ -126,10 +139,10 @@ export function montarEvaluacionesRubro(contenedor, grupo, rubroId, { onVolver, 
             },
           }, '✕'),
         ]),
-        // Calificar por aciertos (opcional): si se pone un total, las casillas de
-        // abajo piden aciertos y la calificación 0-10 se saca sola. Usa onchange
-        // (al salir del campo) para no reconstruir la tabla en cada tecla.
-        el('label', { class: 'fila-aciertos-rubro', title: 'Deja vacío para capturar la calificación 0-10 directamente' }, [
+        // Calificar por aciertos (opcional, solo exámenes): si se pone un total, las
+        // casillas de abajo piden aciertos y la calificación 0-10 se saca sola. Usa
+        // onchange (al salir del campo) para no reconstruir la tabla en cada tecla.
+        !permiteAciertos ? null : el('label', { class: 'fila-aciertos-rubro', title: 'Deja vacío para capturar la calificación 0-10 directamente' }, [
           '/ ',
           el('input', {
             type: 'number', class: 'input-total-aciertos', min: '1', step: '1',
@@ -204,7 +217,7 @@ export function montarEvaluacionesRubro(contenedor, grupo, rubroId, { onVolver, 
   btnAgregar.onclick = () => {
     if (!campoNombre.value.trim()) { alert(`Ponle un nombre (ej. "${nombreRubro} 1").`); return; }
     rubro.evaluaciones = rubro.evaluaciones || [];
-    rubro.evaluaciones.push(nuevaEvaluacion(campoNombre.value.trim(), campoDescripcion.value.trim(), campoFecha.value, campoTotalAciertos.value));
+    rubro.evaluaciones.push(nuevaEvaluacion(campoNombre.value.trim(), campoDescripcion.value.trim(), campoFecha.value, permiteAciertos ? campoTotalAciertos.value : null));
     redistribuirPorcentajesEvaluaciones(rubro);
     campoNombre.value = '';
     campoDescripcion.value = '';
@@ -218,12 +231,12 @@ export function montarEvaluacionesRubro(contenedor, grupo, rubroId, { onVolver, 
   contenedor.appendChild(el('button', { type: 'button', class: 'btn-secundario', onclick: onVolver, style: 'margin-bottom:0.8rem;' }, '← Volver a la rúbrica'));
   contenedor.appendChild(el('div', { class: 'panel' }, [
     el('h2', {}, [`${nombreRubro} `, estadoGuardado]),
-    el('p', { class: 'etiqueta-chica' }, soloLectura ? 'Solo lectura: no se puede editar esta captura.' : `Cada "${nombreRubro}" que agregues aquí (por ejemplo, cada examen) es una captura distinta, con su propio porcentaje — igual que los rubros de la rúbrica. El resultado alimenta sola la calificación de este rubro en "Rúbrica y calificaciones"; ya no se captura nada allá para "${nombreRubro}". Si pones un "total de aciertos", captura los aciertos de cada alumno y la calificación en base 10 se calcula sola.`),
+    el('p', { class: 'etiqueta-chica' }, soloLectura ? 'Solo lectura: no se puede editar esta captura.' : `Cada "${nombreRubro}" que agregues aquí es una captura distinta, con su propio porcentaje — igual que los rubros de la rúbrica. El resultado alimenta sola la calificación de este rubro en "Rúbrica y calificaciones"; ya no se captura nada allá para "${nombreRubro}". ${permiteAciertos ? 'Como es un rubro de examen, puedes poner un "total de aciertos": captura los aciertos de cada alumno y la calificación en base 10 se calcula sola. Si lo dejas vacío, capturas la calificación directo.' : 'Las calificaciones van en base 10 (0 a 10). La captura por número de aciertos solo está disponible en los rubros de examen.'}`),
     soloLectura ? null : el('div', { class: 'rejilla-campos' }, [
       el('div', { class: 'campo' }, [el('label', {}, 'Nombre'), campoNombre]),
       el('div', { class: 'campo' }, [el('label', {}, 'Descripción (opcional)'), campoDescripcion]),
       el('div', { class: 'campo' }, [el('label', {}, 'Fecha (opcional)'), campoFecha]),
-      el('div', { class: 'campo' }, [el('label', {}, 'Total de aciertos (opcional)'), campoTotalAciertos]),
+      !permiteAciertos ? null : el('div', { class: 'campo' }, [el('label', {}, 'Total de aciertos (opcional)'), campoTotalAciertos]),
     ]),
     soloLectura ? null : btnAgregar,
     barraValidacion,

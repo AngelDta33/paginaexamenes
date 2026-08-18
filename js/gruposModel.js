@@ -65,6 +65,20 @@ export function esRubroAsistencia(rubro) {
   return rubro.tipoEspecial === 'asistencia';
 }
 
+// Sin acentos y en minúsculas, para poder comparar nombres escritos a mano.
+function normalizarNombre(texto) {
+  return (texto || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+// Calificar por número de aciertos solo tiene sentido en los exámenes; en los
+// demás rubros (tareas, participación, proyectos…) el maestro captura la
+// calificación en base 10 directamente. Se decide por el nombre porque es lo
+// único que distingue a un rubro de otro: el rubro estándar se llama "Examen" y
+// así también entran "Exámenes", "Examen parcial", "Examen diagnóstico", etc.
+export function esRubroExamen(rubro) {
+  return normalizarNombre(rubro && rubro.nombre).includes('examen');
+}
+
 // Las 5 rúbricas estándar de la escuela (se generan con un botón). El porcentaje es
 // un reparto sugerido que suma 100; el maestro lo puede cambiar cuando quiera.
 export const RUBROS_ESTANDAR = [
