@@ -44,11 +44,25 @@ export function redimensionarImagen(file, maxAncho = 800) {
 
 // Shuffle determinístico a partir de un id (para que el orden de la columna B no cambie entre renders)
 function shuffleDeterminista(arr, semilla) {
-  let s = 0;
-  for (const ch of String(semilla)) s = (s * 31 + ch.charCodeAt(0)) >>> 0;
+  // Todas las multiplicaciones van con Math.imul a propósito. La versión anterior
+  // usaba `s * 1103515245`, y en JS ese producto no cabe en un double sin perder
+  // precisión: los bits bajos del resultado quedaban en cero. Como el índice se
+  // saca justo de esos bits (`s % (i + 1)`), la baraja salía degenerada — daba un
+  // puñado de permutaciones casi ordenadas (1,2,3,5,4,0 y parecidas), así que el
+  // banco de palabras de "identificar en imagen" y la columna B de la relación de
+  // columnas aparecían prácticamente en orden y el alumno podía contestarlas por
+  // posición. Con imul + xorshift32 el reparto ya es uniforme.
+  let s = 2166136261; // FNV-1a de 32 bits sobre la semilla
+  for (const ch of String(semilla)) {
+    s ^= ch.charCodeAt(0);
+    s = Math.imul(s, 16777619) >>> 0;
+  }
+  if (s === 0) s = 0x9e3779b9; // xorshift se queda pegado en cero
   const copia = arr.map((v, i) => [v, i]);
   for (let i = copia.length - 1; i > 0; i--) {
-    s = (s * 1103515245 + 12345) >>> 0;
+    s ^= s << 13; s >>>= 0;
+    s ^= s >>> 17;
+    s ^= s << 5; s >>>= 0;
     const j = s % (i + 1);
     [copia[i], copia[j]] = [copia[j], copia[i]];
   }
@@ -604,7 +618,7 @@ function editorIdentificarImagen(pregunta, onChange) {
   repintarTodo();
   cont.appendChild(campoImg);
   cont.appendChild(zonaImagen);
-  cont.appendChild(el('p', { class: 'etiqueta-chica' }, 'Haz clic en la imagen para agregar cada parte a identificar; puedes agregar tantas como quieras. Arrastra un número para moverlo. Escribe el nombre correcto de cada parte abajo; con "Desactivar" puedes ocultar una parte del examen sin borrarla. En el examen aparecerá la imagen con los números de las partes activas y un banco de palabras para que el alumno los relacione.'));
+  cont.appendChild(el('p', { class: 'etiqueta-chica' }, 'Haz clic en la imagen para agregar cada parte a identificar; puedes agregar tantas como quieras. Arrastra un número para moverlo. Escribe el nombre correcto de cada parte abajo; con "Desactivar" puedes ocultar una parte del examen sin borrarla. En el examen aparecerá la imagen con los números y un banco de palabras para que el alumno los relacione. Ojo: los números de aquí son solo para que tú las ordenes — en el examen y en la clave se reparten al azar (siempre los mismos para este reactivo) para que el alumno no pueda contestar de corrido; revísalos en la vista previa.'));
   cont.appendChild(accionesMarcadores);
   cont.appendChild(listaMarcadores);
   return cont;
@@ -823,6 +837,14 @@ function renderIdentificarImagenBloques(pregunta, numero, modoClave) {
   const activas = marcadores.filter((m) => m.activo !== false);
   const cuerpo = [encabezadoReactivo(numero, pregunta, pregunta.valor)];
 
+  // Los números del examen NO siguen el orden en que el maestro fue colocando los
+  // marcadores. Ese orden casi siempre va de arriba a abajo y coincide con el
+  // orden en que capturó los nombres, así que numerarlos así le permitía al alumno
+  // deducir las partes por posición en vez de identificarlas. Se barajan con una
+  // semilla fija del reactivo para que el examen y la clave siempre coincidan.
+  const ordenExamen = shuffleDeterminista(marcadores, `${pregunta.id}#orden`).map(([m]) => m);
+  const numeroDeMarcador = new Map(ordenExamen.map((m, i) => [m, i + 1]));
+
   if (pregunta.imagen) {
     const wrap = el('div', { class: 'identificar-imagen-wrap' }, [
       el('img', { src: pregunta.imagen, ...atributosTamano(pregunta.imagen) }),
@@ -831,20 +853,20 @@ function renderIdentificarImagenBloques(pregunta, numero, modoClave) {
     // posicionados en % dentro de él, así crecen y se mueven junto con ella.
     aplicarAjusteImagen(wrap, pregunta);
     if (pregunta.imagenModificar) wrap.classList.add('identificar-imagen-ajustada');
-    marcadores.forEach((m, i) => {
-      wrap.appendChild(el('span', { class: 'marcador-num', style: `left:${m.x}%; top:${m.y}%;` }, String(i + 1)));
+    marcadores.forEach((m) => {
+      wrap.appendChild(el('span', { class: 'marcador-num', style: `left:${m.x}%; top:${m.y}%;` }, String(numeroDeMarcador.get(m))));
     });
     cuerpo.push(wrap);
   }
 
   // Banco de palabras barajado (solo en el examen; en la clave se ven las respuestas).
   if (!modoClave && activas.length) {
-    const permutado = shuffleDeterminista(activas.map((m) => m.etiqueta), pregunta.id);
+    const permutado = shuffleDeterminista(activas.map((m) => m.etiqueta), `${pregunta.id}#banco`);
     cuerpo.push(el('div', { class: 'banco-palabras' }, permutado.map(([et]) => el('span', { class: 'palabra-banco' }, et || '—'))));
   }
 
   const bloques = [{ tipo: 'pregunta-inicio', el: el('div', { class: 'reactivo' }, cuerpo) }];
-  marcadores.forEach((m, i) => {
+  ordenExamen.forEach((m, i) => {
     bloques.push({
       tipo: 'pregunta-fila',
       el: el('div', { class: `fila-resp-identificar${i === 0 ? ' fila-resp-identificar-primera' : ''}` }, [
