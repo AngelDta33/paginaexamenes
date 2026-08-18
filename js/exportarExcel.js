@@ -48,10 +48,23 @@ const ESTILO_CELDA_DESTACADA = {
   border: BORDES,
 };
 
+// Las calificaciones calculadas (promedio de exámenes, promedio general,
+// asistencia) salen de divisiones y arrastran la cola de decimales del binario
+// —8.333333333333334—, que en Excel se veía completa. Se redondean a 2 decimales
+// al escribirlas y además se les pone el formato "0.00" para que la celda se vea
+// pareja aunque el maestro la edite después.
+function redondear2(valor) {
+  const n = Number(valor);
+  return Number.isFinite(n) ? Math.round(n * 100) / 100 : '';
+}
+
 const ESTILO_TITULO_DESGLOSE = {
   font: { bold: true, sz: 12, color: { rgb: VERDE } },
   alignment: { horizontal: 'left', vertical: 'center' },
 };
+
+const ESTILO_CELDA_NUMERO = { ...ESTILO_CELDA_CENTRADA, numFmt: '0.00' };
+const ESTILO_CELDA_NUMERO_DESTACADO = { ...ESTILO_CELDA_DESTACADA, numFmt: '0.00' };
 
 function celda(valor, estilo) {
   const tipo = typeof valor === 'number' ? 'n' : 's';
@@ -103,7 +116,7 @@ function filasDesgloseRubro(grupo, rubro, alumnosActivos, dias) {
           const raw = notas[ev.id];
           return celda(raw === null || raw === undefined || raw === '' ? '' : Number(raw), ESTILO_CELDA_CENTRADA);
         }),
-        celda(v === null ? '' : Number(v.toFixed(2)), ESTILO_CELDA_DESTACADA),
+        celda(v === null ? '' : redondear2(v), ESTILO_CELDA_NUMERO_DESTACADO),
       ]);
     });
   } else {
@@ -113,7 +126,7 @@ function filasDesgloseRubro(grupo, rubro, alumnosActivos, dias) {
       const v = valorRubro(grupo, rubro, alumno.id, dias);
       filas.push([
         celda(alumno.nombre, ESTILO_CELDA_NOMBRE),
-        celda(v === null ? '' : Number(v.toFixed(2)), esRubroAsistencia(rubro) ? ESTILO_CELDA_CENTRADA : ESTILO_CELDA_CENTRADA),
+        celda(v === null ? '' : redondear2(v), ESTILO_CELDA_NUMERO),
       ]);
     });
   }
@@ -201,14 +214,14 @@ export async function exportarGrupoExcel(grupo) {
     const cal = grupo.calificaciones[alumno.id] || { valores: {}, extra: 0 };
     const celdasValores = rubros.map((r) => {
       const v = valorRubro(grupo, r, alumno.id, dias);
-      return celda(v === null ? '' : v, ESTILO_CELDA_CENTRADA);
+      return celda(v === null ? '' : redondear2(v), ESTILO_CELDA_NUMERO);
     });
     const promedio = calcularPromedio(grupo, alumno.id, dias);
     return [
       celda(alumno.nombre, ESTILO_CELDA_NOMBRE),
       ...celdasValores,
-      celda(cal.extra || 0, ESTILO_CELDA_CENTRADA),
-      celda(promedio === null ? '' : promedio, ESTILO_CELDA_DESTACADA),
+      celda(redondear2(cal.extra || 0), ESTILO_CELDA_NUMERO),
+      celda(promedio === null ? '' : redondear2(promedio), ESTILO_CELDA_NUMERO_DESTACADO),
     ];
   });
   const hojaRubrica = hojaDesdeFilas(
