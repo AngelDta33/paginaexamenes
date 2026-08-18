@@ -7,7 +7,7 @@ import {
 import {
   ESTADOS_ASISTENCIA, ETIQUETAS_ESTADO_ASISTENCIA, INICIALES_ESTADO_ASISTENCIA, fechaHoyISO, fechaCortaMX,
   valoresAsistenciaDeGrupo, promedioAsistenciaAlumno,
-  DIAS_SEMANA_NOMBRES, calendarioDeGrupo, nuevoTrimestre, crearTrimestresEstandar,
+  DIAS_SEMANA_NOMBRES, calendarioDeGrupo, nuevoTrimestre, crearTrimestresEstandar, fechasDeClase,
 } from './gruposModel.js';
 
 // Ciclo al hacer clic: sin marcar → presente → falta → justificada → sin marcar.
@@ -309,13 +309,19 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
     const btnGuardar = el('button', { type: 'button', class: 'btn-primario' }, 'Guardar');
     const btnCancelar = el('button', { type: 'button', class: 'btn-secundario', onclick: () => overlay.remove() }, 'Cancelar');
 
-    btnGuardar.onclick = async () => {
-      grupo.calendario = {
+    // Lo que hay capturado en el modal ahora mismo — lo usan tanto "Guardar" como
+    // "Agregar días de clase", para que este último no dependa de guardar primero.
+    function calendarioDelFormulario() {
+      return {
         diasClase: ordenSemana.filter((indice) => checksDias[indice].checked),
         inicioCiclo: campoInicioCiclo.value || '',
         finCiclo: campoFinCiclo.value || '',
         trimestres,
       };
+    }
+
+    btnGuardar.onclick = async () => {
+      grupo.calendario = calendarioDelFormulario();
       btnGuardar.disabled = true; btnGuardar.textContent = 'Guardando…';
       try {
         await guardarGrupo(grupo);
@@ -326,15 +332,67 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
       }
     };
 
+    // Genera de un golpe todas las fechas del ciclo que caen en los días de clase
+    // marcados y las da de alta en el pase de lista, para no tener que agregarlas
+    // una por una a lo largo del año.
+    const btnAgregarDiasClase = el('button', { type: 'button', class: 'btn-primario' }, '📅 Agregar días de clase al pase de lista');
+    btnAgregarDiasClase.onclick = async () => {
+      const calendario = calendarioDelFormulario();
+      if (calendario.diasClase.length === 0) { mensaje.textContent = 'Marca al menos un día de clase.'; return; }
+      if (!calendario.inicioCiclo || !calendario.finCiclo) { mensaje.textContent = 'Captura el inicio y el fin del ciclo.'; return; }
+      if (calendario.finCiclo < calendario.inicioCiclo) { mensaje.textContent = 'El fin del ciclo no puede ser antes del inicio.'; return; }
+
+      const todas = fechasDeClase(calendario);
+      const nuevas = todas.filter((f) => !porFecha.has(f));
+      if (nuevas.length === 0) {
+        mensaje.textContent = todas.length === 0
+          ? 'No hay días de clase en ese rango de fechas.'
+          : 'Todas las fechas de clase de ese rango ya están en el pase de lista.';
+        return;
+      }
+      const yaEstaban = todas.length - nuevas.length;
+      const detalle = yaEstaban > 0 ? ` (otras ${yaEstaban} ya estaban).` : '.';
+      if (!confirm(`Se agregarán ${nuevas.length} fechas al pase de lista${detalle}\n\nDel ${calendario.inicioCiclo} al ${calendario.finCiclo}, los días marcados. ¿Continuar?`)) return;
+
+      mensaje.textContent = '';
+      btnAgregarDiasClase.disabled = true; btnGuardar.disabled = true; btnCancelar.disabled = true;
+      try {
+        grupo.calendario = calendario;
+        await guardarGrupo(grupo);
+        let hechas = 0;
+        for (const fecha of nuevas) {
+          // obtenerOCrearAsistencia y no nuevaAsistencia a secas: si otro
+          // dispositivo ya había capturado ese día, se respeta lo que tenga en vez
+          // de sobrescribirlo con un día vacío.
+          const dia = await obtenerOCrearAsistencia(grupo.id, fecha);
+          await guardarAsistencia(dia);
+          porFecha.set(fecha, dia);
+          hechas += 1;
+          btnAgregarDiasClase.textContent = `Agregando ${hechas} de ${nuevas.length}…`;
+        }
+        overlay.remove();
+        ventanaInicio = 0; // las fechas nuevas arrancan al inicio del ciclo
+        ventanaInicializada = true;
+        pintarTabla();
+      } catch (err) {
+        mensaje.textContent = `No se pudieron agregar todas las fechas: ${err.message}`;
+        btnAgregarDiasClase.disabled = false; btnGuardar.disabled = false; btnCancelar.disabled = false;
+        btnAgregarDiasClase.textContent = '📅 Agregar días de clase al pase de lista';
+        pintarTabla(); // deja a la vista las que sí alcanzaron a crearse
+      }
+    };
+
     overlay.appendChild(el('div', { class: 'panel modal-calendario' }, [
       el('h2', {}, 'Calendario del curso'),
-      el('p', { class: 'etiqueta-chica' }, 'Opcional — solo se usa para dividir el pase de lista exportado a Excel en una tabla general y una tabla por trimestre.'),
+      el('p', { class: 'etiqueta-chica' }, 'Con los días de clase y las fechas del ciclo puedes dar de alta todo el pase de lista de un jalón (botón de abajo). Los trimestres, además, dividen el pase de lista exportado a Excel en una tabla general y una por trimestre.'),
       el('label', {}, 'Días de clase'),
       filaDias,
       el('div', { class: 'rejilla-campos', style: 'margin-top:0.6rem;' }, [
         el('div', { class: 'campo' }, [el('label', {}, 'Inicio del ciclo'), campoInicioCiclo]),
         el('div', { class: 'campo' }, [el('label', {}, 'Fin del ciclo'), campoFinCiclo]),
       ]),
+      el('div', { class: 'barra-nueva' }, [btnAgregarDiasClase]),
+      el('p', { class: 'etiqueta-chica' }, 'Da de alta de una vez todas las fechas del ciclo que caen en los días marcados arriba, para no ir agregándolas una por una. Las fechas que ya tengas capturadas no se tocan.'),
       el('h2', { style: 'margin-top:1rem;' }, 'Trimestres (opcional)'),
       contenedorTrimestres,
       el('div', { class: 'barra-nueva' }, [btnAgregarTrimestre, btnTrimestresEstandar]),

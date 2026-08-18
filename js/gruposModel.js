@@ -264,11 +264,17 @@ export function nuevaAsistencia(grupoId, fechaISO) {
   return { grupoId, fecha: fechaISO, registros: {}, updatedAt: new Date().toISOString() };
 }
 
-export function fechaHoyISO() {
-  const d = new Date();
+// Siempre con los componentes locales de la fecha, nunca con toISOString(): ese
+// convierte a UTC y en México adelanta el día (una clase del lunes se guardaría
+// como domingo).
+export function fechaISO(d) {
   const mes = String(d.getMonth() + 1).padStart(2, '0');
   const dia = String(d.getDate()).padStart(2, '0');
   return `${d.getFullYear()}-${mes}-${dia}`;
+}
+
+export function fechaHoyISO() {
+  return fechaISO(new Date());
 }
 
 export function fechaCortaMX(iso) {
@@ -299,6 +305,32 @@ export const TRIMESTRES_ESTANDAR = ['Primer trimestre', 'Segundo trimestre', 'Te
 
 export function crearTrimestresEstandar() {
   return TRIMESTRES_ESTANDAR.map((nombre) => nuevoTrimestre(nombre));
+}
+
+// Tope de días que puede generar un calendario de una sentada: un ciclo escolar
+// de clases diarias no pasa de ~400. Es solo un seguro contra un "fin de ciclo"
+// mal capturado (ej. 2099) que dispararía miles de escrituras.
+const MAX_DIAS_GENERADOS = 400;
+
+// Todas las fechas de clase que caen entre el inicio y el fin del ciclo, según
+// los días de la semana marcados en el calendario del grupo. Es lo que alimenta
+// el botón "Agregar días de clase" del pase de lista.
+export function fechasDeClase(calendario) {
+  const diasClase = calendario.diasClase || [];
+  if (!calendario.inicioCiclo || !calendario.finCiclo || diasClase.length === 0) return [];
+
+  const dias = new Set(diasClase.map(Number));
+  const [anioIni, mesIni, diaIni] = calendario.inicioCiclo.split('-').map(Number);
+  const [anioFin, mesFin, diaFin] = calendario.finCiclo.split('-').map(Number);
+  const cursor = new Date(anioIni, mesIni - 1, diaIni);
+  const fin = new Date(anioFin, mesFin - 1, diaFin);
+
+  const fechas = [];
+  while (cursor <= fin && fechas.length < MAX_DIAS_GENERADOS) {
+    if (dias.has(cursor.getDay())) fechas.push(fechaISO(cursor));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return fechas;
 }
 
 // Fechas (ISO) de un arreglo de días de asistencia que caen dentro de un
