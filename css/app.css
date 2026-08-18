@@ -337,3 +337,41 @@ button {
 .comentario-texto { white-space: pre-wrap; }
 .comentario-meta { font-size: 0.78rem; color: #888; margin-top: 0.2rem; }
 .lista-comentarios .btn-icono { position: absolute; top: 0.35rem; right: 0.35rem; }
+
+/* --- Soporte: botón flotante fijo abajo a la derecha (ver js/soporte.js) --- */
+.soporte-flotante {
+  position: fixed; right: 1.1rem; bottom: 1.1rem; z-index: 900;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 0.5rem;
+}
+.btn-soporte {
+  display: flex; flex-direction: column; align-items: center; gap: 0.15rem;
+  background: #fff; border: 2px solid var(--azul); border-radius: 12px;
+  padding: 0.35rem 0.5rem 0.4rem; max-width: 7.5rem;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.18);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.btn-soporte:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0, 0, 0, 0.24); }
+.icono-soporte { width: 3.6rem; height: 3.6rem; object-fit: contain; display: block; }
+.texto-soporte { font-size: 0.7rem; line-height: 1.15; color: var(--azul); font-weight: bold; text-align: center; }
+
+.panel-soporte {
+  background: #fff; border: 1px solid var(--borde); border-radius: 10px;
+  padding: 0.7rem 0.85rem; width: 17rem;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.22);
+}
+.titulo-soporte { font-weight: bold; color: var(--azul); margin-bottom: 0.2rem; }
+.panel-soporte .etiqueta-chica { margin: 0 0 0.5rem; }
+.fila-correo-soporte { display: flex; align-items: center; justify-content: space-between; gap: 0.4rem; margin-top: 0.3rem; }
+.correo-soporte { color: var(--azul); font-size: 0.85rem; word-break: break-all; }
+.btn-copiar-correo {
+  flex: 0 0 auto; background: var(--azul-suave); color: var(--azul);
+  border: 1px solid var(--azul); border-radius: 5px; padding: 0.15rem 0.45rem; font-size: 0.75rem;
+}
+.btn-copiar-correo.copiado { background: #d9f2e3; border-color: #1c6b3a; color: #1c6b3a; }
+
+@media (max-width: 620px) {
+  .btn-soporte { max-width: 5.5rem; }
+  .icono-soporte { width: 2.6rem; height: 2.6rem; }
+  .texto-soporte { font-size: 0.62rem; }
+  .panel-soporte { width: 15rem; }
+}

@@ -11,6 +11,7 @@ import { montarEditor } from './editor.js';
 import { montarPanelAdmin } from './admin.js';
 import { redimensionarImagen } from './questionTypes.js';
 import { montarListaGrupos, montarGrupo } from './grupos.js';
+import { montarSoporte } from './soporte.js';
 
 const vistaLogin = document.getElementById('vista-login');
 const vistaLista = document.getElementById('vista-lista');
@@ -405,6 +406,10 @@ async function manejarHash() {
 }
 
 window.addEventListener('hashchange', manejarHash);
+
+// Vive fuera de las vistas y no depende de la sesión: si alguien no puede ni
+// entrar, ese es justo el momento en que más necesita el contacto de soporte.
+montarSoporte();
 
 observarSesion((nuevaSesion) => {
   sesion = nuevaSesion;
