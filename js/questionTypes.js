@@ -1,6 +1,7 @@
 // Por cada tipo de reactivo: editor de captura, render para el examen y render para la clave.
 
 import { el, clear } from './dom.js';
+import { atributosTamano } from './imagenes.js';
 import { nuevaSubpregunta, uid } from './model.js';
 import { renderTextoFormulas, campoTextoConFormulas } from './formulas.js';
 
@@ -388,7 +389,7 @@ function editorIdentificarImagen(pregunta, onChange) {
       zonaImagen.appendChild(el('p', { class: 'etiqueta-chica' }, 'Sube o pega una imagen arriba; luego haz clic sobre ella para colocar cada número donde va una parte a identificar.'));
       return;
     }
-    const wrap = el('div', { class: 'marcadores-wrap' }, [el('img', { src: pregunta.imagen, draggable: 'false' })]);
+    const wrap = el('div', { class: 'marcadores-wrap' }, [el('img', { src: pregunta.imagen, draggable: 'false', ...atributosTamano(pregunta.imagen) })]);
     wrap.addEventListener('click', (e) => {
       if (e.target.closest('.marcador-badge')) return; // no crear otro al tocar uno existente
       const rect = wrap.getBoundingClientRect();
@@ -564,7 +565,9 @@ function encabezadoReactivo(numero, pregunta, valor) {
 
 function bloqueImagen(pregunta) {
   if (!pregunta.imagen) return null;
-  const img = el('img', { src: pregunta.imagen });
+  // width/height van a propósito: sin ellos el paginador mide la imagen antes de
+  // que se decodifique y le sale altura 0 (ver js/imagenes.js).
+  const img = el('img', { src: pregunta.imagen, ...atributosTamano(pregunta.imagen) });
   // Por defecto la imagen usa el formato normal (CSS). Solo si el docente activó
   // "modificar orientación" se aplica el ancho y la alineación elegidos.
   if (pregunta.imagenModificar) {
@@ -678,7 +681,9 @@ function renderIdentificarImagenBloques(pregunta, numero, modoClave) {
   const cuerpo = [encabezadoReactivo(numero, pregunta, pregunta.valor)];
 
   if (pregunta.imagen) {
-    const wrap = el('div', { class: 'identificar-imagen-wrap' }, [el('img', { src: pregunta.imagen })]);
+    const wrap = el('div', { class: 'identificar-imagen-wrap' }, [
+      el('img', { src: pregunta.imagen, ...atributosTamano(pregunta.imagen) }),
+    ]);
     marcadores.forEach((m, i) => {
       wrap.appendChild(el('span', { class: 'marcador-num', style: `left:${m.x}%; top:${m.y}%;` }, String(i + 1)));
     });

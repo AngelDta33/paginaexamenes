@@ -155,7 +155,10 @@ button {
 .aviso-tipo-b { background: #fff4e0; border: 1px solid #e8b23a; color: #7a5407; border-radius: 8px; padding: 0.6rem 0.8rem; margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center; gap: 0.6rem; }
 
 .panel-preview { position: sticky; top: 1rem; }
-.acciones-preview { display: flex; gap: 0.5rem; margin-bottom: 0.7rem; flex-wrap: wrap; }
+.acciones-preview { display: flex; gap: 0.5rem; margin-bottom: 0.7rem; flex-wrap: wrap; align-items: center; }
+.campo-papel { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.85rem; color: var(--gris); }
+.selector-papel { width: auto !important; font-size: 0.85rem; padding: 0.35rem 0.4rem !important; }
+.nota-impresion { margin: -0.3rem 0 0.7rem; }
 .marco-preview { max-height: 82vh; overflow: auto; background: #ccc; border-radius: 8px; }
 
 .campo-imagen { margin-top: 0.4rem; font-size: 0.85rem; }

@@ -12,6 +12,10 @@ export function nuevoExamen(sesion) {
     createdAt: ahora,
     updatedAt: ahora,
     tipoExamen: 'A',
+    // Tamaño de hoja con el que se arma la vista previa y se imprime (ver
+    // TAMANOS_PAPEL en js/paginate.js). Los exámenes guardados antes de que
+    // existiera este campo caen solos en oficio, que era el fijo de antes.
+    tamanoPapel: 'oficio',
     duplicadoDeId: null,
     revisadoDistinto: false,
     profesorId: sesion ? sesion.uid : null,

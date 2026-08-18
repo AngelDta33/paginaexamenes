@@ -1,15 +1,54 @@
-// Motor de paginación: arma páginas tamaño Carta con el mismo render para pantalla e impresión,
-// para que encabezados (completo en pág. 1, mini en pág. 2+) y numeración centrada sean exactos.
+// Motor de paginación: arma las hojas (del tamaño de papel elegido en el examen) con el
+// mismo render para pantalla e impresión, para que encabezados (completo en pág. 1, mini en
+// pág. 2+) y numeración centrada sean exactos.
 
 import { el, clear } from './dom.js';
 import { numerarReactivos, subtotalSeccion, totalExamen } from './model.js';
 import { renderPreguntaBloques, renderLecturaBloques } from './questionTypes.js';
+import { precargarImagenes, atributosTamano } from './imagenes.js';
 
 const PX_POR_CM = 96 / 2.54;
-const PAGINA_ANCHO_CM = 21.59; // oficio/folio 8.5×13"
-const PAGINA_ALTO_CM = 33.02;
 const PADDING_CM = 1.8;
 const MIN_RESTANTE_PARA_TITULO_CM = 4;
+
+// Colchón que se le resta al alto útil de la hoja al empaquetar los bloques. La
+// medición previa y el render final nunca coinciden al milímetro (redondeo a
+// píxeles enteros, márgenes que colapsan entre bloques hermanos, diferencias de
+// hinting de fuentes entre pantalla e impresora), y sin colchón un bloque que
+// "cabe justo" termina desbordándose y lo recorta el overflow:hidden de .page.
+const MARGEN_SEGURIDAD_CM = 0.25;
+
+// Tamaños de hoja disponibles. El error que reportaban los maestros —hojas en
+// blanco de más y contenido cortado en el PDF pero no en la vista previa— pasaba
+// cuando el papel elegido en el diálogo de impresión no era el mismo con el que
+// se armó la vista previa: la hoja de 33.02cm no cabía en una carta o A4, así que
+// cada página se partía en dos (una con el contenido cortado y otra casi vacía).
+// Con esto el maestro elige el papel, la vista previa se arma con esa medida y
+// preview.js emite el @page correspondiente, así que siempre coinciden.
+export const TAMANOS_PAPEL = {
+  oficio: { etiqueta: 'Oficio / Folio (21.59 × 33.02 cm)', ancho: 21.59, alto: 33.02 },
+  carta: { etiqueta: 'Carta (21.59 × 27.94 cm)', ancho: 21.59, alto: 27.94 },
+  a4: { etiqueta: 'A4 (21 × 29.7 cm)', ancho: 21, alto: 29.7 },
+};
+
+export const PAPEL_POR_DEFECTO = 'oficio';
+
+export function papelDeExamen(examen) {
+  return TAMANOS_PAPEL[examen && examen.tamanoPapel] || TAMANOS_PAPEL[PAPEL_POR_DEFECTO];
+}
+
+// Todas las imágenes que van a aparecer en la hoja — hay que precargarlas antes
+// de medir nada (ver js/imagenes.js).
+function urlsDeImagenes(examen, config) {
+  const urls = [config && config.logoDataUrl];
+  for (const seccion of (examen && examen.secciones) || []) {
+    for (const pregunta of seccion.preguntas || []) {
+      urls.push(pregunta.imagen);
+      for (const sub of pregunta.subpreguntas || []) urls.push(sub.imagen);
+    }
+  }
+  return urls.filter(Boolean);
+}
 
 function cm(valor) {
   return `${valor}cm`;
@@ -71,7 +110,7 @@ function renderEncabezadoCompleto(examen, config, modoClave) {
   ]);
   return el('div', { class: 'encabezado-completo' }, [
     el('div', { class: 'encabezado-escuela' }, [
-      config.logoDataUrl ? el('img', { class: 'logo-escuela', src: config.logoDataUrl }) : null,
+      config.logoDataUrl ? el('img', { class: 'logo-escuela', src: config.logoDataUrl, ...atributosTamano(config.logoDataUrl) }) : null,
       el('div', { class: 'nombre-escuela-ciclo' }, [
         el('div', { class: 'nombre-escuela' }, config.nombreEscuela || ''),
         config.cicloEscolar ? el('div', { class: 'ciclo-escolar' }, `Ciclo escolar ${config.cicloEscolar}`) : null,
@@ -145,9 +184,14 @@ function medirAlto(elemento, contenedorMedicion) {
   return alto;
 }
 
-export function renderPaginas(examen, config, modoClave = false) {
-  const anchoContenidoCm = PAGINA_ANCHO_CM - PADDING_CM * 2;
-  const altoUtilPaginaCm = PAGINA_ALTO_CM - PADDING_CM * 2;
+export async function renderPaginas(examen, config, modoClave = false) {
+  // Antes de medir nada: sin esto las imágenes miden 0 al medirlas y el
+  // empaquetado mete de más en cada página (ver js/imagenes.js).
+  await precargarImagenes(urlsDeImagenes(examen, config));
+
+  const papel = papelDeExamen(examen);
+  const anchoContenidoCm = papel.ancho - PADDING_CM * 2;
+  const altoUtilPaginaCm = papel.alto - PADDING_CM * 2 - MARGEN_SEGURIDAD_CM;
   const altoUtilPaginaPx = altoUtilPaginaCm * PX_POR_CM;
   const altoPiePx = 0.9 * PX_POR_CM;
   const minRestanteTituloPx = MIN_RESTANTE_PARA_TITULO_CM * PX_POR_CM;

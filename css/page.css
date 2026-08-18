@@ -1,9 +1,12 @@
 /* Estilos de la "hoja" — compartidos entre vista previa en pantalla e impresión.
-   Las medidas (21.59 x 33.02cm oficio, padding 1.8cm) deben coincidir con las constantes de js/paginate.js */
+   El tamaño sale de --pagina-ancho / --pagina-alto, que js/preview.js le pone al
+   .hoja-contenedor a partir del papel elegido en el examen (ver TAMANOS_PAPEL en
+   js/paginate.js); los valores de aquí solo son el respaldo (oficio). El padding
+   de 1.8cm sí tiene que coincidir con PADDING_CM de js/paginate.js. */
 
 .page {
-  width: 21.59cm;
-  height: 33.02cm;
+  width: var(--pagina-ancho, 21.59cm);
+  height: var(--pagina-alto, 33.02cm);
   padding: 1.8cm;
   box-sizing: border-box;
   background: #fff;
@@ -136,20 +139,52 @@
 }
 
 @media print {
-  @page { size: 21.59cm 33.02cm; margin: 0; }
-  body * { visibility: hidden; }
-  .hoja-contenedor, .hoja-contenedor * { visibility: visible; }
-  /* .panel-preview usa position:sticky para la pantalla — eso lo convierte en el
-     "contenedor de referencia" de .hoja-contenedor (position:absolute), así que
-     top:0/left:0 terminaba anclado a la posición de ese panel dentro del formulario
-     (que en la hoja de impresión, más angosta, cae debajo de todos los reactivos)
-     en vez de anclarse a la esquina de la hoja — de ahí las páginas en blanco antes
-     del examen. Quitar el sticky solo en impresión corrige el punto de referencia. */
-  .panel-preview { position: static; }
+  /* El @page (tamaño de papel) lo inyecta js/preview.js justo antes de imprimir,
+     porque @page no acepta variables CSS y el tamaño depende del examen. */
+
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
+    height: auto !important;
+  }
+
+  /* display:none, NO visibility:hidden. Un elemento invisible sigue ocupando su
+     espacio en el layout, y ese espacio se volvía páginas en blanco al final del
+     PDF (el editor completo seguía midiendo lo que mide). Mientras dura la
+     impresión, js/preview.js cuelga la hoja de <body> dentro de .raiz-impresion,
+     así que basta con esconder a todos sus hermanos. */
+  body > *:not(.raiz-impresion) { display: none !important; }
+
+  .raiz-impresion {
+    display: block;
+    position: static;
+    margin: 0;
+    padding: 0;
+  }
+
   .hoja-contenedor {
-    position: absolute; top: 0; left: 0; padding: 0; margin: 0;
+    padding: 0;
+    margin: 0;
     transform: none !important;
   }
-  .page { box-shadow: none; margin: 0 auto; }
-  .page + .page { break-before: page; }
+
+  .page {
+    box-shadow: none;
+    margin: 0 auto;
+    /* Un pelo menos que la hoja física: si la caja midiera exactamente lo mismo,
+       cualquier redondeo a píxeles enteros la desborda por 1px y ese píxel se
+       lleva una hoja entera en blanco. */
+    height: calc(var(--pagina-alto, 33.02cm) - 0.04cm);
+    overflow: hidden;
+    break-inside: avoid;
+    page-break-inside: avoid;
+    break-after: page;
+    page-break-after: always;
+  }
+  /* Sin esto el salto de la última hoja agrega una página vacía al final. */
+  .page:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
 }

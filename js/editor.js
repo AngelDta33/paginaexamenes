@@ -9,6 +9,7 @@ import {
 import { crearEditorPregunta } from './questionTypes.js';
 import { guardarExamen, obtenerConfig, exportarExamenJSON } from './store.js';
 import { pintarVistaPrevia, imprimir } from './preview.js';
+import { TAMANOS_PAPEL, PAPEL_POR_DEFECTO } from './paginate.js';
 import { esRevisorOAdmin as calcularEsRevisorOAdmin } from './auth.js';
 
 function fechaCorta(iso) {
@@ -297,14 +298,27 @@ export function montarEditor(contenedor, examen, { sesion, onVolver }) {
   btnVerClave.onclick = () => { modoVista = 'clave'; actualizarBotonesModo(); repintarPreview(); };
   actualizarBotonesModo();
 
+  // El tamaño de papel tiene que ser el mismo aquí y en el diálogo de impresión:
+  // si no coinciden, cada hoja se parte en dos al imprimir (contenido cortado +
+  // una página casi en blanco). Cambiarlo repagina la vista previa al instante.
+  const selectorPapel = el('select', {
+    class: 'selector-papel', title: 'Tamaño de hoja con el que se arma e imprime el examen',
+    disabled: !puedeEditar,
+    onchange: (e) => { examen.tamanoPapel = e.target.value; guardarYActualizar(); },
+  }, Object.entries(TAMANOS_PAPEL).map(([valor, papel]) => el('option', {
+    value: valor, selected: (examen.tamanoPapel || PAPEL_POR_DEFECTO) === valor,
+  }, papel.etiqueta)));
+
   const panelPreview = el('div', { class: 'panel panel-preview' }, [
     el('h2', {}, ['Vista previa ', estadoGuardado]),
     el('div', { class: 'acciones-preview' }, [
       btnVerExamen,
       btnVerClave,
+      el('label', { class: 'campo-papel' }, ['Hoja: ', selectorPapel]),
       el('button', { type: 'button', class: 'btn-primario', onclick: () => imprimir(examen, modoVista === 'clave') }, '🖨 Imprimir / Descargar PDF'),
       el('button', { type: 'button', class: 'btn-secundario', onclick: () => exportarExamenJSON(examen) }, '⬇ Exportar respaldo (.json)'),
     ]),
+    el('p', { class: 'etiqueta-chica nota-impresion' }, 'Al imprimir, elige el mismo tamaño de hoja de aquí arriba y pon Márgenes: Ninguno y Escala: 100% (sin "Ajustar al área de impresión"). Así el PDF sale idéntico a esta vista previa.'),
     marcoPreview,
   ]);
 
