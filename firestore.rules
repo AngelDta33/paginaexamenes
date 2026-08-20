@@ -54,6 +54,15 @@ service cloud.firestore {
       allow update, delete: if autenticado() && resource.data.profesorId == request.auth.uid;
       allow create: if autenticado() && request.resource.data.profesorId == request.auth.uid;
     }
+    // programas/{id}: formato de "Programa de actividades académicas" — mismo
+    // criterio de privacidad que grupos: el maestro dueño escribe lo suyo,
+    // revisor/administrador pueden leer cualquiera (para el Vo.Bo. de Coordinación).
+    match /programas/{programaId} {
+      allow read: if autenticado() && (resource.data.profesorId == request.auth.uid || esRevisorOAdmin());
+      allow update, delete: if autenticado() && resource.data.profesorId == request.auth.uid;
+      allow create: if autenticado() && request.resource.data.profesorId == request.auth.uid;
+    }
+
     match /asistencias/{docId} {
       // resource es null cuando el documento del día todavía no existe (primera vez que
       // se pasa lista ese día) — obtenerOCrearAsistencia hace un getDoc antes de crearlo,

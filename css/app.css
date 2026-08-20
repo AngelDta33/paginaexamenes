@@ -212,6 +212,12 @@ button {
 .pantalla-config .panel { max-width: 520px; }
 .logo-config-preview img { max-height: 4rem; margin-top: 0.4rem; }
 
+/* --- Módulo de Programas: editor de criterios de evaluación --- */
+.lista-criterios-programa { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 0.5rem; }
+.fila-criterio-programa { display: flex; align-items: center; gap: 0.4rem; }
+.fila-criterio-programa input[type=text] { flex: 1 1 auto; }
+.input-porcentaje-criterio { width: 5rem !important; flex: 0 0 auto; }
+
 /* --- Sesión / login --- */
 .info-sesion { display: flex; align-items: center; gap: 0.6rem; }
 .nombre-sesion { font-size: 0.9rem; }
@@ -283,6 +289,9 @@ button {
 
 /* --- Módulo de Grupos: mismo sistema visual, en verde --- */
 .tema-verde { --azul: #1f8a4c; --azul-suave: #e6f6ec; --azul-oscuro: #166b3a; }
+
+/* --- Módulo de Programas: mismo sistema visual, en morado --- */
+.tema-morado { --azul: #7c3aed; --azul-suave: #f1e9fe; --azul-oscuro: #5f27c9; }
 
 .lista-alumnos { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.6rem; }
 .selector-pestanas { display: flex; gap: 0.5rem; margin: 1rem 0 0.8rem 0; }

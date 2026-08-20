@@ -1,0 +1,51 @@
+/* Programa de actividades académicas: una sola hoja tamaño carta horizontal
+   (27.94 × 21.59cm), reutiliza el tamaño/impresión de .page y .hoja-contenedor
+   de page.css — aquí solo va el layout interno de la tabla del formato. */
+
+.pagina-programa { padding: 1cm 1.2cm; font-size: 9.5pt; line-height: 1.3; }
+
+.encabezado-programa { display: flex; align-items: center; gap: 0.5cm; margin-bottom: 0.3cm; }
+.encabezado-programa .logo-programa { height: 1.7cm; width: auto; object-fit: contain; }
+.titulo-programa { flex: 1 1 auto; text-align: center; font-weight: bold; font-size: 11pt; line-height: 1.35; }
+.titulo-programa div:last-child { font-size: 10.5pt; }
+
+.cuerpo-programa { flex: 1 1 auto; display: flex; flex-direction: column; border: 1pt solid #111; min-height: 0; }
+
+.fila-datos-programa { display: grid; border-bottom: 1pt solid #111; }
+.fila-datos-programa.fila-disciplina { grid-template-columns: 1fr; }
+.fila-datos-programa.fila-profesor { grid-template-columns: 1fr 1fr; }
+.celda-datos-programa { padding: 0.12cm 0.3cm; border-right: 1pt solid #111; }
+.celda-datos-programa:last-child { border-right: none; }
+.celda-datos-programa strong { font-weight: bold; }
+
+.barra-temario { text-align: center; font-weight: bold; font-size: 11pt; padding: 0.12cm 0; border-bottom: 1pt solid #111; }
+
+.fila-temario { flex: 1 1 auto; display: grid; grid-template-columns: 17% 27% 27% 29%; min-height: 0; }
+.col-temario { border-right: 1pt solid #111; display: flex; flex-direction: column; min-height: 0; }
+.col-temario:last-child { border-right: none; }
+.titulo-col-temario { font-weight: bold; text-align: center; font-size: 9.5pt; padding: 0.12cm 0.2cm; border-bottom: 1pt solid #111; }
+.contenido-col-temario {
+  flex: 1 1 auto; padding: 0.2cm 0.3cm; white-space: pre-wrap; overflow: hidden; font-size: 9.5pt;
+}
+
+.col-criterios { display: flex; flex-direction: column; min-height: 0; }
+.tabla-criterios { width: 100%; border-collapse: collapse; font-size: 9pt; }
+.tabla-criterios th, .tabla-criterios td { border: 0.5pt solid #111; padding: 0.08cm 0.2cm; text-align: center; }
+.tabla-criterios th { font-weight: bold; }
+.tabla-criterios td.celda-criterio-nombre { text-align: left; }
+.tabla-criterios tr.fila-total td { font-weight: bold; }
+.tabla-criterios tr.fila-evaluacion td.celda-criterio-nombre { font-weight: bold; }
+
+.firmas-programa { flex: 1 1 auto; display: flex; align-items: flex-end; justify-content: space-around; gap: 0.4cm; padding: 0.2cm 0.3cm; min-height: 0; }
+.firma-programa { flex: 1 1 0; text-align: center; }
+.linea-firma-programa { border-bottom: 0.5pt solid #111; margin-bottom: 0.1cm; height: 0.6cm; }
+.etiqueta-firma-programa { font-size: 8.5pt; }
+
+.fila-observaciones-programa { border-top: 1pt solid #111; padding: 0.15cm 0.3cm; min-height: 1.4cm; }
+.fila-observaciones-programa strong { font-weight: bold; }
+.texto-observaciones-programa { white-space: pre-wrap; font-size: 9.5pt; }
+
+.pie-programa { flex: 0 0 auto; display: flex; justify-content: space-around; margin-top: 0.5cm; font-size: 9.5pt; }
+.firma-pie-programa { text-align: center; }
+.firma-pie-programa .etiqueta-elaboro { font-weight: bold; margin-bottom: 0.6cm; }
+.firma-pie-programa .etiqueta-cargo { margin-top: 0.15cm; }

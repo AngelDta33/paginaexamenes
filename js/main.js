@@ -13,6 +13,7 @@ import { montarEditor } from './editor.js';
 import { montarPanelAdmin } from './admin.js';
 import { redimensionarImagen } from './questionTypes.js';
 import { montarListaGrupos, montarGrupo } from './grupos.js';
+import { montarListaProgramas, montarEditorPrograma } from './programas.js';
 import { montarSoporte } from './soporte.js';
 
 const vistaLogin = document.getElementById('vista-login');
@@ -22,11 +23,16 @@ const vistaConfig = document.getElementById('vista-config');
 const vistaAdmin = document.getElementById('vista-admin');
 const vistaGrupos = document.getElementById('vista-grupos');
 const vistaGrupo = document.getElementById('vista-grupo');
+const vistaProgramas = document.getElementById('vista-programas');
+const vistaPrograma = document.getElementById('vista-programa');
 const infoSesion = document.getElementById('info-sesion');
 const selectorModulo = document.getElementById('selector-modulo');
 const btnModuloExamenes = document.getElementById('btn-modulo-examenes');
 const btnModuloGrupos = document.getElementById('btn-modulo-grupos');
-const todasLasVistas = [vistaLogin, vistaLista, vistaEditor, vistaConfig, vistaAdmin, vistaGrupos, vistaGrupo];
+const btnModuloProgramas = document.getElementById('btn-modulo-programas');
+const todasLasVistas = [
+  vistaLogin, vistaLista, vistaEditor, vistaConfig, vistaAdmin, vistaGrupos, vistaGrupo, vistaProgramas, vistaPrograma,
+];
 
 let sesion = null; // { uid, email, nombre, rol, activo } | null
 
@@ -37,6 +43,7 @@ function mostrarVista(vista) {
 function marcarModuloActivo(modulo) {
   btnModuloExamenes.classList.toggle('activo', modulo === 'examenes');
   btnModuloGrupos.classList.toggle('activo', modulo === 'grupos');
+  btnModuloProgramas.classList.toggle('activo', modulo === 'programas');
 }
 
 // --- Sesión (barra superior) ---
@@ -158,9 +165,12 @@ function irAEditor(examenId) { cambiarRuta(`#examen/${examenId}`); }
 function irAAdmin() { cambiarRuta('#usuarios'); }
 function irAGrupos() { cambiarRuta('#grupos'); }
 function irAGrupo(grupoId) { cambiarRuta(`#grupo/${grupoId}`); }
+function irAProgramas() { cambiarRuta('#programas'); }
+function irAPrograma(programaId) { cambiarRuta(`#programa/${programaId}`); }
 
 btnModuloExamenes.onclick = irALista;
 btnModuloGrupos.onclick = irAGrupos;
+btnModuloProgramas.onclick = irAProgramas;
 
 async function renderLista() {
   marcarModuloActivo('examenes');
@@ -192,6 +202,18 @@ function renderGrupo(grupoId) {
   marcarModuloActivo('grupos');
   mostrarVista(vistaGrupo);
   montarGrupo(vistaGrupo, grupoId, sesion, { onVolver: irAGrupos });
+}
+
+function renderProgramas() {
+  marcarModuloActivo('programas');
+  mostrarVista(vistaProgramas);
+  montarListaProgramas(vistaProgramas, sesion, { onAbrirPrograma: irAPrograma });
+}
+
+function renderPrograma(programaId) {
+  marcarModuloActivo('programas');
+  mostrarVista(vistaPrograma);
+  montarEditorPrograma(vistaPrograma, programaId, sesion, { onVolver: irAProgramas });
 }
 
 // --- Lista de exámenes ---
@@ -422,6 +444,14 @@ async function manejarHash() {
   }
   if (hash.startsWith('grupo/')) {
     renderGrupo(hash.slice('grupo/'.length));
+    return;
+  }
+  if (hash === 'programas') {
+    renderProgramas();
+    return;
+  }
+  if (hash.startsWith('programa/')) {
+    renderPrograma(hash.slice('programa/'.length));
     return;
   }
   renderLista();
