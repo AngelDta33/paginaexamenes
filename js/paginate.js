@@ -3,7 +3,9 @@
 // pág. 2+) y numeración centrada sean exactos.
 
 import { el, clear } from './dom.js';
-import { numerarReactivos, subtotalSeccion, totalExamen } from './model.js';
+import {
+  numerarReactivos, subtotalSeccion, totalExamen, ENCABEZADO_INGLES_DEFECTO,
+} from './model.js';
 import { renderPreguntaBloques, renderLecturaBloques } from './questionTypes.js';
 import { precargarImagenes, atributosTamano } from './imagenes.js';
 
@@ -83,31 +85,58 @@ function renderTituloExamenCentrado(examen, config) {
   ]);
 }
 
+// Membrete oficial fijo (Gobierno del Estado de México…) que llevan los
+// exámenes de inglés en vez del logo/nombre de la escuela.
+function renderEncabezadoOficialIngles(config) {
+  const texto = config.encabezadoIngles || ENCABEZADO_INGLES_DEFECTO;
+  return el('div', { class: 'membrete-ingles' }, texto.split('\n').map((linea) => el('div', {}, linea)));
+}
+
+// Título libre centrado de los exámenes de inglés (ver meta.tituloIngles en
+// model.js) + "TYPE A/B" en su propia línea, igual que en los formatos
+// originales del maestro.
+function renderTituloIngles(examen, modoClave) {
+  const lineas = (examen.meta.tituloIngles || '').split('\n').filter((l) => l.trim());
+  return el('div', { class: 'titulo-examen-centrado' }, [
+    ...lineas.map((linea) => el('div', {}, linea)),
+    el('div', {}, `TYPE ${examen.tipoExamen || 'A'}${modoClave ? ' — ANSWER KEY' : ''}`),
+  ]);
+}
+
 function renderEncabezadoCompleto(examen, config, modoClave) {
   const { meta } = examen;
+  const esIngles = examen.formato === 'ingles';
   const total = totalExamen(examen);
   const filas = el('div', { class: 'encabezado-datos' }, [
     el('span', {}, `Grado: ${meta.grado || '____'}`),
     el('span', {}, `Grupo: ${meta.grupo || '____'}`),
     el('span', {}, 'N.L.: ______'),
-    el('span', {}, `Materia: ${meta.materia || '____'}`),
-    el('span', {}, `Trimestre: ${meta.trimestre || '____'}`),
-    el('span', {}, `Examen Tipo ${examen.tipoExamen || 'A'}`),
+    esIngles ? el('span', {}, `Asignatura: ${meta.materia || '____'}`) : el('span', {}, `Materia: ${meta.materia || '____'}`),
+    esIngles ? null : el('span', {}, `Trimestre: ${meta.trimestre || '____'}`),
+    esIngles ? null : el('span', {}, `Examen Tipo ${examen.tipoExamen || 'A'}`),
     el('span', {}, `Fecha: ${meta.fecha || '____'}`),
   ]);
   const filaAlumno = el('div', { class: 'encabezado-alumno' }, [
-    el('span', {}, 'Nombre del alumno: ______________________________________________'),
+    el('span', {}, `Nombre del alumno${esIngles ? ' (a)' : ''}: ______________________________________________`),
   ]);
   const filaProfesor = el('div', { class: 'encabezado-datos' }, [
     el('span', {}, `Profesor(a): ${meta.profesor || '____'}`),
     el('span', {}, `No. de reactivos: ${Object.keys(numerarReactivos(examen)).length}`),
-    el('span', {}, `Total de puntos: ${total}`),
-    el('span', {}, `Valor del examen: ${meta.valorExamen}`),
+    esIngles ? null : el('span', {}, `Total de puntos: ${total}`),
+    el('span', {}, `Valor del examen: ${meta.valorExamen}${esIngles ? '%' : ''}`),
   ]);
   const filaCalificacion = el('div', { class: 'encabezado-datos' }, [
     el('span', {}, 'Puntos obtenidos: ______________'),
     el('span', {}, 'Porcentaje: ______________'),
   ]);
+  if (esIngles) {
+    return el('div', { class: 'encabezado-completo encabezado-ingles' }, [
+      renderEncabezadoOficialIngles(config),
+      el('div', { class: 'caja-datos-ingles' }, [filas, filaAlumno, filaProfesor, filaCalificacion]),
+      renderTituloIngles(examen, modoClave),
+      examen.instruccionesGenerales ? el('div', { class: 'instrucciones-generales' }, examen.instruccionesGenerales) : null,
+    ]);
+  }
   return el('div', { class: 'encabezado-completo' }, [
     el('div', { class: 'encabezado-escuela' }, [
       config.logoDataUrl ? el('img', { class: 'logo-escuela', src: config.logoDataUrl, ...atributosTamano(config.logoDataUrl) }) : null,
@@ -130,17 +159,18 @@ function renderEncabezadoCompleto(examen, config, modoClave) {
 // derecha, la materia y el grado — y, según el ejemplo, el tipo de examen en
 // una segunda línea (ej. "ESP 1°" / "TIPO A o B").
 function renderEncabezadoMini(examen, modoClave) {
+  const esIngles = examen.formato === 'ingles';
   return el('div', { class: 'encabezado-mini' }, [
     el('div', { class: 'encabezado-mini-materia' }, [
       `${examen.meta.materia || ''} ${examen.meta.grado || ''}${examen.meta.grupo || ''}`.trim(),
-      modoClave ? el('span', { class: 'etiqueta-clave-mini' }, ' — CLAVE') : null,
+      modoClave ? el('span', { class: 'etiqueta-clave-mini' }, esIngles ? ' — ANSWER KEY' : ' — CLAVE') : null,
     ]),
-    el('div', { class: 'encabezado-mini-tipo' }, `TIPO ${examen.tipoExamen || 'A'}`),
+    el('div', { class: 'encabezado-mini-tipo' }, `${esIngles ? 'TYPE' : 'TIPO'} ${examen.tipoExamen || 'A'}`),
   ]);
 }
 
-function renderPie(numPagina, totalPaginas) {
-  return el('div', { class: 'pie-pagina' }, `Página ${numPagina} de ${totalPaginas}`);
+function renderPie(numPagina, totalPaginas, esIngles) {
+  return el('div', { class: 'pie-pagina' }, esIngles ? `Page ${numPagina} of ${totalPaginas}` : `Página ${numPagina} de ${totalPaginas}`);
 }
 
 function construirBloques(examen, modoClave) {
@@ -167,7 +197,10 @@ function construirBloques(examen, modoClave) {
       bloques.push({ tipo: 'subtotal-seccion', el: el('div', { class: 'subtotal-seccion' }, `Subtotal: ${subtotalSeccion(seccion)} pts`) });
     }
   }
-  bloques.push({ tipo: 'firma', el: renderFirma() });
+  // Los formatos de inglés que mandó el maestro no llevan firma del padre/tutor.
+  if (examen.formato !== 'ingles') {
+    bloques.push({ tipo: 'firma', el: renderFirma() });
+  }
   return bloques;
 }
 
@@ -252,7 +285,7 @@ export async function renderPaginas(examen, config, modoClave = false) {
     return el('div', { class: 'page' }, [
       el('div', { class: 'page-header' }, [i === 0 ? renderEncabezadoCompleto(examen, config, modoClave) : renderEncabezadoMini(examen, modoClave)]),
       cuerpo,
-      el('div', { class: 'page-footer' }, [renderPie(i + 1, totalPaginas)]),
+      el('div', { class: 'page-footer' }, [renderPie(i + 1, totalPaginas, examen.formato === 'ingles')]),
     ]);
   });
 }

@@ -6,7 +6,9 @@ import {
   listarExamenes, obtenerExamen, guardarExamen, eliminarExamen,
   obtenerConfig, guardarConfig, exportarExamenJSON, importarExamenJSON,
 } from './store.js';
-import { nuevoExamen, uid, ETIQUETAS_ESTADO, ETIQUETAS_ROL } from './model.js';
+import {
+  nuevoExamen, uid, ETIQUETAS_ESTADO, ETIQUETAS_ROL, ENCABEZADO_INGLES_DEFECTO,
+} from './model.js';
 import { montarEditor } from './editor.js';
 import { montarPanelAdmin } from './admin.js';
 import { redimensionarImagen } from './questionTypes.js';
@@ -216,6 +218,15 @@ async function pintarLista() {
         irAEditor(examen.id);
       },
     }, '+ Nuevo examen'),
+    el('button', {
+      type: 'button', class: 'btn-primario',
+      title: 'Examen con el membrete oficial y formato usados para las materias de inglés',
+      onclick: async () => {
+        const examen = nuevoExamen(sesion, 'ingles');
+        await guardarExamen(examen);
+        irAEditor(examen.id);
+      },
+    }, '+ Nuevo examen inglés'),
   ];
   if (sesion.rol === 'administrador') {
     controles.push(el('button', {
@@ -285,6 +296,7 @@ async function pintarLista() {
     el('h3', {}, [
       `${examen.meta.materia || 'Sin materia'} `,
       el('span', { class: 'etiqueta-tipo-examen' }, `Tipo ${examen.tipoExamen}`),
+      examen.formato === 'ingles' ? el('span', { class: 'etiqueta-tipo-examen' }, 'Inglés') : null,
     ]),
     el('div', { class: 'meta-chica' }, [
       `${examen.meta.grado || '—'}${examen.meta.grupo || ''} · ${examen.meta.trimestre || 'sin trimestre'} · editado ${fechaCorta(examen.updatedAt)}`,
@@ -374,6 +386,16 @@ async function pintarConfig(onVolver) {
           },
         }),
         previewLogo,
+      ]),
+    ]),
+    el('div', { class: 'panel' }, [
+      el('h2', {}, 'Membrete de los exámenes de inglés'),
+      el('p', { class: 'etiqueta-chica' }, 'Reemplaza el logo/nombre de la escuela cuando el examen se crea con el botón "+ Nuevo examen inglés". Una línea por renglón.'),
+      el('div', { class: 'campo' }, [
+        el('textarea', {
+          rows: '7',
+          oninput: (e) => { config.encabezadoIngles = e.target.value; guardarConfigConDebounce(); },
+        }, config.encabezadoIngles || ENCABEZADO_INGLES_DEFECTO),
       ]),
     ]),
   ]));

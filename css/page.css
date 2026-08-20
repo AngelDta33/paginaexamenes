@@ -43,6 +43,16 @@
   text-align: center; font-weight: bold; font-size: 12pt; margin-top: 0.3cm; letter-spacing: 0.3pt;
 }
 
+/* --- Encabezado de los exámenes de inglés: membrete oficial + datos en caja
+   con borde, como en los formatos Word que mandó el maestro (ver paginate.js). --- */
+.encabezado-ingles { border-bottom: none; padding-bottom: 0; }
+.membrete-ingles {
+  border: 1pt solid #111; border-bottom: none; padding: 0.2cm 0.35cm;
+  font-size: 9pt; line-height: 1.35;
+}
+.caja-datos-ingles { border: 1pt solid #111; padding: 0.15cm 0.35cm 0.05cm; margin-bottom: 0.3cm; }
+.caja-datos-ingles .encabezado-datos, .caja-datos-ingles .encabezado-alumno { margin: 0.1cm 0; }
+
 /* --- Mini encabezado (páginas 2+) --- */
 .encabezado-mini {
   display: flex; flex-direction: column; align-items: flex-end; font-size: 9.5pt; color: #333;

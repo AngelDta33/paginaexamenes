@@ -4,14 +4,30 @@ export function uid(prefix = 'id') {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+// Encabezado oficial fijo que llevan los exámenes de inglés (membrete de
+// Gobierno del Estado de México) — se precarga en "Datos de la escuela" la
+// primera vez que se abre ese campo, pero se puede editar ahí si cambia.
+export const ENCABEZADO_INGLES_DEFECTO = [
+  'Gobierno del Estado de México',
+  'Secretaría de Educación',
+  'Subsecretaría de Educación Básica y Normal',
+  'Dirección General de Educación Básica',
+  'Subdirección Regional de Educación Básica Nezahualcóyotl',
+  'Supervisión Escolar No. S-098',
+  'Esc. Particular 0223 "Colegio Cultural México-Aragón, S. C.',
+].join('\n');
+
 // sesion = { uid, nombre } de quien lo crea — se guarda como dueño del examen.
-export function nuevoExamen(sesion) {
+// formato: 'normal' (el formato de siempre, con logo de la escuela) o
+// 'ingles' (membrete oficial y título libre, ver paginate.js).
+export function nuevoExamen(sesion, formato = 'normal') {
   const ahora = new Date().toISOString();
   return {
     id: uid('exam'),
     createdAt: ahora,
     updatedAt: ahora,
     tipoExamen: 'A',
+    formato,
     // Tamaño de hoja con el que se arma la vista previa y se imprime (ver
     // TAMANOS_PAPEL en js/paginate.js). Los exámenes guardados antes de que
     // existiera este campo caen solos en oficio, que era el fijo de antes.
@@ -34,6 +50,10 @@ export function nuevoExamen(sesion) {
       trimestre: '',
       fecha: '',
       valorExamen: 100,
+      // Título libre centrado que llevan los exámenes de inglés (ej. "THIRD-GRADE
+      // ENGLISH INTER" / "THIRD TRIMESTRAL EXAM 2025-2026") — varía tanto de
+      // redacción entre exámenes que no vale la pena tratar de generarlo solo.
+      tituloIngles: '',
     },
     instruccionesGenerales: '',
     secciones: [nuevaSeccion()],

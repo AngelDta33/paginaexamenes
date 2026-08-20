@@ -178,8 +178,16 @@ export function montarEditor(contenedor, examen, { sesion, onVolver }) {
         campoTexto('Trimestre', examen.meta.trimestre, (v) => { examen.meta.trimestre = v; }),
         campoTexto('Fecha', examen.meta.fecha, (v) => { examen.meta.fecha = v; }, 'date'),
         el('div', { class: 'campo' }, [el('label', {}, 'Tipo de examen'), selectorTipoExamen]),
-        campoTexto('Valor del examen (pts)', examen.meta.valorExamen, (v) => { examen.meta.valorExamen = parseFloat(v) || 0; }, 'number'),
+        campoTexto(`Valor del examen (${examen.formato === 'ingles' ? '%' : 'pts'})`, examen.meta.valorExamen, (v) => { examen.meta.valorExamen = parseFloat(v) || 0; }, 'number'),
       ]),
+      examen.formato === 'ingles' ? el('div', { class: 'campo', style: 'margin-top:0.6rem;' }, [
+        el('label', {}, 'Título del examen (inglés)'),
+        el('textarea', {
+          rows: '2', placeholder: 'THIRD-GRADE ENGLISH INTER\nTHIRD TRIMESTRAL EXAM 2025-2026',
+          oninput: (e) => { examen.meta.tituloIngles = e.target.value; guardarYActualizar(); },
+        }, examen.meta.tituloIngles),
+        el('p', { class: 'etiqueta-chica' }, 'Una línea por renglón, centrado en la hoja. "TYPE A/B" se agrega solo, tomado del "Tipo de examen" de arriba.'),
+      ]) : null,
       el('div', { class: 'campo', style: 'margin-top:0.6rem;' }, [
         el('label', {}, 'Instrucciones generales'),
         el('textarea', {
