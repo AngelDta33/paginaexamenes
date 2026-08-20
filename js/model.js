@@ -17,6 +17,24 @@ export const ENCABEZADO_INGLES_DEFECTO = [
   'Esc. Particular 0223 "Colegio Cultural México-Aragón, S. C.',
 ].join('\n');
 
+// Membrete oficial del formato normal (punto I de "Elaboración de exámenes").
+// Va dentro de una caja con borde, con el logo de la escuela a la izquierda. Ojo:
+// NO es el mismo que el de inglés — cambian la supervisión escolar y la última
+// línea —, por eso son dos constantes y dos campos de configuración distintos.
+export const ENCABEZADO_OFICIAL_DEFECTO = [
+  'Gobierno del Estado de México',
+  'Secretaría de Educación',
+  'Subsecretaría de Educación Básica y Normal',
+  'Dirección General de Educación Básica',
+  'Subdirección Regional de Educación Básica Nezahualcóyotl',
+  'Supervisión Escolar S102',
+  'Esc. Part. 0223 "Colegio Cultural México-Aragón, S.C."',
+].join('\n');
+
+// Punto III: "Indicar siempre una instrucción general". Este es el texto tal cual
+// viene en el formato oficial; el docente puede cambiarlo en "Datos generales".
+export const INSTRUCCIONES_GENERALES_DEFECTO = 'Lee detenidamente y contesta de manera legible cada uno de los siguientes reactivos. Deberás responder el examen sólo con tinta negra, señala la respuesta correcta con marca texto amarillo. No se permite el uso de corrector. Recuerda que, si algún reactivo tiene doble respuesta o ésta no se entiende, quedará cancelado.';
+
 // sesion = { uid, nombre } de quien lo crea — se guarda como dueño del examen.
 // formato: 'normal' (el formato de siempre, con logo de la escuela) o
 // 'ingles' (membrete oficial y título libre, ver paginate.js).
@@ -48,14 +66,26 @@ export function nuevoExamen(sesion, formato = 'normal') {
       materia: '',
       profesor: '',
       trimestre: '',
+      // Ciclo escolar impreso en el título ("EXAMEN PRIMER TRIMESTRE 2026-2027").
+      // Va en el examen y no solo en la configuración de la escuela para poder
+      // reciclar un examen del año pasado cambiando nada más este campo. Vacío
+      // = se usa el de "Datos de la escuela" (ver cicloDeExamen en paginate.js).
+      cicloEscolar: '',
+      // Fecha de aplicación. No se imprime —en la hoja va la raya en blanco,
+      // porque se llena a mano el día del examen—, sirve para ubicar el examen
+      // dentro de la app.
       fecha: '',
+      // "Total de puntos" del encabezado: lo que vale el examen en puntos. Es el
+      // número contra el que se validan los reactivos (punto V: "La cantidad de
+      // puntos en el examen debe ser igual al valor del mismo").
+      totalPuntos: 100,
       valorExamen: 100,
       // Título libre centrado que llevan los exámenes de inglés (ej. "THIRD-GRADE
       // ENGLISH INTER" / "THIRD TRIMESTRAL EXAM 2025-2026") — varía tanto de
       // redacción entre exámenes que no vale la pena tratar de generarlo solo.
       tituloIngles: '',
     },
-    instruccionesGenerales: '',
+    instruccionesGenerales: formato === 'ingles' ? '' : INSTRUCCIONES_GENERALES_DEFECTO,
     secciones: [nuevaSeccion()],
   };
 }
@@ -194,17 +224,36 @@ function esValorProhibido(valor) {
   return INCREMENTOS_PROHIBIDOS.has(Math.round(frac * 100) / 100);
 }
 
+// "Total de puntos" del encabezado. Los exámenes guardados antes de que existiera
+// el campo se quedan con el valor del examen, que era el que se validaba entonces.
+export function puntosDeclarados(examen) {
+  const meta = examen.meta || {};
+  const total = meta.totalPuntos != null ? meta.totalPuntos : meta.valorExamen;
+  return Number(total) || 0;
+}
+
 export function validarExamen(examen) {
   const avisos = [];
   const total = totalExamen(examen);
-  const declarado = Number(examen.meta.valorExamen) || 0;
+  const declarado = puntosDeclarados(examen);
 
   if (Math.abs(total - declarado) > 0.001) {
     avisos.push({
       tipo: 'total',
-      mensaje: `La suma de los puntos de los reactivos (${total}) no coincide con el valor del examen declarado (${declarado}).`,
+      mensaje: `La suma de los puntos de los reactivos (${total}) no coincide con el total de puntos declarado en el encabezado (${declarado}).`,
     });
   }
+
+  // Punto III del formato: "Indicar siempre una instrucción general y las
+  // específicas en cada sección".
+  if (!(examen.instruccionesGenerales || '').trim()) {
+    avisos.push({ tipo: 'instrucciones', mensaje: 'Falta la instrucción general del examen (el formato pide siempre una).' });
+  }
+  (examen.secciones || []).forEach((seccion, i) => {
+    if ((seccion.preguntas || []).length > 0 && !(seccion.instrucciones || '').trim()) {
+      avisos.push({ tipo: 'instrucciones', mensaje: `La sección ${i + 1}${seccion.titulo ? ` ("${seccion.titulo}")` : ''} no tiene instrucciones específicas.` });
+    }
+  });
 
   for (const seccion of examen.secciones || []) {
     for (const p of seccion.preguntas || []) {

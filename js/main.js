@@ -7,7 +7,8 @@ import {
   obtenerConfig, guardarConfig, exportarExamenJSON, importarExamenJSON,
 } from './store.js';
 import {
-  nuevoExamen, uid, ETIQUETAS_ESTADO, ETIQUETAS_ROL, ENCABEZADO_INGLES_DEFECTO,
+  nuevoExamen, uid, ETIQUETAS_ESTADO, ETIQUETAS_ROL,
+  ENCABEZADO_INGLES_DEFECTO, ENCABEZADO_OFICIAL_DEFECTO,
 } from './model.js';
 import { montarEditor } from './editor.js';
 import { montarPanelAdmin } from './admin.js';
@@ -15,6 +16,7 @@ import { redimensionarImagen } from './questionTypes.js';
 import { montarListaGrupos, montarGrupo } from './grupos.js';
 import { montarListaProgramas, montarEditorPrograma } from './programas.js';
 import { montarSoporte } from './soporte.js';
+import { ETIQUETAS_TRIMESTRE } from './programasModel.js';
 import { coincideTexto, guardarFoco, restaurarFoco } from './filtros.js';
 
 const vistaLogin = document.getElementById('vista-login');
@@ -378,7 +380,7 @@ function renderizarResultadosExamenes(contenedorResultados) {
       examen.formato === 'ingles' ? el('span', { class: 'etiqueta-tipo-examen' }, 'Inglés') : null,
     ]),
     el('div', { class: 'meta-chica' }, [
-      `${examen.meta.grado || '—'}${examen.meta.grupo || ''} · ${examen.meta.trimestre || 'sin trimestre'} · editado ${fechaCorta(examen.updatedAt)}`,
+      `${examen.meta.grado || '—'}${examen.meta.grupo || ''} · ${ETIQUETAS_TRIMESTRE[examen.meta.trimestre] || 'sin trimestre'} · editado ${fechaCorta(examen.updatedAt)}`,
       puedeVerTodos ? el('br') : null,
       puedeVerTodos ? `Profesor(a): ${examen.profesorNombre || '—'}` : null,
     ]),
@@ -465,6 +467,16 @@ async function pintarConfig(onVolver) {
           },
         }),
         previewLogo,
+      ]),
+    ]),
+    el('div', { class: 'panel' }, [
+      el('h2', {}, 'Membrete de los exámenes'),
+      el('p', { class: 'etiqueta-chica' }, 'Las líneas de la dependencia que van en la caja del encabezado, junto al logo (punto I del formato oficial). Una línea por renglón.'),
+      el('div', { class: 'campo' }, [
+        el('textarea', {
+          rows: '7',
+          oninput: (e) => { config.encabezadoOficial = e.target.value; guardarConfigConDebounce(); },
+        }, config.encabezadoOficial || ENCABEZADO_OFICIAL_DEFECTO),
       ]),
     ]),
     el('div', { class: 'panel' }, [

@@ -4,12 +4,13 @@
 import { el, clear } from './dom.js';
 import {
   nuevaSeccion, nuevaPregunta, TIPOS_PREGUNTA, subtotalSeccion, totalExamen, numerarReactivos,
-  validarExamen, ETIQUETAS_ESTADO,
+  validarExamen, puntosDeclarados, ETIQUETAS_ESTADO,
 } from './model.js';
 import { crearEditorPregunta } from './questionTypes.js';
 import { guardarExamen, obtenerConfig, exportarExamenJSON } from './store.js';
 import { pintarVistaPrevia, imprimir } from './preview.js';
 import { TAMANOS_PAPEL, PAPEL_POR_DEFECTO } from './paginate.js';
+import { ETIQUETAS_TRIMESTRE } from './programasModel.js';
 import { esRevisorOAdmin as calcularEsRevisorOAdmin } from './auth.js';
 
 function fechaCorta(iso) {
@@ -157,6 +158,7 @@ export function montarEditor(contenedor, examen, { sesion, onVolver }) {
   // --- Panel encabezado + Reactivos (solo si se puede editar) ---
   let panelEncabezado;
   let panelSecciones;
+  let campoCiclo = null;
 
   if (puedeEditar) {
     const campoTexto = (etiqueta, valor, onInput, tipo = 'text') => el('div', { class: 'campo' }, [
@@ -168,18 +170,37 @@ export function montarEditor(contenedor, examen, { sesion, onVolver }) {
       onchange: (e) => { examen.tipoExamen = e.target.value; guardarYActualizar(); },
     }, ['A', 'B'].map((v) => el('option', { value: v, selected: examen.tipoExamen === v }, `Tipo ${v}`)));
 
+    campoCiclo = el('input', {
+      type: 'text', value: examen.meta.cicloEscolar || '',
+      oninput: (e) => { examen.meta.cicloEscolar = e.target.value; guardarYActualizar(); },
+    });
+
+    // Lista y no texto libre: el título centrado de la hoja se arma con estas
+    // etiquetas ("EXAMEN PRIMER TRIMESTRE …"), y escrito a mano no coincidía.
+    const selectorTrimestre = el('select', {
+      onchange: (e) => { examen.meta.trimestre = e.target.value; guardarYActualizar(); },
+    }, [
+      el('option', { value: '', selected: !examen.meta.trimestre }, 'Sin trimestre'),
+      ...Object.entries(ETIQUETAS_TRIMESTRE).map(([v, t]) => el('option', {
+        value: v, selected: String(examen.meta.trimestre) === v,
+      }, t)),
+    ]);
+
     panelEncabezado = el('div', { class: 'panel' }, [
       el('h2', {}, 'Datos generales'),
       el('div', { class: 'rejilla-campos' }, [
         campoTexto('Grado', examen.meta.grado, (v) => { examen.meta.grado = v; }),
         campoTexto('Grupo', examen.meta.grupo, (v) => { examen.meta.grupo = v; }),
-        campoTexto('Materia', examen.meta.materia, (v) => { examen.meta.materia = v; }),
+        // El encabezado oficial la llama "Disciplina"; adentro sigue siendo meta.materia.
+        campoTexto(examen.formato === 'ingles' ? 'Asignatura' : 'Disciplina', examen.meta.materia, (v) => { examen.meta.materia = v; }),
         campoTexto('Profesor(a)', examen.meta.profesor, (v) => { examen.meta.profesor = v; }),
-        campoTexto('Trimestre', examen.meta.trimestre, (v) => { examen.meta.trimestre = v; }),
-        campoTexto('Fecha', examen.meta.fecha, (v) => { examen.meta.fecha = v; }, 'date'),
+        el('div', { class: 'campo' }, [el('label', {}, 'Trimestre'), selectorTrimestre]),
+        el('div', { class: 'campo' }, [el('label', {}, 'Ciclo escolar'), campoCiclo]),
         el('div', { class: 'campo' }, [el('label', {}, 'Tipo de examen'), selectorTipoExamen]),
+        examen.formato === 'ingles' ? null : campoTexto('Total de puntos', puntosDeclarados(examen), (v) => { examen.meta.totalPuntos = parseFloat(v) || 0; }, 'number'),
         campoTexto(`Valor del examen (${examen.formato === 'ingles' ? '%' : 'pts'})`, examen.meta.valorExamen, (v) => { examen.meta.valorExamen = parseFloat(v) || 0; }, 'number'),
       ]),
+      examen.formato === 'ingles' ? null : el('p', { class: 'etiqueta-chica' }, '"Total de puntos" es lo que vale el examen en puntos (los reactivos deben sumar exactamente eso). "Valor del examen" es lo que cuenta dentro de la calificación del trimestre. "No. de reactivos" se cuenta solo. Trimestre y ciclo escolar salen impresos en el título de la hoja; la fecha no se imprime, va en blanco para llenarse el día del examen.'),
       examen.formato === 'ingles' ? el('div', { class: 'campo', style: 'margin-top:0.6rem;' }, [
         el('label', {}, 'Título del examen (inglés)'),
         el('textarea', {
@@ -278,7 +299,7 @@ export function montarEditor(contenedor, examen, { sesion, onVolver }) {
     const total = totalExamen(examen);
     if (avisos.length === 0) {
       barraValidacion.className = 'barra-validacion ok';
-      barraValidacion.appendChild(el('span', {}, `✔ Los puntos cuadran: ${total} / ${examen.meta.valorExamen} pts. Reactivos: ${Object.keys(numerarReactivos(examen)).length}.`));
+      barraValidacion.appendChild(el('span', {}, `✔ Los puntos cuadran: ${total} / ${puntosDeclarados(examen)} pts. Reactivos: ${Object.keys(numerarReactivos(examen)).length}.`));
     } else {
       barraValidacion.className = 'barra-validacion aviso';
       barraValidacion.appendChild(el('span', {}, `Revisa lo siguiente antes de imprimir (total actual: ${total} pts):`));
@@ -343,5 +364,11 @@ export function montarEditor(contenedor, examen, { sesion, onVolver }) {
   contenedor.appendChild(layout);
 
   pintarValidacion();
-  obtenerConfig().then((config) => { configCache = config; repintarPreview(); });
+  obtenerConfig().then((config) => {
+    configCache = config;
+    // Vacío = se hereda el ciclo de "Datos de la escuela"; el placeholder deja
+    // ver cuál es sin tener que escribirlo (ver cicloDeExamen en paginate.js).
+    if (campoCiclo && config.cicloEscolar) campoCiclo.placeholder = config.cicloEscolar;
+    repintarPreview();
+  });
 }

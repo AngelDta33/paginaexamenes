@@ -4,10 +4,12 @@
 
 import { el, clear } from './dom.js';
 import {
-  numerarReactivos, subtotalSeccion, totalExamen, ENCABEZADO_INGLES_DEFECTO,
+  numerarReactivos, subtotalSeccion, puntosDeclarados,
+  ENCABEZADO_INGLES_DEFECTO, ENCABEZADO_OFICIAL_DEFECTO,
 } from './model.js';
 import { renderPreguntaBloques, renderLecturaBloques } from './questionTypes.js';
 import { precargarImagenes, atributosTamano } from './imagenes.js';
+import { ETIQUETAS_TRIMESTRE } from './programasModel.js';
 
 const PX_POR_CM = 96 / 2.54;
 const PADDING_CM = 1.8;
@@ -70,18 +72,76 @@ function renderFirma() {
   ]);
 }
 
-const ORDINALES_TRIMESTRE = { 1: 'PRIMER', 2: 'SEGUNDO', 3: 'TERCER' };
+// El ciclo escolar se guarda en el examen para poder renovarlo sin tocar la
+// configuración de la escuela (un examen reciclado del año pasado solo cambia
+// aquí); si el examen no trae ninguno, se cae al de "Datos de la escuela".
+export function cicloDeExamen(examen, config) {
+  return (examen.meta && examen.meta.cicloEscolar) || (config && config.cicloEscolar) || '';
+}
 
 // Punto II del formato oficial: "Colocar el tipo de examen según corresponda
 // (centrado)" — ejemplo: "EXAMEN PRIMER TRIMESTRE 2026-2027" / "TIPO A ó B".
-function renderTituloExamenCentrado(examen, config) {
-  const ordinal = ORDINALES_TRIMESTRE[Number(examen.meta.trimestre)];
+function renderTituloExamenCentrado(examen, config, modoClave) {
+  const trimestre = ETIQUETAS_TRIMESTRE[examen.meta.trimestre];
+  const ciclo = cicloDeExamen(examen, config);
   const partes = ['EXAMEN'];
-  if (ordinal) partes.push(`${ordinal} TRIMESTRE`);
-  if (config.cicloEscolar) partes.push(config.cicloEscolar);
+  if (trimestre) partes.push(trimestre);
+  if (ciclo) partes.push(ciclo);
   return el('div', { class: 'titulo-examen-centrado' }, [
     el('div', {}, partes.join(' ')),
-    el('div', {}, `TIPO ${examen.tipoExamen || 'A'}`),
+    el('div', {}, `TIPO ${examen.tipoExamen || 'A'}${modoClave ? ' — CLAVE DE RESPUESTAS' : ''}`),
+  ]);
+}
+
+// Membrete oficial del formato normal (punto I): caja con borde, logo de la
+// escuela a la izquierda y las siete líneas de la dependencia a la derecha.
+function renderMembreteOficial(config) {
+  const texto = config.encabezadoOficial || ENCABEZADO_OFICIAL_DEFECTO;
+  return el('div', { class: 'membrete-oficial' }, [
+    config.logoDataUrl ? el('img', { class: 'logo-escuela', src: config.logoDataUrl, ...atributosTamano(config.logoDataUrl) }) : null,
+    el('div', { class: 'membrete-oficial-texto' }, texto.split('\n').map((linea) => el('div', {}, linea))),
+  ]);
+}
+
+// Un campo del encabezado oficial: la etiqueta y su raya. El valor va escrito
+// sobre la raya; los campos que se llenan a mano después de aplicar el examen
+// (N.L., puntos obtenidos, porcentaje) se pasan vacíos y solo dejan la raya.
+function campoLinea(etiqueta, valor, clase) {
+  const texto = valor == null ? '' : String(valor);
+  return el('span', { class: `campo-linea ${clase || ''}`.trim() }, [
+    el('span', { class: 'etiqueta-campo' }, etiqueta),
+    // Los campos vacíos llevan un espacio duro y no cadena vacía: un elemento
+    // sin texto no tiene línea base propia, y la raya se iba de altura respecto
+    // a su etiqueta en vez de quedar al ras.
+    el('span', { class: 'valor-campo' }, texto || '\u00A0'),
+  ]);
+}
+
+// Caja de datos del punto I, con las cuatro filas del formato oficial.
+function renderCajaDatosOficial(examen) {
+  const { meta } = examen;
+  const numReactivos = Object.keys(numerarReactivos(examen)).length;
+  return el('div', { class: 'caja-datos-oficial' }, [
+    el('div', { class: 'fila-datos-oficial' }, [
+      campoLinea('Nombre del alumno(a):', '', 'campo-ancho'),
+      campoLinea('Grado:', meta.grado, 'campo-corto'),
+      campoLinea('Grupo:', meta.grupo, 'campo-corto'),
+      campoLinea('N.L.', '', 'campo-corto'),
+    ]),
+    el('div', { class: 'fila-datos-oficial' }, [
+      campoLinea('Nombre del profesor(a):', meta.profesor, 'campo-ancho'),
+      campoLinea('Disciplina:', meta.materia, 'campo-ancho'),
+    ]),
+    el('div', { class: 'fila-datos-oficial' }, [
+      campoLinea('Fecha:', '', 'campo-fecha'),
+      campoLinea('No. de reactivos:', numReactivos, 'campo-corto'),
+      campoLinea('Total de puntos:', puntosDeclarados(examen), 'campo-corto'),
+      campoLinea('Valor del examen:', meta.valorExamen, 'campo-medio'),
+    ]),
+    el('div', { class: 'fila-datos-oficial fila-datos-calificacion' }, [
+      campoLinea('Puntos obtenidos:', '', 'campo-medio'),
+      campoLinea('Porcentaje:', '', 'campo-medio'),
+    ]),
   ]);
 }
 
@@ -103,55 +163,55 @@ function renderTituloIngles(examen, modoClave) {
   ]);
 }
 
-function renderEncabezadoCompleto(examen, config, modoClave) {
+// Instrucción general (punto III). El formato la pide siempre y con su etiqueta
+// al frente, en negritas.
+function renderInstruccionesGenerales(examen, esIngles) {
+  if (!examen.instruccionesGenerales) return null;
+  if (esIngles) return el('div', { class: 'instrucciones-generales' }, examen.instruccionesGenerales);
+  return el('div', { class: 'instrucciones-generales' }, [
+    el('span', { class: 'etiqueta-instrucciones' }, 'Instrucciones Generales: '),
+    examen.instruccionesGenerales,
+  ]);
+}
+
+function renderEncabezadoIngles(examen, config, modoClave) {
   const { meta } = examen;
-  const esIngles = examen.formato === 'ingles';
-  const total = totalExamen(examen);
   const filas = el('div', { class: 'encabezado-datos' }, [
     el('span', {}, `Grado: ${meta.grado || '____'}`),
     el('span', {}, `Grupo: ${meta.grupo || '____'}`),
     el('span', {}, 'N.L.: ______'),
-    esIngles ? el('span', {}, `Asignatura: ${meta.materia || '____'}`) : el('span', {}, `Materia: ${meta.materia || '____'}`),
-    esIngles ? null : el('span', {}, `Trimestre: ${meta.trimestre || '____'}`),
-    esIngles ? null : el('span', {}, `Examen Tipo ${examen.tipoExamen || 'A'}`),
+    el('span', {}, `Asignatura: ${meta.materia || '____'}`),
     el('span', {}, `Fecha: ${meta.fecha || '____'}`),
   ]);
   const filaAlumno = el('div', { class: 'encabezado-alumno' }, [
-    el('span', {}, `Nombre del alumno${esIngles ? ' (a)' : ''}: ______________________________________________`),
+    el('span', {}, 'Nombre del alumno (a): ______________________________________________'),
   ]);
   const filaProfesor = el('div', { class: 'encabezado-datos' }, [
     el('span', {}, `Profesor(a): ${meta.profesor || '____'}`),
     el('span', {}, `No. de reactivos: ${Object.keys(numerarReactivos(examen)).length}`),
-    esIngles ? null : el('span', {}, `Total de puntos: ${total}`),
-    el('span', {}, `Valor del examen: ${meta.valorExamen}${esIngles ? '%' : ''}`),
+    el('span', {}, `Valor del examen: ${meta.valorExamen}%`),
   ]);
   const filaCalificacion = el('div', { class: 'encabezado-datos' }, [
     el('span', {}, 'Puntos obtenidos: ______________'),
     el('span', {}, 'Porcentaje: ______________'),
   ]);
-  if (esIngles) {
-    return el('div', { class: 'encabezado-completo encabezado-ingles' }, [
-      renderEncabezadoOficialIngles(config),
-      el('div', { class: 'caja-datos-ingles' }, [filas, filaAlumno, filaProfesor, filaCalificacion]),
-      renderTituloIngles(examen, modoClave),
-      examen.instruccionesGenerales ? el('div', { class: 'instrucciones-generales' }, examen.instruccionesGenerales) : null,
-    ]);
-  }
+  return el('div', { class: 'encabezado-completo encabezado-ingles' }, [
+    renderEncabezadoOficialIngles(config),
+    el('div', { class: 'caja-datos-ingles' }, [filas, filaAlumno, filaProfesor, filaCalificacion]),
+    renderTituloIngles(examen, modoClave),
+    renderInstruccionesGenerales(examen, true),
+  ]);
+}
+
+function renderEncabezadoCompleto(examen, config, modoClave) {
+  if (examen.formato === 'ingles') return renderEncabezadoIngles(examen, config, modoClave);
+  // Formato normal: puntos I, II y III de "Elaboración de exámenes" — membrete en
+  // caja, caja de datos, título centrado y la instrucción general.
   return el('div', { class: 'encabezado-completo' }, [
-    el('div', { class: 'encabezado-escuela' }, [
-      config.logoDataUrl ? el('img', { class: 'logo-escuela', src: config.logoDataUrl, ...atributosTamano(config.logoDataUrl) }) : null,
-      el('div', { class: 'nombre-escuela-ciclo' }, [
-        el('div', { class: 'nombre-escuela' }, config.nombreEscuela || ''),
-        config.cicloEscolar ? el('div', { class: 'ciclo-escolar' }, `Ciclo escolar ${config.cicloEscolar}`) : null,
-      ]),
-      el('div', { class: 'titulo-tipo-doc' }, modoClave ? 'CLAVE DE RESPUESTAS' : 'EXAMEN'),
-    ]),
-    filas,
-    filaAlumno,
-    filaProfesor,
-    filaCalificacion,
-    renderTituloExamenCentrado(examen, config),
-    examen.instruccionesGenerales ? el('div', { class: 'instrucciones-generales' }, examen.instruccionesGenerales) : null,
+    renderMembreteOficial(config),
+    renderCajaDatosOficial(examen),
+    renderTituloExamenCentrado(examen, config, modoClave),
+    renderInstruccionesGenerales(examen, false),
   ]);
 }
 
@@ -162,15 +222,25 @@ function renderEncabezadoMini(examen, modoClave) {
   const esIngles = examen.formato === 'ingles';
   return el('div', { class: 'encabezado-mini' }, [
     el('div', { class: 'encabezado-mini-materia' }, [
-      `${examen.meta.materia || ''} ${examen.meta.grado || ''}${examen.meta.grupo || ''}`.trim(),
+      esIngles
+        ? `${examen.meta.materia || ''} ${examen.meta.grado || ''}${examen.meta.grupo || ''}`.trim()
+        : `${examen.meta.materia || ''} ${examen.meta.grado || ''}`.trim(),
       modoClave ? el('span', { class: 'etiqueta-clave-mini' }, esIngles ? ' — ANSWER KEY' : ' — CLAVE') : null,
     ]),
     el('div', { class: 'encabezado-mini-tipo' }, `${esIngles ? 'TYPE' : 'TIPO'} ${examen.tipoExamen || 'A'}`),
   ]);
 }
 
-function renderPie(numPagina, totalPaginas, esIngles) {
-  return el('div', { class: 'pie-pagina' }, esIngles ? `Page ${numPagina} of ${totalPaginas}` : `Página ${numPagina} de ${totalPaginas}`);
+// Punto VI: la numeración va centrada y arriba, con el formato "- 2 -" del
+// ejemplo oficial, encima del mini encabezado de materia/grado.
+function renderNumeroPagina(numPagina) {
+  return el('div', { class: 'numero-pagina' }, `- ${numPagina} -`);
+}
+
+// Los exámenes de inglés conservan su pie de siempre; el formato normal ya no
+// lleva pie, porque su numeración se subió al encabezado.
+function renderPie(numPagina, totalPaginas) {
+  return el('div', { class: 'pie-pagina pie-pagina-ingles' }, `Page ${numPagina} of ${totalPaginas}`);
 }
 
 function construirBloques(examen, modoClave) {
@@ -194,7 +264,7 @@ function construirBloques(examen, modoClave) {
       }
     }
     if ((seccion.preguntas || []).length > 0) {
-      bloques.push({ tipo: 'subtotal-seccion', el: el('div', { class: 'subtotal-seccion' }, `Subtotal: ${subtotalSeccion(seccion)} pts`) });
+      bloques.push({ tipo: 'subtotal-seccion', el: renderValorSeccion(seccion) });
     }
   }
   // Los formatos de inglés que mandó el maestro no llevan firma del padre/tutor.
@@ -202,6 +272,26 @@ function construirBloques(examen, modoClave) {
     bloques.push({ tipo: 'firma', el: renderFirma() });
   }
   return bloques;
+}
+
+function puntos(valor) {
+  return `${valor} ${Math.abs(valor) === 1 ? 'punto' : 'puntos'}`;
+}
+
+// Punto IV: "Indicar en cada segmento el valor otorgado a cada reactivo y el
+// total de cada sección". La línea del valor por reactivo solo tiene sentido
+// cuando todos valen lo mismo; si no, se muestra únicamente el total.
+function renderValorSeccion(seccion) {
+  const valores = (seccion.preguntas || []).map((p) => (
+    p.tipo === 'lectura_comprension'
+      ? (p.subpreguntas || []).map((sp) => Number(sp.valor) || 0)
+      : [Number(p.valor) || 0]
+  )).flat();
+  const uniforme = valores.length > 0 && valores.every((v) => v === valores[0]);
+  return el('div', { class: 'subtotal-seccion' }, [
+    uniforme ? el('div', {}, `Valor de cada reactivo: ${puntos(valores[0])}`) : null,
+    el('div', {}, `Valor de la sección: ${puntos(subtotalSeccion(seccion))}`),
+  ]);
 }
 
 function medirAlto(elemento, contenedorMedicion) {
@@ -226,7 +316,9 @@ export async function renderPaginas(examen, config, modoClave = false) {
   const anchoContenidoCm = papel.ancho - PADDING_CM * 2;
   const altoUtilPaginaCm = papel.alto - PADDING_CM * 2 - MARGEN_SEGURIDAD_CM;
   const altoUtilPaginaPx = altoUtilPaginaCm * PX_POR_CM;
-  const altoPiePx = 0.9 * PX_POR_CM;
+  // Solo los exámenes de inglés siguen teniendo pie; en el formato normal ese
+  // espacio se recupera para los reactivos.
+  const altoPiePx = examen.formato === 'ingles' ? 0.9 * PX_POR_CM : 0;
   const minRestanteTituloPx = MIN_RESTANTE_PARA_TITULO_CM * PX_POR_CM;
 
   const medicion = el('div', {
@@ -237,10 +329,23 @@ export async function renderPaginas(examen, config, modoClave = false) {
   });
   document.body.appendChild(medicion);
 
-  const headerCompleto = renderEncabezadoCompleto(examen, config, modoClave);
-  const altoHeaderCompleto = medirAlto(headerCompleto, medicion);
-  const headerMiniMuestra = renderEncabezadoMini(examen, modoClave);
-  const altoHeaderMini = medirAlto(headerMiniMuestra, medicion);
+  const esIngles = examen.formato === 'ingles';
+
+  // El encabezado de cada hoja: en el formato normal arranca con la numeración
+  // (punto VI) y sigue con el encabezado completo en la página 1 o el mini en
+  // las demás. El número se pinta con un dígito de muestra al medir: todas las
+  // variantes miden lo mismo de alto.
+  function renderHeader(indicePagina, numPagina) {
+    return el('div', { class: 'page-header' }, [
+      esIngles ? null : renderNumeroPagina(numPagina),
+      indicePagina === 0
+        ? renderEncabezadoCompleto(examen, config, modoClave)
+        : renderEncabezadoMini(examen, modoClave),
+    ]);
+  }
+
+  const altoHeaderCompleto = medirAlto(renderHeader(0, 1), medicion);
+  const altoHeaderMini = medirAlto(renderHeader(1, 1), medicion);
 
   const bloques = construirBloques(examen, modoClave);
   const alturas = bloques.map((b) => medirAlto(b.el, medicion));
@@ -283,9 +388,9 @@ export async function renderPaginas(examen, config, modoClave = false) {
   return paginas.map((bloquesPagina, i) => {
     const cuerpo = el('div', { class: 'page-body' }, bloquesPagina.map((b) => b.el));
     return el('div', { class: 'page' }, [
-      el('div', { class: 'page-header' }, [i === 0 ? renderEncabezadoCompleto(examen, config, modoClave) : renderEncabezadoMini(examen, modoClave)]),
+      renderHeader(i, i + 1),
       cuerpo,
-      el('div', { class: 'page-footer' }, [renderPie(i + 1, totalPaginas, examen.formato === 'ingles')]),
+      esIngles ? el('div', { class: 'page-footer' }, [renderPie(i + 1, totalPaginas)]) : null,
     ]);
   });
 }

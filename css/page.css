@@ -27,20 +27,67 @@
 .page-footer { flex: 0 0 auto; }
 
 /* --- Encabezado completo (página 1) --- */
-.encabezado-completo { border-bottom: 1.5pt solid #111; padding-bottom: 0.3cm; margin-bottom: 0.4cm; }
-.encabezado-escuela { display: flex; align-items: center; gap: 0.4cm; margin-bottom: 0.25cm; }
+.encabezado-completo { margin-bottom: 0.4cm; }
 .logo-escuela { height: 1.6cm; width: auto; object-fit: contain; }
-.nombre-escuela-ciclo { flex: 1 1 auto; }
-.nombre-escuela { font-weight: bold; font-size: 13pt; }
-.ciclo-escolar { font-size: 9.5pt; color: #444; }
-.titulo-tipo-doc { font-weight: bold; font-size: 12pt; letter-spacing: 0.5pt; }
+
+/* Punto I del formato oficial: membrete en caja con el logo a la izquierda, y
+   debajo la caja de datos. Las dos cajas van pegadas, como en el original. */
+.membrete-oficial {
+  display: flex; align-items: center; gap: 0.45cm;
+  border: 1pt solid #111; padding: 0.15cm 0.35cm;
+}
+.membrete-oficial .logo-escuela { height: 2.1cm; flex: 0 0 auto; }
+.membrete-oficial-texto { line-height: 1.25; }
+
+/* El membrete y la caja de datos van un punto más chicos que el cuerpo del
+   examen (igual que en el formato de Word): a 11pt los cuatro campos del tercer
+   renglón no caben en el ancho de la hoja y se encimaban unos con otros. */
+.membrete-oficial, .caja-datos-oficial { font-size: 10pt; }
+.caja-datos-oficial { border: 1pt solid #111; border-top: none; padding: 0.25cm 0.35cm; }
+/* Los campos se reparten el renglón. Se deja envolver (wrap) a propósito: en
+   A4, que es 0.6cm más angosto que el oficio, un renglón apretado prefiere
+   pasar el último campo abajo antes que desbordarse fuera de la caja. */
+.fila-datos-oficial {
+  display: flex; flex-wrap: wrap; gap: 0.1cm 0.4cm; margin: 0.1cm 0;
+}
+.fila-datos-calificacion { padding-left: 2.2cm; }
+
+/* Etiqueta y valor comparten línea base, de modo que la raya —el borde inferior
+   del valor— queda al ras del texto de la etiqueta. Nada de overflow:hidden
+   aquí: un elemento recortado se alinea por su borde inferior en vez de por su
+   texto, y eso dejaba las rayas corridas hacia abajo y hacia la derecha. */
+.campo-linea { display: flex; align-items: baseline; gap: 0.12cm; min-width: 0; }
+.etiqueta-campo { flex: 0 0 auto; white-space: nowrap; }
+.valor-campo { flex: 1 1 auto; border-bottom: 0.75pt solid #111; white-space: nowrap; }
+/* Los campos "cortos" traen un dato ya impreso (grado, grupo, cuántos reactivos)
+   y les basta una raya chica; los medios y anchos se estiran con el espacio que
+   sobra para que el renglón quede justificado de orilla a orilla. Los anchos son
+   mínimos: un valor más largo alarga su raya, y si ya no cabe, el renglón
+   envuelve — nunca se encima con el campo de al lado. */
+.campo-corto { flex: 0 0 auto; }
+.campo-corto .valor-campo { min-width: 1cm; }
+.campo-medio { flex: 1 1 auto; }
+.campo-medio .valor-campo { min-width: 1.2cm; }
+.campo-ancho { flex: 1 1 auto; }
+.campo-ancho .valor-campo { min-width: 3cm; }
+/* La fecha se escribe a mano al aplicar el examen: la raya tiene que dar para
+   dd/mm/aaaa completo. */
+.campo-fecha { flex: 0 0 auto; }
+.campo-fecha .valor-campo { min-width: 2cm; }
+/* El último renglón va indentado y con rayas fijas, como en el formato. */
+.fila-datos-calificacion .campo-linea { flex: 0 0 auto; }
+.fila-datos-calificacion .valor-campo { min-width: 3cm; }
+
 .encabezado-datos { display: flex; flex-wrap: wrap; gap: 0 0.6cm; font-size: 10pt; margin: 0.1cm 0; }
 .encabezado-alumno { font-size: 10pt; margin: 0.15cm 0; }
-.instrucciones-generales { margin-top: 0.25cm; font-style: italic; font-size: 10pt; }
+.instrucciones-generales { margin-top: 0.3cm; text-align: justify; }
+.etiqueta-instrucciones { font-weight: bold; }
+/* Los exámenes de inglés conservan la letra chica e itálica de sus formatos. */
+.encabezado-ingles .instrucciones-generales { font-style: italic; font-size: 10pt; text-align: left; }
 
 /* --- Título centrado "EXAMEN [trimestre] [ciclo]" / "TIPO A ó B" (punto II) --- */
 .titulo-examen-centrado {
-  text-align: center; font-weight: bold; font-size: 12pt; margin-top: 0.3cm; letter-spacing: 0.3pt;
+  text-align: center; font-weight: bold; margin-top: 0.35cm; letter-spacing: 0.3pt;
 }
 
 /* --- Encabezado de los exámenes de inglés: membrete oficial + datos en caja
@@ -52,27 +99,33 @@
 }
 .caja-datos-ingles { border: 1pt solid #111; padding: 0.15cm 0.35cm 0.05cm; margin-bottom: 0.3cm; }
 .caja-datos-ingles .encabezado-datos, .caja-datos-ingles .encabezado-alumno { margin: 0.1cm 0; }
+/* El título de los exámenes de inglés conserva el tamaño que tenía. */
+.encabezado-ingles .titulo-examen-centrado { font-size: 12pt; }
 
 /* --- Mini encabezado (páginas 2+) --- */
 .encabezado-mini {
-  display: flex; flex-direction: column; align-items: flex-end; font-size: 9.5pt; color: #333;
+  display: flex; flex-direction: column; align-items: flex-end; font-size: 10pt;
   border-bottom: 0.5pt solid #999; padding-bottom: 0.15cm; margin-bottom: 0.35cm;
 }
 .encabezado-mini-tipo { font-weight: bold; }
 .etiqueta-clave-mini { font-weight: bold; margin-left: 0.2cm; }
 
-/* --- Pie de página --- */
-.page-footer { text-align: center; font-size: 9pt; color: #444; padding-top: 0.2cm; }
+/* --- Numeración: punto VI, centrada y en la parte superior de la hoja --- */
+.numero-pagina { text-align: center; margin-bottom: 0.15cm; }
+
+/* --- Pie de página: solo lo llevan los exámenes de inglés --- */
+.page-footer { text-align: center; padding-top: 0.2cm; }
+.pie-pagina-ingles { font-size: 9pt; color: #444; }
 
 /* --- Bloques de contenido --- */
 .bloque-titulo-seccion { margin: 0.5cm 0 0.25cm 0; }
-.titulo-seccion { font-size: 11.5pt; font-weight: bold; margin: 0 0 0.1cm 0; text-transform: uppercase; }
-.instrucciones-seccion { font-style: italic; font-size: 10pt; margin: 0; }
+.titulo-seccion { font-weight: bold; margin: 0 0 0.1cm 0; text-transform: uppercase; }
+.instrucciones-seccion { font-weight: bold; margin: 0; }
 
 .reactivo { margin-bottom: 0.45cm; }
 .reactivo-encabezado { display: block; }
 .num-reactivo { font-weight: bold; }
-.valor-reactivo { color: #444; font-size: 9.5pt; }
+.valor-reactivo { color: #444; }
 
 .imagen-reactivo { margin: 0.15cm 0; }
 .imagen-reactivo img { max-width: 100%; max-height: 6cm; display: block; }
@@ -97,7 +150,7 @@
 .resp-correcta { font-weight: bold; }
 
 .linea-respuesta { border-bottom: 0.5pt solid #333; height: 0.7cm; margin-top: 0.1cm; }
-.respuesta-modelo { margin-top: 0.1cm; font-size: 10pt; background: #f4f4f4; padding: 0.15cm; }
+.respuesta-modelo { margin-top: 0.1cm; background: #f4f4f4; padding: 0.15cm; }
 
 .vf-opciones { display: flex; gap: 0.6cm; margin-top: 0.1cm; margin-left: 0.6cm; }
 .vf-correcta { font-weight: bold; }
@@ -117,7 +170,7 @@
   font-size: 9pt; font-weight: bold; line-height: 0.5cm; text-align: center;
 }
 .banco-palabras { display: flex; flex-wrap: wrap; gap: 0.15cm 0.3cm; border: 0.5pt solid #999; padding: 0.2cm; margin: 0.15cm 0; background: #fafafa; }
-.palabra-banco { border: 0.5pt solid #666; border-radius: 3pt; padding: 0.03cm 0.2cm; font-size: 10pt; }
+.palabra-banco { border: 0.5pt solid #666; border-radius: 3pt; padding: 0.03cm 0.2cm; }
 /* Cada fila es su propio bloque (ver renderIdentificarImagenBloques), mismo motivo
    que las opciones y la relación de columnas: que el paginador pueda cortar la
    lista de respuestas entre renglones si no caben todos en la página. */
@@ -139,11 +192,11 @@
 .texto-lectura-linea-primera { border-top: 0.5pt solid #999; padding-top: 0.25cm; }
 .texto-lectura-linea-ultima { border-bottom: 0.5pt solid #999; padding-bottom: 0.25cm; margin-bottom: 0.3cm; }
 
-.subtotal-seccion { text-align: right; font-weight: bold; font-size: 10pt; margin: 0.1cm 0 0.3cm 0; border-top: 0.5pt solid #ccc; padding-top: 0.1cm; }
+.subtotal-seccion { text-align: right; font-weight: bold; margin: 0.15cm 0 0.35cm 0; }
 
 .bloque-firma { margin-top: 1cm; }
 .linea-firma { border-bottom: 0.5pt solid #333; width: 8cm; margin: 0 auto; }
-.etiqueta-firma { text-align: center; font-size: 9.5pt; margin-top: 0.1cm; }
+.etiqueta-firma { text-align: center; margin-top: 0.1cm; }
 
 /* --- Contenedor de páginas en pantalla --- */
 .hoja-contenedor { padding: 1cm 0; }
