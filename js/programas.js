@@ -11,6 +11,7 @@ import {
 } from './programasModel.js';
 import { obtenerConfig } from './store.js';
 import { esRevisorOAdmin } from './auth.js';
+import { coincideTexto } from './filtros.js';
 
 const ANCHO_HOJA_CM = 27.94; // carta horizontal (11 x 8.5in)
 const ALTO_HOJA_CM = 21.59;
@@ -20,6 +21,10 @@ function fechaCorta(iso) {
   return new Date(iso).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+let busquedaPrograma = '';
+let filtroTrimestrePrograma = 'todos';
+let filtroProfesorPrograma = 'todos';
+
 // ---------------------------------------------------------------------------
 // LISTA
 // ---------------------------------------------------------------------------
@@ -27,6 +32,7 @@ function fechaCorta(iso) {
 export async function montarListaProgramas(contenedor, sesion, { onAbrirPrograma }) {
   clear(contenedor);
   const soloConsulta = esRevisorOAdmin(sesion);
+  const repintar = () => montarListaProgramas(contenedor, sesion, { onAbrirPrograma });
 
   if (!soloConsulta) {
     contenedor.appendChild(el('div', { class: 'barra-nueva' }, [
@@ -53,8 +59,41 @@ export async function montarListaProgramas(contenedor, sesion, { onAbrirPrograma
   }
   cargando.remove();
 
+  const barraFiltros = el('div', { class: 'barra-filtros' }, [
+    el('input', {
+      type: 'text', placeholder: 'Buscar por disciplina, campo formativo o grupos…', class: 'campo-busqueda', value: busquedaPrograma,
+      oninput: (e) => { busquedaPrograma = e.target.value; repintar(); },
+    }),
+    el('select', {
+      onchange: (e) => { filtroTrimestrePrograma = e.target.value; repintar(); },
+    }, [
+      el('option', { value: 'todos', selected: filtroTrimestrePrograma === 'todos' }, 'Todos los trimestres'),
+      ...Object.entries(ETIQUETAS_TRIMESTRE).map(([v, t]) => el('option', { value: v, selected: filtroTrimestrePrograma === v }, t)),
+    ]),
+  ]);
+  if (soloConsulta) {
+    const profesores = [...new Set(programas.map((p) => p.profesorNombre).filter(Boolean))].sort();
+    barraFiltros.appendChild(el('select', {
+      onchange: (e) => { filtroProfesorPrograma = e.target.value; repintar(); },
+    }, [
+      el('option', { value: 'todos', selected: filtroProfesorPrograma === 'todos' }, 'Todos los profesores'),
+      ...profesores.map((p) => el('option', { value: p, selected: filtroProfesorPrograma === p }, p)),
+    ]));
+  }
+  contenedor.appendChild(barraFiltros);
+
+  if (soloConsulta && filtroProfesorPrograma !== 'todos') {
+    programas = programas.filter((p) => p.profesorNombre === filtroProfesorPrograma);
+  }
+  if (filtroTrimestrePrograma !== 'todos') {
+    programas = programas.filter((p) => p.trimestre === filtroTrimestrePrograma);
+  }
+  if (busquedaPrograma) {
+    programas = programas.filter((p) => coincideTexto(busquedaPrograma, p.disciplina, p.campoFormativo, p.grupos, p.profesorNombre));
+  }
+
   if (programas.length === 0) {
-    contenedor.appendChild(el('p', { style: 'color:#666; margin-top:1.5rem;' }, soloConsulta ? 'Todavía no hay programas capturados.' : 'Aún no tienes programas. Crea uno para llenar el formato de actividades académicas del trimestre.'));
+    contenedor.appendChild(el('p', { style: 'color:#666; margin-top:1.5rem;' }, soloConsulta ? 'No hay programas que coincidan con esos filtros.' : 'Aún no tienes programas. Crea uno para llenar el formato de actividades académicas del trimestre.'));
     return;
   }
 

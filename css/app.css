@@ -76,7 +76,10 @@ button {
 .tarjeta-examen .acciones-tarjeta { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 .etiqueta-tipo-examen { display: inline-block; background: var(--azul-suave); color: var(--azul); border-radius: 4px; padding: 0.05rem 0.4rem; font-size: 0.78rem; font-weight: bold; margin-left: 0.3rem; }
 
-.barra-nueva { display: flex; gap: 0.6rem; margin-top: 1rem; align-items: center; }
+.barra-nueva { display: flex; gap: 0.6rem; margin-top: 1rem; align-items: center; flex-wrap: wrap; }
+.barra-filtros { display: flex; gap: 0.6rem; margin-top: 0.6rem; align-items: center; flex-wrap: wrap; }
+.barra-filtros select { width: auto; }
+.campo-busqueda { width: 260px !important; }
 
 /* --- Editor: layout 2 columnas --- */
 .editor-layout { display: grid; grid-template-columns: minmax(380px, 1fr) minmax(420px, 1.1fr); gap: 1.2rem; align-items: start; }

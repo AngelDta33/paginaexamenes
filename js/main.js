@@ -15,6 +15,7 @@ import { redimensionarImagen } from './questionTypes.js';
 import { montarListaGrupos, montarGrupo } from './grupos.js';
 import { montarListaProgramas, montarEditorPrograma } from './programas.js';
 import { montarSoporte } from './soporte.js';
+import { coincideTexto } from './filtros.js';
 
 const vistaLogin = document.getElementById('vista-login');
 const vistaLista = document.getElementById('vista-lista');
@@ -225,6 +226,9 @@ function fechaCorta(iso) {
 }
 
 let filtroEstado = 'todos';
+let filtroTipoExamen = 'todos';
+let filtroProfesorExamen = 'todos';
+let busquedaExamen = '';
 
 async function pintarLista() {
   clear(vistaLista);
@@ -281,16 +285,6 @@ async function pintarLista() {
     }),
   ]));
 
-  if (puedeVerTodos) {
-    const selector = el('select', {
-      onchange: (e) => { filtroEstado = e.target.value; pintarLista(); },
-    }, [
-      el('option', { value: 'todos', selected: filtroEstado === 'todos' }, 'Todos los estados'),
-      ...Object.entries(ETIQUETAS_ESTADO).map(([valor, etiqueta]) => el('option', { value: valor, selected: filtroEstado === valor }, etiqueta)),
-    ]);
-    controles.push(selector);
-  }
-
   vistaLista.appendChild(el('div', { class: 'barra-nueva' }, controles));
 
   const cargando = el('p', { style: 'color:#666; margin-top:1.5rem;' }, 'Cargando exámenes…');
@@ -305,12 +299,53 @@ async function pintarLista() {
   }
   cargando.remove();
 
+  const barraFiltros = el('div', { class: 'barra-filtros' }, [
+    el('input', {
+      type: 'text', placeholder: 'Buscar por materia, grado o profesor(a)…', class: 'campo-busqueda', value: busquedaExamen,
+      oninput: (e) => { busquedaExamen = e.target.value; pintarLista(); },
+    }),
+    el('select', {
+      onchange: (e) => { filtroTipoExamen = e.target.value; pintarLista(); },
+    }, [
+      el('option', { value: 'todos', selected: filtroTipoExamen === 'todos' }, 'Todos los tipos'),
+      el('option', { value: 'A', selected: filtroTipoExamen === 'A' }, 'Tipo A'),
+      el('option', { value: 'B', selected: filtroTipoExamen === 'B' }, 'Tipo B'),
+    ]),
+  ]);
+  if (puedeVerTodos) {
+    barraFiltros.appendChild(el('select', {
+      onchange: (e) => { filtroEstado = e.target.value; pintarLista(); },
+    }, [
+      el('option', { value: 'todos', selected: filtroEstado === 'todos' }, 'Todos los estados'),
+      ...Object.entries(ETIQUETAS_ESTADO).map(([valor, etiqueta]) => el('option', { value: valor, selected: filtroEstado === valor }, etiqueta)),
+    ]));
+    const profesores = [...new Set(examenes.map((ex) => ex.profesorNombre).filter(Boolean))].sort();
+    barraFiltros.appendChild(el('select', {
+      onchange: (e) => { filtroProfesorExamen = e.target.value; pintarLista(); },
+    }, [
+      el('option', { value: 'todos', selected: filtroProfesorExamen === 'todos' }, 'Todos los profesores'),
+      ...profesores.map((p) => el('option', { value: p, selected: filtroProfesorExamen === p }, p)),
+    ]));
+  }
+  vistaLista.appendChild(barraFiltros);
+
   if (puedeVerTodos && filtroEstado !== 'todos') {
     examenes = examenes.filter((ex) => ex.estado === filtroEstado);
   }
+  if (puedeVerTodos && filtroProfesorExamen !== 'todos') {
+    examenes = examenes.filter((ex) => ex.profesorNombre === filtroProfesorExamen);
+  }
+  if (filtroTipoExamen !== 'todos') {
+    examenes = examenes.filter((ex) => ex.tipoExamen === filtroTipoExamen);
+  }
+  if (busquedaExamen) {
+    examenes = examenes.filter((ex) => coincideTexto(
+      busquedaExamen, ex.meta.materia, ex.meta.grado, ex.meta.grupo, ex.meta.profesor, ex.profesorNombre,
+    ));
+  }
 
   if (examenes.length === 0) {
-    vistaLista.appendChild(el('p', { style: 'color:#666; margin-top:1.5rem;' }, 'No hay exámenes que mostrar aquí todavía.'));
+    vistaLista.appendChild(el('p', { style: 'color:#666; margin-top:1.5rem;' }, 'No hay exámenes que coincidan con esos filtros.'));
     return;
   }
 

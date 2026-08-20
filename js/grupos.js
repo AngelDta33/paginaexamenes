@@ -11,17 +11,22 @@ import { montarRubrica } from './rubrica.js';
 import { montarEvaluacionesRubro } from './evaluacionesRubro.js';
 import { exportarGrupoExcel } from './exportarExcel.js';
 import { esRevisorOAdmin } from './auth.js';
+import { coincideTexto } from './filtros.js';
 
 function fechaCorta(iso) {
   if (!iso) return '';
   return new Date(iso).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+let busquedaGrupo = '';
+let filtroProfesorGrupo = 'todos';
+
 export async function montarListaGrupos(contenedor, sesion, { onAbrirGrupo }) {
   clear(contenedor);
   // Revisor/administrador solo consultan: ven los grupos de todos los maestros
   // (con el nombre del profesor en la tarjeta) pero no crean ni eliminan ninguno.
   const soloConsulta = esRevisorOAdmin(sesion);
+  const repintar = () => montarListaGrupos(contenedor, sesion, { onAbrirGrupo });
 
   if (!soloConsulta) {
     contenedor.appendChild(el('div', { class: 'barra-nueva' }, [
@@ -48,8 +53,32 @@ export async function montarListaGrupos(contenedor, sesion, { onAbrirGrupo }) {
   }
   cargando.remove();
 
+  const barraFiltros = el('div', { class: 'barra-filtros' }, [
+    el('input', {
+      type: 'text', placeholder: 'Buscar por nombre, materia o grado…', class: 'campo-busqueda', value: busquedaGrupo,
+      oninput: (e) => { busquedaGrupo = e.target.value; repintar(); },
+    }),
+  ]);
+  if (soloConsulta) {
+    const profesores = [...new Set(grupos.map((g) => g.profesorNombre).filter(Boolean))].sort();
+    barraFiltros.appendChild(el('select', {
+      onchange: (e) => { filtroProfesorGrupo = e.target.value; repintar(); },
+    }, [
+      el('option', { value: 'todos', selected: filtroProfesorGrupo === 'todos' }, 'Todos los profesores'),
+      ...profesores.map((p) => el('option', { value: p, selected: filtroProfesorGrupo === p }, p)),
+    ]));
+  }
+  contenedor.appendChild(barraFiltros);
+
+  if (soloConsulta && filtroProfesorGrupo !== 'todos') {
+    grupos = grupos.filter((g) => g.profesorNombre === filtroProfesorGrupo);
+  }
+  if (busquedaGrupo) {
+    grupos = grupos.filter((g) => coincideTexto(busquedaGrupo, g.nombre, g.materia, g.grado, g.grupo, g.profesorNombre));
+  }
+
   if (grupos.length === 0) {
-    contenedor.appendChild(el('p', { style: 'color:#666; margin-top:1.5rem;' }, soloConsulta ? 'Todavía no hay grupos capturados.' : 'Aún no tienes grupos. Crea uno para empezar a tomar asistencia y llevar tu rúbrica de calificaciones.'));
+    contenedor.appendChild(el('p', { style: 'color:#666; margin-top:1.5rem;' }, soloConsulta ? 'No hay grupos que coincidan con esos filtros.' : 'Aún no tienes grupos. Crea uno para empezar a tomar asistencia y llevar tu rúbrica de calificaciones.'));
     return;
   }
 
