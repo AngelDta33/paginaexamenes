@@ -15,7 +15,7 @@ import { redimensionarImagen } from './questionTypes.js';
 import { montarListaGrupos, montarGrupo } from './grupos.js';
 import { montarListaProgramas, montarEditorPrograma } from './programas.js';
 import { montarSoporte } from './soporte.js';
-import { coincideTexto } from './filtros.js';
+import { coincideTexto, guardarFoco, restaurarFoco } from './filtros.js';
 
 const vistaLogin = document.getElementById('vista-login');
 const vistaLista = document.getElementById('vista-lista');
@@ -230,10 +230,16 @@ let filtroTipoExamen = 'todos';
 let filtroProfesorExamen = 'todos';
 let busquedaExamen = '';
 
+// examenesCache guarda el último resultado de listarExamenes(): teclear en el
+// buscador o cambiar un filtro solo tiene que re-filtrar y repintar esta copia
+// en memoria, no volver a consultar Firestore en cada tecla — si no, el
+// <input> se reemplaza por uno nuevo en cada tecla justo cuando el navegador
+// todavía está esperando la respuesta de red, así que pierde el foco y solo
+// se puede borrar de a un carácter (hay que volver a hacer clic cada vez).
+let examenesCache = null;
+
 async function pintarLista() {
   clear(vistaLista);
-
-  const puedeVerTodos = esRevisorOAdmin(sesion);
 
   const controles = [
     el('button', {
@@ -287,25 +293,40 @@ async function pintarLista() {
 
   vistaLista.appendChild(el('div', { class: 'barra-nueva' }, controles));
 
-  const cargando = el('p', { style: 'color:#666; margin-top:1.5rem;' }, 'Cargando exámenes…');
-  vistaLista.appendChild(cargando);
+  const contenedorResultados = el('div', {});
+  vistaLista.appendChild(contenedorResultados);
 
-  let examenes;
+  const cargando = el('p', { style: 'color:#666; margin-top:1.5rem;' }, 'Cargando exámenes…');
+  contenedorResultados.appendChild(cargando);
+
   try {
-    examenes = await listarExamenes(sesion);
+    examenesCache = await listarExamenes(sesion);
   } catch (err) {
     cargando.textContent = `No se pudieron cargar los exámenes: ${err.message}`;
     return;
   }
-  cargando.remove();
+  clear(contenedorResultados);
+  renderizarResultadosExamenes(contenedorResultados);
+}
+
+// Repinta solo la barra de filtros y las tarjetas a partir de examenesCache
+// (sin red de por medio) — de aquí llaman los oninput/onchange de los
+// filtros, y por eso todo pasa de forma síncrona: así el <input> nuevo queda
+// enfocado en el mismo instante en que se reemplaza el viejo.
+function renderizarResultadosExamenes(contenedorResultados) {
+  const foco = guardarFoco(contenedorResultados, '.campo-busqueda');
+  clear(contenedorResultados);
+
+  const puedeVerTodos = esRevisorOAdmin(sesion);
+  let examenes = examenesCache || [];
 
   const barraFiltros = el('div', { class: 'barra-filtros' }, [
     el('input', {
       type: 'text', placeholder: 'Buscar por materia, grado o profesor(a)…', class: 'campo-busqueda', value: busquedaExamen,
-      oninput: (e) => { busquedaExamen = e.target.value; pintarLista(); },
+      oninput: (e) => { busquedaExamen = e.target.value; renderizarResultadosExamenes(contenedorResultados); },
     }),
     el('select', {
-      onchange: (e) => { filtroTipoExamen = e.target.value; pintarLista(); },
+      onchange: (e) => { filtroTipoExamen = e.target.value; renderizarResultadosExamenes(contenedorResultados); },
     }, [
       el('option', { value: 'todos', selected: filtroTipoExamen === 'todos' }, 'Todos los tipos'),
       el('option', { value: 'A', selected: filtroTipoExamen === 'A' }, 'Tipo A'),
@@ -314,20 +335,21 @@ async function pintarLista() {
   ]);
   if (puedeVerTodos) {
     barraFiltros.appendChild(el('select', {
-      onchange: (e) => { filtroEstado = e.target.value; pintarLista(); },
+      onchange: (e) => { filtroEstado = e.target.value; renderizarResultadosExamenes(contenedorResultados); },
     }, [
       el('option', { value: 'todos', selected: filtroEstado === 'todos' }, 'Todos los estados'),
       ...Object.entries(ETIQUETAS_ESTADO).map(([valor, etiqueta]) => el('option', { value: valor, selected: filtroEstado === valor }, etiqueta)),
     ]));
     const profesores = [...new Set(examenes.map((ex) => ex.profesorNombre).filter(Boolean))].sort();
     barraFiltros.appendChild(el('select', {
-      onchange: (e) => { filtroProfesorExamen = e.target.value; pintarLista(); },
+      onchange: (e) => { filtroProfesorExamen = e.target.value; renderizarResultadosExamenes(contenedorResultados); },
     }, [
       el('option', { value: 'todos', selected: filtroProfesorExamen === 'todos' }, 'Todos los profesores'),
       ...profesores.map((p) => el('option', { value: p, selected: filtroProfesorExamen === p }, p)),
     ]));
   }
-  vistaLista.appendChild(barraFiltros);
+  contenedorResultados.appendChild(barraFiltros);
+  restaurarFoco(contenedorResultados, foco);
 
   if (puedeVerTodos && filtroEstado !== 'todos') {
     examenes = examenes.filter((ex) => ex.estado === filtroEstado);
@@ -345,11 +367,11 @@ async function pintarLista() {
   }
 
   if (examenes.length === 0) {
-    vistaLista.appendChild(el('p', { style: 'color:#666; margin-top:1.5rem;' }, 'No hay exámenes que coincidan con esos filtros.'));
+    contenedorResultados.appendChild(el('p', { style: 'color:#666; margin-top:1.5rem;' }, 'No hay exámenes que coincidan con esos filtros.'));
     return;
   }
 
-  vistaLista.appendChild(el('div', { class: 'lista-examenes' }, examenes.map((examen) => el('div', { class: 'tarjeta-examen' }, [
+  contenedorResultados.appendChild(el('div', { class: 'lista-examenes' }, examenes.map((examen) => el('div', { class: 'tarjeta-examen' }, [
     el('h3', {}, [
       `${examen.meta.materia || 'Sin materia'} `,
       el('span', { class: 'etiqueta-tipo-examen' }, `Tipo ${examen.tipoExamen}`),

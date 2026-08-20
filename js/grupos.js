@@ -11,7 +11,7 @@ import { montarRubrica } from './rubrica.js';
 import { montarEvaluacionesRubro } from './evaluacionesRubro.js';
 import { exportarGrupoExcel } from './exportarExcel.js';
 import { esRevisorOAdmin } from './auth.js';
-import { coincideTexto } from './filtros.js';
+import { coincideTexto, guardarFoco, restaurarFoco } from './filtros.js';
 
 function fechaCorta(iso) {
   if (!iso) return '';
@@ -20,13 +20,18 @@ function fechaCorta(iso) {
 
 let busquedaGrupo = '';
 let filtroProfesorGrupo = 'todos';
+// gruposCache guarda el último listarGrupos(): teclear en el buscador o
+// cambiar un filtro solo re-filtra y repinta esta copia en memoria, sin
+// volver a consultar Firestore en cada tecla (si no, el <input> se reemplaza
+// por uno nuevo justo cuando el navegador está esperando la respuesta de red
+// y pierde el foco — solo dejaba borrar de a un carácter).
+let gruposCache = null;
 
 export async function montarListaGrupos(contenedor, sesion, { onAbrirGrupo }) {
   clear(contenedor);
   // Revisor/administrador solo consultan: ven los grupos de todos los maestros
   // (con el nombre del profesor en la tarjeta) pero no crean ni eliminan ninguno.
   const soloConsulta = esRevisorOAdmin(sesion);
-  const repintar = () => montarListaGrupos(contenedor, sesion, { onAbrirGrupo });
 
   if (!soloConsulta) {
     contenedor.appendChild(el('div', { class: 'barra-nueva' }, [
@@ -41,17 +46,27 @@ export async function montarListaGrupos(contenedor, sesion, { onAbrirGrupo }) {
     ]));
   }
 
-  const cargando = el('p', { style: 'color:#666; margin-top:1.5rem;' }, 'Cargando grupos…');
-  contenedor.appendChild(cargando);
+  const contenedorResultados = el('div', {});
+  contenedor.appendChild(contenedorResultados);
 
-  let grupos;
+  const cargando = el('p', { style: 'color:#666; margin-top:1.5rem;' }, 'Cargando grupos…');
+  contenedorResultados.appendChild(cargando);
+
   try {
-    grupos = await listarGrupos(sesion);
+    gruposCache = await listarGrupos(sesion);
   } catch (err) {
     cargando.textContent = `No se pudieron cargar los grupos: ${err.message}`;
     return;
   }
-  cargando.remove();
+  clear(contenedorResultados);
+  renderizarResultadosGrupos(contenedor, contenedorResultados, sesion, { onAbrirGrupo }, soloConsulta);
+}
+
+function renderizarResultadosGrupos(contenedor, contenedorResultados, sesion, { onAbrirGrupo }, soloConsulta) {
+  const foco = guardarFoco(contenedorResultados, '.campo-busqueda');
+  clear(contenedorResultados);
+  const repintar = () => renderizarResultadosGrupos(contenedor, contenedorResultados, sesion, { onAbrirGrupo }, soloConsulta);
+  let grupos = gruposCache || [];
 
   const barraFiltros = el('div', { class: 'barra-filtros' }, [
     el('input', {
@@ -68,7 +83,8 @@ export async function montarListaGrupos(contenedor, sesion, { onAbrirGrupo }) {
       ...profesores.map((p) => el('option', { value: p, selected: filtroProfesorGrupo === p }, p)),
     ]));
   }
-  contenedor.appendChild(barraFiltros);
+  contenedorResultados.appendChild(barraFiltros);
+  restaurarFoco(contenedorResultados, foco);
 
   if (soloConsulta && filtroProfesorGrupo !== 'todos') {
     grupos = grupos.filter((g) => g.profesorNombre === filtroProfesorGrupo);
@@ -78,11 +94,11 @@ export async function montarListaGrupos(contenedor, sesion, { onAbrirGrupo }) {
   }
 
   if (grupos.length === 0) {
-    contenedor.appendChild(el('p', { style: 'color:#666; margin-top:1.5rem;' }, soloConsulta ? 'No hay grupos que coincidan con esos filtros.' : 'Aún no tienes grupos. Crea uno para empezar a tomar asistencia y llevar tu rúbrica de calificaciones.'));
+    contenedorResultados.appendChild(el('p', { style: 'color:#666; margin-top:1.5rem;' }, soloConsulta ? 'No hay grupos que coincidan con esos filtros.' : 'Aún no tienes grupos. Crea uno para empezar a tomar asistencia y llevar tu rúbrica de calificaciones.'));
     return;
   }
 
-  contenedor.appendChild(el('div', { class: 'lista-examenes' }, grupos.map((grupo) => el('div', { class: 'tarjeta-examen' }, [
+  contenedorResultados.appendChild(el('div', { class: 'lista-examenes' }, grupos.map((grupo) => el('div', { class: 'tarjeta-examen' }, [
     el('h3', {}, grupo.nombre || 'Grupo sin nombre'),
     el('div', { class: 'meta-chica' }, `${grupo.materia || 'sin materia'} · ${grupo.grado || ''}${grupo.grupo || ''} · ${(grupo.alumnos || []).length} alumnos · editado ${fechaCorta(grupo.updatedAt)}`),
     soloConsulta ? el('div', { class: 'meta-chica' }, `Profesor(a): ${grupo.profesorNombre || 'sin nombre'}`) : null,

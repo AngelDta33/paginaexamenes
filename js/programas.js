@@ -11,7 +11,7 @@ import {
 } from './programasModel.js';
 import { obtenerConfig } from './store.js';
 import { esRevisorOAdmin } from './auth.js';
-import { coincideTexto } from './filtros.js';
+import { coincideTexto, guardarFoco, restaurarFoco } from './filtros.js';
 
 const ANCHO_HOJA_CM = 27.94; // carta horizontal (11 x 8.5in)
 const ALTO_HOJA_CM = 21.59;
@@ -24,6 +24,12 @@ function fechaCorta(iso) {
 let busquedaPrograma = '';
 let filtroTrimestrePrograma = 'todos';
 let filtroProfesorPrograma = 'todos';
+// programasCache guarda el último listarProgramas(): teclear en el buscador o
+// cambiar un filtro solo re-filtra y repinta esta copia en memoria, sin
+// volver a consultar Firestore en cada tecla (si no, el <input> se reemplaza
+// por uno nuevo justo cuando el navegador está esperando la respuesta de red
+// y pierde el foco — solo dejaba borrar de a un carácter).
+let programasCache = null;
 
 // ---------------------------------------------------------------------------
 // LISTA
@@ -32,7 +38,6 @@ let filtroProfesorPrograma = 'todos';
 export async function montarListaProgramas(contenedor, sesion, { onAbrirPrograma }) {
   clear(contenedor);
   const soloConsulta = esRevisorOAdmin(sesion);
-  const repintar = () => montarListaProgramas(contenedor, sesion, { onAbrirPrograma });
 
   if (!soloConsulta) {
     contenedor.appendChild(el('div', { class: 'barra-nueva' }, [
@@ -47,17 +52,27 @@ export async function montarListaProgramas(contenedor, sesion, { onAbrirPrograma
     ]));
   }
 
-  const cargando = el('p', { style: 'color:#666; margin-top:1.5rem;' }, 'Cargando programas…');
-  contenedor.appendChild(cargando);
+  const contenedorResultados = el('div', {});
+  contenedor.appendChild(contenedorResultados);
 
-  let programas;
+  const cargando = el('p', { style: 'color:#666; margin-top:1.5rem;' }, 'Cargando programas…');
+  contenedorResultados.appendChild(cargando);
+
   try {
-    programas = await listarProgramas(sesion);
+    programasCache = await listarProgramas(sesion);
   } catch (err) {
     cargando.textContent = `No se pudieron cargar los programas: ${err.message}`;
     return;
   }
-  cargando.remove();
+  clear(contenedorResultados);
+  renderizarResultadosProgramas(contenedor, contenedorResultados, sesion, { onAbrirPrograma }, soloConsulta);
+}
+
+function renderizarResultadosProgramas(contenedor, contenedorResultados, sesion, { onAbrirPrograma }, soloConsulta) {
+  const foco = guardarFoco(contenedorResultados, '.campo-busqueda');
+  clear(contenedorResultados);
+  const repintar = () => renderizarResultadosProgramas(contenedor, contenedorResultados, sesion, { onAbrirPrograma }, soloConsulta);
+  let programas = programasCache || [];
 
   const barraFiltros = el('div', { class: 'barra-filtros' }, [
     el('input', {
@@ -80,7 +95,8 @@ export async function montarListaProgramas(contenedor, sesion, { onAbrirPrograma
       ...profesores.map((p) => el('option', { value: p, selected: filtroProfesorPrograma === p }, p)),
     ]));
   }
-  contenedor.appendChild(barraFiltros);
+  contenedorResultados.appendChild(barraFiltros);
+  restaurarFoco(contenedorResultados, foco);
 
   if (soloConsulta && filtroProfesorPrograma !== 'todos') {
     programas = programas.filter((p) => p.profesorNombre === filtroProfesorPrograma);
@@ -93,11 +109,11 @@ export async function montarListaProgramas(contenedor, sesion, { onAbrirPrograma
   }
 
   if (programas.length === 0) {
-    contenedor.appendChild(el('p', { style: 'color:#666; margin-top:1.5rem;' }, soloConsulta ? 'No hay programas que coincidan con esos filtros.' : 'Aún no tienes programas. Crea uno para llenar el formato de actividades académicas del trimestre.'));
+    contenedorResultados.appendChild(el('p', { style: 'color:#666; margin-top:1.5rem;' }, soloConsulta ? 'No hay programas que coincidan con esos filtros.' : 'Aún no tienes programas. Crea uno para llenar el formato de actividades académicas del trimestre.'));
     return;
   }
 
-  contenedor.appendChild(el('div', { class: 'lista-examenes' }, programas.map((programa) => el('div', { class: 'tarjeta-examen' }, [
+  contenedorResultados.appendChild(el('div', { class: 'lista-examenes' }, programas.map((programa) => el('div', { class: 'tarjeta-examen' }, [
     el('h3', {}, programa.disciplina || 'Sin disciplina'),
     el('div', { class: 'meta-chica' }, `${ETIQUETAS_TRIMESTRE[programa.trimestre] || 'sin trimestre'} · ${programa.grupos || 'sin grupos'} · editado ${fechaCorta(programa.updatedAt)}`),
     soloConsulta ? el('div', { class: 'meta-chica' }, `Profesor(a): ${programa.profesorNombre || 'sin nombre'}`) : null,
