@@ -6,6 +6,14 @@ import { el, clear } from './dom.js';
 const CORREOS_SOPORTE = ['raul.becario@ccuma.mx', 'angel.becario@ccuma.mx'];
 const ASUNTO_CORREO = 'Reporte de error o sugerencia — Panel de control CCUMA';
 
+// Cuenta compartida de pruebas: mientras la app solo se reparte entre administrativos,
+// los maestros entran con esta para darnos feedback sin tener que darlos de alta uno
+// por uno. Al abrirla al público hay que borrar este bloque y la cuenta en Firebase.
+const CUENTA_PRUEBA = {
+  correo: 'docente@ccuma.mx',
+  contrasena: '8M9qqpNkGj',
+};
+
 function enlaceCorreo(correo) {
   return `mailto:${correo}?subject=${encodeURIComponent(ASUNTO_CORREO)}`;
 }
@@ -31,18 +39,24 @@ async function copiarTexto(texto) {
   return ok;
 }
 
-function filaCorreo(correo) {
-  const btnCopiar = el('button', { type: 'button', class: 'btn-copiar-correo', title: `Copiar ${correo}` }, 'Copiar');
+// Fila "texto + botón Copiar". Si se le pasa un href el texto va como enlace
+// (correos de soporte); si no, va como texto plano (los datos de la cuenta de prueba).
+function filaCopiable(texto, href) {
+  const btnCopiar = el('button', { type: 'button', class: 'btn-copiar-correo', title: `Copiar ${texto}` }, 'Copiar');
   btnCopiar.onclick = async () => {
-    const ok = await copiarTexto(correo);
+    const ok = await copiarTexto(texto);
     btnCopiar.textContent = ok ? '¡Copiado!' : 'Cópialo a mano';
     btnCopiar.classList.add('copiado');
     setTimeout(() => { btnCopiar.textContent = 'Copiar'; btnCopiar.classList.remove('copiado'); }, 1800);
   };
-  return el('div', { class: 'fila-correo-soporte' }, [
-    el('a', { class: 'correo-soporte', href: enlaceCorreo(correo) }, correo),
-    btnCopiar,
-  ]);
+  const etiqueta = href
+    ? el('a', { class: 'correo-soporte', href }, texto)
+    : el('span', { class: 'correo-soporte' }, texto);
+  return el('div', { class: 'fila-correo-soporte' }, [etiqueta, btnCopiar]);
+}
+
+function filaCorreo(correo) {
+  return filaCopiable(correo, enlaceCorreo(correo));
 }
 
 // Se monta una sola vez al arrancar la app (ver main.js) y vive fuera de <main>,
@@ -65,6 +79,12 @@ export function montarSoporte() {
     panel.appendChild(el('div', { class: 'titulo-soporte' }, 'Soporte'));
     panel.appendChild(el('p', { class: 'etiqueta-chica' }, '¿Encontraste un error o se te ocurre una mejora? Escríbenos a cualquiera de estos correos:'));
     CORREOS_SOPORTE.forEach((correo) => panel.appendChild(filaCorreo(correo)));
+
+    panel.appendChild(el('div', { class: 'separador-soporte' }));
+    panel.appendChild(el('div', { class: 'titulo-soporte' }, 'Cuenta para realizar pruebas de la app'));
+    panel.appendChild(el('p', { class: 'etiqueta-chica' }, 'Entra con estos datos para probar la app y contarnos qué le falta. Es una cuenta compartida: no guardes en ella información real ni le cambies la contraseña.'));
+    panel.appendChild(filaCopiable(CUENTA_PRUEBA.correo));
+    panel.appendChild(filaCopiable(CUENTA_PRUEBA.contrasena));
   }
 
   function abierto() { return !panel.classList.contains('oculto'); }
