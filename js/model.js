@@ -4,6 +4,16 @@ export function uid(prefix = 'id') {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+// Intercambia in situ el elemento en `indice` con el que está `delta`
+// posiciones más allá (-1 = subir, +1 = bajar) — usado por los botones ▲▼
+// para reordenar secciones, reactivos y subpreguntas. No hace nada si el
+// destino queda fuera del arreglo (ya está hasta arriba/abajo).
+export function moverElemento(array, indice, delta) {
+  const destino = indice + delta;
+  if (destino < 0 || destino >= array.length) return;
+  [array[indice], array[destino]] = [array[destino], array[indice]];
+}
+
 // Encabezado oficial fijo que llevan los exámenes de inglés (membrete de
 // Gobierno del Estado de México) — se precarga en "Datos de la escuela" la
 // primera vez que se abre ese campo, pero se puede editar ahí si cambia.
@@ -87,6 +97,11 @@ export function nuevoExamen(sesion, formato = 'normal') {
     },
     instruccionesGenerales: formato === 'ingles' ? '' : INSTRUCCIONES_GENERALES_DEFECTO,
     secciones: [nuevaSeccion()],
+    // Márgenes/sangría/interlineado de todo el documento — solo un
+    // administrador los cambia (ver panelFormatoDocumento en editor.js y
+    // estiloDocumentoDeExamen en paginate.js, que ya cae en los valores de
+    // siempre si esto viene vacío).
+    estiloDocumento: {},
   };
 }
 
@@ -96,6 +111,12 @@ export function nuevaSeccion() {
     titulo: '',
     instrucciones: '',
     preguntas: [],
+    // Comentario de revisión de un administrador para esta sección (ver
+    // pintarComentarioSeccion en editor.js) — nunca se imprime.
+    comentarioRevision: null,
+    // Fuente/tamaño/ajuste de texto de esta sección — solo un administrador
+    // los cambia (ver el bloque "Formato de esta sección" en editor.js).
+    estilo: {},
   };
 }
 
@@ -186,6 +207,13 @@ function shuffleArray(arr) {
   return copia;
 }
 
+// Los ids de secciones y preguntas, en orden, aplanados en un solo string —
+// para poder comparar si dos acomodos son "el mismo examen" aunque cambien
+// los objetos de por medio.
+function firmaOrden(secciones) {
+  return secciones.flatMap((s) => [s.id, ...(s.preguntas || []).map((p) => p.id)]).join('|');
+}
+
 // Mezcla el orden de las secciones y, dentro de cada una, el orden de sus
 // reactivos — para que un examen Tipo B no quede con las preguntas en la
 // misma posición que su Tipo A (más difícil copiar mirando la hoja de al
@@ -195,10 +223,25 @@ function shuffleArray(arr) {
 // esas subpreguntas no se toca, porque suelen depender de leer el texto en
 // orden (pregunta 1 sobre el primer párrafo, etc.).
 export function mezclarOrdenExamen(examen) {
-  examen.secciones = shuffleArray(examen.secciones || []);
-  for (const seccion of examen.secciones) {
-    seccion.preguntas = shuffleArray(seccion.preguntas || []);
+  const secciones = examen.secciones || [];
+  const firmaOriginal = firmaOrden(secciones);
+  const totalUnidades = secciones.length
+    + secciones.reduce((acc, s) => acc + (s.preguntas || []).length, 0);
+  if (totalUnidades < 2) return examen; // no hay nada que mezclar
+
+  // Con pocas secciones/preguntas, mezclar al azar puede devolver el mismo
+  // orden por pura casualidad (ej. 2 secciones tienen 50% de probabilidad de
+  // no cambiar) — el maestro pidió explícitamente que el Tipo B no quede
+  // igual al Tipo A, así que se reintenta hasta lograr un orden distinto.
+  let resultado = secciones;
+  for (let intento = 0; intento < 20; intento++) {
+    resultado = shuffleArray(secciones);
+    for (const seccion of resultado) {
+      seccion.preguntas = shuffleArray(seccion.preguntas || []);
+    }
+    if (firmaOrden(resultado) !== firmaOriginal) break;
   }
+  examen.secciones = resultado;
   return examen;
 }
 

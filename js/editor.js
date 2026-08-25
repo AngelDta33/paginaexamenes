@@ -4,7 +4,7 @@
 import { el, clear } from './dom.js';
 import {
   nuevaSeccion, nuevaPregunta, TIPOS_PREGUNTA, subtotalSeccion, totalExamen, numerarReactivos,
-  validarExamen, puntosDeclarados, ETIQUETAS_ESTADO,
+  validarExamen, puntosDeclarados, ETIQUETAS_ESTADO, moverElemento,
 } from './model.js';
 import { crearEditorPregunta } from './questionTypes.js';
 import { guardarExamen, obtenerConfig, exportarExamenJSON } from './store.js';
@@ -206,11 +206,22 @@ export function montarEditor(contenedor, examen, { sesion, onVolver }) {
     // administrador los puede cambiar; un maestro nunca ve este bloque.
     function panelFormatoDocumento() {
       examen.estiloDocumento = examen.estiloDocumento || {};
+      // `valor === '' ? '' : valor` (no `valor || ''`) para que un 0 puesto a
+      // propósito se siga viendo como "0" y no como vacío/sin definir. `min`
+      // en un <input type=number> es solo una sugerencia visual para las
+      // flechitas — no bloquea que se teclee o pegue un negativo, por eso se
+      // recorta a mano en oninput.
       const campoNumero = (etiqueta, valor, defecto, onInput) => el('label', {}, [
         `${etiqueta} `,
         el('input', {
-          type: 'number', step: '0.1', min: '0', placeholder: String(defecto), value: valor || '',
-          oninput: (e) => { onInput(e.target.value === '' ? null : parseFloat(e.target.value)); guardarYActualizar(); },
+          type: 'number', step: '0.1', min: '0', placeholder: String(defecto),
+          value: valor === null || valor === undefined || valor === '' ? '' : valor,
+          oninput: (e) => {
+            const texto = e.target.value;
+            if (texto === '' || texto === '-') { onInput(null); guardarYActualizar(); return; }
+            onInput(Math.max(0, parseFloat(texto) || 0));
+            guardarYActualizar();
+          },
         }),
       ]);
       return el('div', { class: 'formato-documento-admin' }, [
@@ -274,14 +285,14 @@ export function montarEditor(contenedor, examen, { sesion, onVolver }) {
         el('button', {
           type: 'button', class: 'btn-icono', title: 'Mover sección arriba', disabled: indice === 0,
           onclick: indice === 0 ? null : () => {
-            [examen.secciones[indice - 1], examen.secciones[indice]] = [examen.secciones[indice], examen.secciones[indice - 1]];
+            moverElemento(examen.secciones, indice, -1);
             pintarSecciones(); guardarYActualizar();
           },
         }, '▲'),
         el('button', {
           type: 'button', class: 'btn-icono', title: 'Mover sección abajo', disabled: indice === examen.secciones.length - 1,
           onclick: indice === examen.secciones.length - 1 ? null : () => {
-            [examen.secciones[indice + 1], examen.secciones[indice]] = [examen.secciones[indice], examen.secciones[indice + 1]];
+            moverElemento(examen.secciones, indice, 1);
             pintarSecciones(); guardarYActualizar();
           },
         }, '▼'),
@@ -367,11 +378,11 @@ export function montarEditor(contenedor, examen, { sesion, onVolver }) {
             onChange: () => { subtotalSpan.textContent = `Subtotal: ${subtotalSeccion(seccion)} pts`; guardarYActualizar(); },
             onDelete: () => { seccion.preguntas.splice(pi, 1); pintarPreguntas(); guardarYActualizar(); },
             onMoveUp: pi > 0 ? () => {
-              [seccion.preguntas[pi - 1], seccion.preguntas[pi]] = [seccion.preguntas[pi], seccion.preguntas[pi - 1]];
+              moverElemento(seccion.preguntas, pi, -1);
               pintarPreguntas(); guardarYActualizar();
             } : null,
             onMoveDown: pi < seccion.preguntas.length - 1 ? () => {
-              [seccion.preguntas[pi + 1], seccion.preguntas[pi]] = [seccion.preguntas[pi], seccion.preguntas[pi + 1]];
+              moverElemento(seccion.preguntas, pi, 1);
               pintarPreguntas(); guardarYActualizar();
             } : null,
           }));

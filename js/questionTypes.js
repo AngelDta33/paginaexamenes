@@ -2,7 +2,7 @@
 
 import { el, clear } from './dom.js';
 import { atributosTamano } from './imagenes.js';
-import { nuevaSubpregunta, uid } from './model.js';
+import { nuevaSubpregunta, uid, moverElemento } from './model.js';
 import { renderTextoFormulas, campoTextoConFormulas } from './formulas.js';
 
 const LETRAS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -646,11 +646,11 @@ function editorLecturaComprension(pregunta, onChange) {
         // dos": se agrega al final con "+ Agregar subpregunta" y luego se sube
         // hasta la posición donde debe quedar.
         onMoveUp: i > 0 ? () => {
-          [pregunta.subpreguntas[i - 1], pregunta.subpreguntas[i]] = [pregunta.subpreguntas[i], pregunta.subpreguntas[i - 1]];
+          moverElemento(pregunta.subpreguntas, i, -1);
           pintarSub(); onChange();
         } : null,
         onMoveDown: i < pregunta.subpreguntas.length - 1 ? () => {
-          [pregunta.subpreguntas[i + 1], pregunta.subpreguntas[i]] = [pregunta.subpreguntas[i], pregunta.subpreguntas[i + 1]];
+          moverElemento(pregunta.subpreguntas, i, 1);
           pintarSub(); onChange();
         } : null,
       }));

@@ -385,12 +385,16 @@ async function pintarLista() {
   const cargando = el('p', { style: 'color:#666; margin-top:1.5rem;' }, 'Cargando exámenes…');
   contenedorResultados.appendChild(cargando);
 
-  try {
-    [examenesCache, carpetasCache] = await Promise.all([listarExamenes(sesion), listarCarpetas(sesion)]);
-  } catch (err) {
-    cargando.textContent = `No se pudieron cargar los exámenes: ${err.message}`;
+  // allSettled y no Promise.all: las carpetas son un extra de organización,
+  // no algo esencial — si esa consulta falla no tiene que tumbar la lista de
+  // exámenes, que puede haberse cargado bien de todas formas.
+  const [examenesResultado, carpetasResultado] = await Promise.allSettled([listarExamenes(sesion), listarCarpetas(sesion)]);
+  if (examenesResultado.status === 'rejected') {
+    cargando.textContent = `No se pudieron cargar los exámenes: ${examenesResultado.reason.message}`;
     return;
   }
+  examenesCache = examenesResultado.value;
+  carpetasCache = carpetasResultado.status === 'fulfilled' ? carpetasResultado.value : [];
   clear(contenedorResultados);
   renderizarResultadosExamenes(contenedorResultados);
 }
@@ -412,6 +416,14 @@ function renderizarResultadosExamenes(contenedorResultados) {
   // se cruzan con ella (un filtro de materia/tipo/estado se aplica dentro de
   // la carpeta activa, no al revés).
   if (carpetas.length > 0 || carpetaActivaId) {
+    // Un solo recorrido de los exámenes para contar cuántos hay por carpeta,
+    // en vez de un .filter() aparte por cada chip (que sería O(carpetas × exámenes)).
+    let sinCarpeta = 0;
+    const conteoPorCarpeta = new Map();
+    for (const ex of todosLosExamenes) {
+      if (ex.carpetaId) conteoPorCarpeta.set(ex.carpetaId, (conteoPorCarpeta.get(ex.carpetaId) || 0) + 1);
+      else sinCarpeta += 1;
+    }
     const chip = (valor, etiqueta, cantidad) => el('button', {
       type: 'button',
       class: `chip-carpeta${carpetaActivaId === valor ? ' activo' : ''}`,
@@ -419,9 +431,9 @@ function renderizarResultadosExamenes(contenedorResultados) {
     }, `${etiqueta} (${cantidad})`);
     const barraCarpetas = el('div', { class: 'barra-carpetas' }, [
       chip(null, 'Todos', todosLosExamenes.length),
-      chip('sin-carpeta', 'Sin carpeta', todosLosExamenes.filter((ex) => !ex.carpetaId).length),
+      chip('sin-carpeta', 'Sin carpeta', sinCarpeta),
       ...carpetas.map((carp) => {
-        const chipEl = chip(carp.id, carp.nombre, todosLosExamenes.filter((ex) => ex.carpetaId === carp.id).length);
+        const chipEl = chip(carp.id, carp.nombre, conteoPorCarpeta.get(carp.id) || 0);
         if (carp.profesorId === sesion.uid) {
           chipEl.appendChild(el('span', {
             class: 'btn-quitar-chip', title: 'Eliminar carpeta',
@@ -507,17 +519,25 @@ function renderizarResultadosExamenes(contenedorResultados) {
       puedeVerTodos ? `Profesor(a): ${examen.profesorNombre || '—'}` : null,
     ]),
     el('div', { class: `insignia-estado insignia-${examen.estado || 'borrador'}` }, ETIQUETAS_ESTADO[examen.estado] || 'Borrador'),
-    carpetas.length > 0 ? el('select', {
-      class: 'selector-carpeta-tarjeta', title: 'Mover a una carpeta',
-      onchange: async (e) => {
-        examen.carpetaId = e.target.value || null;
-        await guardarExamen(examen);
-        renderizarResultadosExamenes(contenedorResultados);
-      },
-    }, [
-      el('option', { value: '', selected: !examen.carpetaId }, '📁 Sin carpeta'),
-      ...carpetas.map((c) => el('option', { value: c.id, selected: examen.carpetaId === c.id }, `📁 ${c.nombre}`)),
-    ]) : null,
+    (() => {
+      // revisor/administrador ven las carpetas de TODOS los profesores en
+      // `carpetas`; si se ofrecieran todas aquí, se podría archivar sin
+      // querer el examen de un profesor dentro de la carpeta de otro. Cada
+      // tarjeta solo puede ofrecer las carpetas de su propio dueño.
+      const carpetasDelProfesor = carpetas.filter((c) => c.profesorId === examen.profesorId);
+      if (carpetasDelProfesor.length === 0) return null;
+      return el('select', {
+        class: 'selector-carpeta-tarjeta', title: 'Mover a una carpeta',
+        onchange: async (e) => {
+          examen.carpetaId = e.target.value || null;
+          await guardarExamen(examen);
+          renderizarResultadosExamenes(contenedorResultados);
+        },
+      }, [
+        el('option', { value: '', selected: !examen.carpetaId }, '📁 Sin carpeta'),
+        ...carpetasDelProfesor.map((c) => el('option', { value: c.id, selected: examen.carpetaId === c.id }, `📁 ${c.nombre}`)),
+      ]);
+    })(),
     el('div', { class: 'acciones-tarjeta' }, [
       el('button', { type: 'button', class: 'btn-primario', onclick: () => irAEditor(examen.id) }, 'Abrir'),
       el('button', {

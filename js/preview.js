@@ -13,21 +13,24 @@ export async function pintarVistaPrevia(contenedor, examen, config, modoClave = 
   const token = (ultimoRepintado.get(contenedor) || 0) + 1;
   ultimoRepintado.set(contenedor, token);
 
+  const paginas = await renderPaginas(examen, config, modoClave);
+  if (ultimoRepintado.get(contenedor) !== token) return; // llegó tarde: ya hay un repintado más nuevo
+
   // Las medidas de la hoja viven en variables CSS sobre el contenedor para que
   // page.css (.page) y el @page de la impresión salgan siempre del mismo dato.
+  // Se ponen recién aquí, ya seguro de que este repintado es el más reciente:
+  // si se pusieran antes del await de arriba, un repintado más nuevo en curso
+  // (ej. el administrador tecleando rápido en Márgenes/Interlineado) podía
+  // dejar el contenido todavía en pantalla —medido con el valor anterior—
+  // un instante bajo las variables del valor nuevo, y se veía recortado por
+  // el overflow:hidden de .page hasta que ese repintado más nuevo terminaba.
   const papel = papelDeExamen(examen);
   contenedor.style.setProperty('--pagina-ancho', `${papel.ancho}cm`);
   contenedor.style.setProperty('--pagina-alto', `${papel.alto}cm`);
-  // Márgenes/interlineado/sangría del documento (solo un administrador los
-  // cambia, ver editor.js) — misma idea que el tamaño de hoja: hay que
-  // ponerlos aquí para que .page y lo que se mide en paginate.js coincidan.
   const { margenCm, interlineado, sangriaCm } = estiloDocumentoDeExamen(examen);
   contenedor.style.setProperty('--pagina-padding', `${margenCm}cm`);
   contenedor.style.setProperty('--pagina-interlineado', `${interlineado}`);
   contenedor.style.setProperty('--pagina-sangria', `${sangriaCm}cm`);
-
-  const paginas = await renderPaginas(examen, config, modoClave);
-  if (ultimoRepintado.get(contenedor) !== token) return; // llegó tarde: ya hay un repintado más nuevo
 
   clear(contenedor);
   paginas.forEach((pagina) => contenedor.appendChild(pagina));

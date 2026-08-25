@@ -41,15 +41,25 @@ export function papelDeExamen(examen) {
   return TAMANOS_PAPEL[examen && examen.tamanoPapel] || TAMANOS_PAPEL[PAPEL_POR_DEFECTO];
 }
 
+// Un valor guardado válido (incluyendo 0, ej. "sin margen") gana sobre el
+// valor de siempre; solo se usa el de siempre cuando no hay nada guardado,
+// está vacío o es inválido/negativo. `0 || X` trataría un 0 puesto a propósito
+// como "no hay nada guardado" y lo reemplazaría con el de siempre — de ahí el
+// chequeo explícito de null/undefined/NaN en vez de `||`.
+function numeroODefecto(valor, porDefecto) {
+  const n = Number(valor);
+  return valor == null || valor === '' || Number.isNaN(n) || n < 0 ? porDefecto : n;
+}
+
 // Márgenes/interlineado/sangría de todo el documento: solo un administrador
 // los puede tocar (ver editor.js), en examen.estiloDocumento. Si el examen no
 // trae nada guardado ahí, se usan los valores de siempre.
 export function estiloDocumentoDeExamen(examen) {
   const e = (examen && examen.estiloDocumento) || {};
   return {
-    margenCm: Number(e.margenCm) || PADDING_CM,
-    interlineado: Number(e.interlineado) || 1.5,
-    sangriaCm: Number(e.sangriaCm) || 0,
+    margenCm: numeroODefecto(e.margenCm, PADDING_CM),
+    interlineado: numeroODefecto(e.interlineado, 1.5),
+    sangriaCm: numeroODefecto(e.sangriaCm, 0),
   };
 }
 

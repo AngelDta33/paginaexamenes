@@ -25,8 +25,11 @@
 
 /* Sangría de todo el documento (solo administrador, ver editor.js) — se
    aplica a los bloques de texto corrido; tablas, opciones y demás no llevan
-   sangría de primera línea porque no se ve bien ahí. */
-.instrucciones-generales, .instrucciones-seccion, .enunciado-texto,
+   sangría de primera línea porque no se ve bien ahí. .enunciado-texto es un
+   <span> en línea dentro de .reactivo-encabezado (ver encabezadoReactivo en
+   questionTypes.js) — text-indent no tiene efecto en elementos en línea, por
+   eso se aplica al contenedor de bloque que sí lo tiene. */
+.instrucciones-generales, .instrucciones-seccion, .reactivo-encabezado,
 .texto-lectura-linea, .respuesta-modelo {
   text-indent: var(--pagina-sangria, 0);
 }
