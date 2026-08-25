@@ -41,6 +41,18 @@ export function papelDeExamen(examen) {
   return TAMANOS_PAPEL[examen && examen.tamanoPapel] || TAMANOS_PAPEL[PAPEL_POR_DEFECTO];
 }
 
+// Márgenes/interlineado/sangría de todo el documento: solo un administrador
+// los puede tocar (ver editor.js), en examen.estiloDocumento. Si el examen no
+// trae nada guardado ahí, se usan los valores de siempre.
+export function estiloDocumentoDeExamen(examen) {
+  const e = (examen && examen.estiloDocumento) || {};
+  return {
+    margenCm: Number(e.margenCm) || PADDING_CM,
+    interlineado: Number(e.interlineado) || 1.5,
+    sangriaCm: Number(e.sangriaCm) || 0,
+  };
+}
+
 // Todas las imágenes que van a aparecer en la hoja — hay que precargarlas antes
 // de medir nada (ver js/imagenes.js).
 function urlsDeImagenes(examen, config) {
@@ -243,10 +255,23 @@ function renderPie(numPagina, totalPaginas) {
   return el('div', { class: 'pie-pagina pie-pagina-ingles' }, `Page ${numPagina} of ${totalPaginas}`);
 }
 
+// El administrador puede sobreescribir tipo de letra, tamaño y ajuste de
+// texto de una sección (seccion.estilo) — se aplica como estilo en línea a
+// cada bloque de esa sección, antes de medir, para que el paginador calcule
+// la altura real con la fuente que de verdad se va a imprimir.
+function aplicarEstiloSeccion(elemento, estilo) {
+  if (!estilo) return;
+  if (estilo.familia) elemento.style.fontFamily = estilo.familia;
+  if (estilo.tamano) elemento.style.fontSize = `${estilo.tamano}pt`;
+  if (estilo.ajuste === 'sin_ajuste') elemento.style.whiteSpace = 'nowrap';
+  else if (estilo.ajuste === 'justificado') elemento.style.textAlign = 'justify';
+}
+
 function construirBloques(examen, modoClave) {
   const numeros = numerarReactivos(examen);
   const bloques = [];
   for (const seccion of examen.secciones || []) {
+    const inicioSeccion = bloques.length;
     if (seccion.titulo || seccion.instrucciones) {
       bloques.push({ tipo: 'titulo-seccion', el: renderTituloSeccion(seccion) });
     }
@@ -265,6 +290,9 @@ function construirBloques(examen, modoClave) {
     }
     if ((seccion.preguntas || []).length > 0) {
       bloques.push({ tipo: 'subtotal-seccion', el: renderValorSeccion(seccion) });
+    }
+    if (seccion.estilo) {
+      for (let i = inicioSeccion; i < bloques.length; i++) aplicarEstiloSeccion(bloques[i].el, seccion.estilo);
     }
   }
   // Los formatos de inglés que mandó el maestro no llevan firma del padre/tutor.
@@ -313,8 +341,9 @@ export async function renderPaginas(examen, config, modoClave = false) {
   await precargarImagenes(urlsDeImagenes(examen, config));
 
   const papel = papelDeExamen(examen);
-  const anchoContenidoCm = papel.ancho - PADDING_CM * 2;
-  const altoUtilPaginaCm = papel.alto - PADDING_CM * 2 - MARGEN_SEGURIDAD_CM;
+  const { margenCm, interlineado, sangriaCm } = estiloDocumentoDeExamen(examen);
+  const anchoContenidoCm = papel.ancho - margenCm * 2;
+  const altoUtilPaginaCm = papel.alto - margenCm * 2 - MARGEN_SEGURIDAD_CM;
   const altoUtilPaginaPx = altoUtilPaginaCm * PX_POR_CM;
   // Solo los exámenes de inglés siguen teniendo pie; en el formato normal ese
   // espacio se recupera para los reactivos.
@@ -325,7 +354,10 @@ export async function renderPaginas(examen, config, modoClave = false) {
     class: 'medicion-oculta',
     // Misma tipografía que .page (page.css) — si no coincide, lo medido aquí no
     // predice la altura real y el contenido se desborda y se recorta en la hoja.
-    style: `position:absolute; visibility:hidden; left:-9999px; top:0; width:${cm(anchoContenidoCm)}; font-family: Arial, Helvetica, sans-serif; font-size: 11pt; line-height: 1.5;`,
+    // El interlineado también tiene que coincidir con el de .page (variable
+    // --pagina-interlineado que pone preview.js) porque cambia la altura de
+    // cada bloque igual que el tamaño de letra.
+    style: `position:absolute; visibility:hidden; left:-9999px; top:0; width:${cm(anchoContenidoCm)}; font-family: Arial, Helvetica, sans-serif; font-size: 11pt; line-height: ${interlineado}; --pagina-sangria: ${cm(sangriaCm)};`,
   });
   document.body.appendChild(medicion);
 

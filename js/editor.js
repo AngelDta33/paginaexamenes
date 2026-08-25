@@ -18,6 +18,22 @@ function fechaCorta(iso) {
   return new Date(iso).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+// Formato por sección (solo administrador, ver pintarSeccion más abajo).
+const FAMILIAS_FUENTE = [
+  { valor: '', etiqueta: 'Predeterminada' },
+  { valor: 'Arial, Helvetica, sans-serif', etiqueta: 'Arial' },
+  { valor: "'Times New Roman', Times, serif", etiqueta: 'Times New Roman' },
+  { valor: 'Georgia, serif', etiqueta: 'Georgia' },
+  { valor: "'Courier New', Courier, monospace", etiqueta: 'Courier New' },
+  { valor: 'Verdana, Geneva, sans-serif', etiqueta: 'Verdana' },
+];
+const TAMANOS_FUENTE = ['', '8', '9', '10', '11', '12', '13', '14', '16'];
+const AJUSTES_TEXTO = [
+  { valor: '', etiqueta: 'Normal' },
+  { valor: 'justificado', etiqueta: 'Justificado' },
+  { valor: 'sin_ajuste', etiqueta: 'Sin ajuste (una línea)' },
+];
+
 // sesion = { uid, nombre, rol } de quien tiene la pantalla abierta.
 export function montarEditor(contenedor, examen, { sesion, onVolver }) {
   let modoVista = 'examen'; // 'examen' | 'clave'
@@ -186,6 +202,25 @@ export function montarEditor(contenedor, examen, { sesion, onVolver }) {
       }, t)),
     ]);
 
+    // Márgenes, sangría e interlineado de TODO el documento — solo un
+    // administrador los puede cambiar; un maestro nunca ve este bloque.
+    function panelFormatoDocumento() {
+      examen.estiloDocumento = examen.estiloDocumento || {};
+      const campoNumero = (etiqueta, valor, defecto, onInput) => el('label', {}, [
+        `${etiqueta} `,
+        el('input', {
+          type: 'number', step: '0.1', min: '0', placeholder: String(defecto), value: valor || '',
+          oninput: (e) => { onInput(e.target.value === '' ? null : parseFloat(e.target.value)); guardarYActualizar(); },
+        }),
+      ]);
+      return el('div', { class: 'formato-documento-admin' }, [
+        el('span', { class: 'etiqueta-formato-admin' }, '🛠 Formato de todo el documento (solo administrador):'),
+        campoNumero('Márgenes (cm)', examen.estiloDocumento.margenCm, 1.8, (v) => { examen.estiloDocumento.margenCm = v; }),
+        campoNumero('Sangría (cm)', examen.estiloDocumento.sangriaCm, 0, (v) => { examen.estiloDocumento.sangriaCm = v; }),
+        campoNumero('Interlineado', examen.estiloDocumento.interlineado, 1.5, (v) => { examen.estiloDocumento.interlineado = v; }),
+      ]);
+    }
+
     panelEncabezado = el('div', { class: 'panel' }, [
       el('h2', {}, 'Datos generales'),
       el('div', { class: 'rejilla-campos' }, [
@@ -216,6 +251,7 @@ export function montarEditor(contenedor, examen, { sesion, onVolver }) {
           oninput: (e) => { examen.instruccionesGenerales = e.target.value; guardarYActualizar(); },
         }, examen.instruccionesGenerales),
       ]),
+      esRevisorOAdmin ? panelFormatoDocumento() : null,
     ]);
 
     const contenedorSecciones = el('div', { class: 'contenedor-secciones' });
@@ -235,6 +271,20 @@ export function montarEditor(contenedor, examen, { sesion, onVolver }) {
           oninput: (e) => { seccion.titulo = e.target.value; guardarYActualizar(); },
         }),
         subtotalSpan,
+        el('button', {
+          type: 'button', class: 'btn-icono', title: 'Mover sección arriba', disabled: indice === 0,
+          onclick: indice === 0 ? null : () => {
+            [examen.secciones[indice - 1], examen.secciones[indice]] = [examen.secciones[indice], examen.secciones[indice - 1]];
+            pintarSecciones(); guardarYActualizar();
+          },
+        }, '▲'),
+        el('button', {
+          type: 'button', class: 'btn-icono', title: 'Mover sección abajo', disabled: indice === examen.secciones.length - 1,
+          onclick: indice === examen.secciones.length - 1 ? null : () => {
+            [examen.secciones[indice + 1], examen.secciones[indice]] = [examen.secciones[indice], examen.secciones[indice + 1]];
+            pintarSecciones(); guardarYActualizar();
+          },
+        }, '▼'),
         examen.secciones.length > 1 ? el('button', {
           type: 'button', class: 'btn-icono btn-eliminar', title: 'Eliminar sección',
           onclick: () => { examen.secciones.splice(indice, 1); pintarSecciones(); guardarYActualizar(); },
@@ -246,6 +296,69 @@ export function montarEditor(contenedor, examen, { sesion, onVolver }) {
         oninput: (e) => { seccion.instrucciones = e.target.value; guardarYActualizar(); },
       }, seccion.instrucciones));
 
+      // Comentario de revisión por sección: solo lo escribe revisor/administrador
+      // y solo se ve aquí, en el editor — nunca en el examen ni en la vista
+      // previa. Así, cuando el examen se regresa a borrador, el docente ve
+      // exactamente en qué sección estuvo el error.
+      const contenedorComentario = el('div', {});
+      function pintarComentarioSeccion() {
+        clear(contenedorComentario);
+        const comentario = seccion.comentarioRevision;
+        if (esRevisorOAdmin) {
+          contenedorComentario.appendChild(el('div', { class: 'comentario-seccion comentario-seccion-editable' }, [
+            el('label', {}, '💬 Comentario de revisión de esta sección (no aparece en el examen; solo lo ve el profesor aquí en el editor):'),
+            el('textarea', {
+              rows: '2', placeholder: 'Ej. Falta indicar el valor de este reactivo…', value: comentario ? comentario.texto : '',
+              oninput: (e) => {
+                const texto = e.target.value;
+                seccion.comentarioRevision = texto.trim() ? { texto, autor: sesion.nombre, fecha: new Date().toISOString() } : null;
+                guardarYActualizar();
+              },
+            }, comentario ? comentario.texto : ''),
+          ]));
+        } else if (comentario) {
+          contenedorComentario.appendChild(el('div', { class: 'comentario-seccion comentario-seccion-aviso' }, [
+            el('div', { class: 'comentario-seccion-texto' }, comentario.texto),
+            el('div', { class: 'comentario-seccion-meta' }, `— ${comentario.autor || 'Revisor'}${comentario.fecha ? `, ${fechaCorta(comentario.fecha)}` : ''}`),
+            el('button', {
+              type: 'button', class: 'btn-secundario', title: 'Marcar como resuelto y quitar',
+              onclick: () => { seccion.comentarioRevision = null; pintarComentarioSeccion(); guardarYActualizar(); },
+            }, '✓ Ya lo corregí'),
+          ]));
+        }
+      }
+      pintarComentarioSeccion();
+      bloque.appendChild(contenedorComentario);
+
+      // Formato de la sección (tipo de letra, tamaño, ajuste de texto): solo
+      // lo puede tocar un administrador, y solo afecta esta sección (no el
+      // resto del examen). Se aplica en la vista previa/impresión, nunca en
+      // el editor mismo.
+      if (esRevisorOAdmin) {
+        seccion.estilo = seccion.estilo || {};
+        const selectorFamilia = el('select', {
+          onchange: (e) => { seccion.estilo.familia = e.target.value; guardarYActualizar(); },
+        }, FAMILIAS_FUENTE.map((f) => el('option', {
+          value: f.valor, selected: (seccion.estilo.familia || '') === f.valor,
+        }, f.etiqueta)));
+        const selectorTamano = el('select', {
+          onchange: (e) => { seccion.estilo.tamano = e.target.value; guardarYActualizar(); },
+        }, TAMANOS_FUENTE.map((t) => el('option', {
+          value: t, selected: (seccion.estilo.tamano || '') === t,
+        }, t ? `${t} pt` : 'Predeterminado')));
+        const selectorAjuste = el('select', {
+          onchange: (e) => { seccion.estilo.ajuste = e.target.value; guardarYActualizar(); },
+        }, AJUSTES_TEXTO.map((a) => el('option', {
+          value: a.valor, selected: (seccion.estilo.ajuste || '') === a.valor,
+        }, a.etiqueta)));
+        bloque.appendChild(el('div', { class: 'formato-seccion-admin' }, [
+          el('span', { class: 'etiqueta-formato-admin' }, '🛠 Formato de esta sección (solo administrador):'),
+          el('label', {}, ['Fuente ', selectorFamilia]),
+          el('label', {}, ['Tamaño ', selectorTamano]),
+          el('label', {}, ['Ajuste ', selectorAjuste]),
+        ]));
+      }
+
       const contenedorPreguntas = el('div', {});
       function pintarPreguntas() {
         clear(contenedorPreguntas);
@@ -253,6 +366,14 @@ export function montarEditor(contenedor, examen, { sesion, onVolver }) {
           contenedorPreguntas.appendChild(crearEditorPregunta(p, {
             onChange: () => { subtotalSpan.textContent = `Subtotal: ${subtotalSeccion(seccion)} pts`; guardarYActualizar(); },
             onDelete: () => { seccion.preguntas.splice(pi, 1); pintarPreguntas(); guardarYActualizar(); },
+            onMoveUp: pi > 0 ? () => {
+              [seccion.preguntas[pi - 1], seccion.preguntas[pi]] = [seccion.preguntas[pi], seccion.preguntas[pi - 1]];
+              pintarPreguntas(); guardarYActualizar();
+            } : null,
+            onMoveDown: pi < seccion.preguntas.length - 1 ? () => {
+              [seccion.preguntas[pi + 1], seccion.preguntas[pi]] = [seccion.preguntas[pi], seccion.preguntas[pi + 1]];
+              pintarPreguntas(); guardarYActualizar();
+            } : null,
           }));
         });
       }

@@ -1,7 +1,7 @@
 // Arma la vista previa (y lo que se imprime) a partir del motor de paginación.
 
 import { el, clear } from './dom.js';
-import { renderPaginas, papelDeExamen } from './paginate.js';
+import { renderPaginas, papelDeExamen, estiloDocumentoDeExamen } from './paginate.js';
 
 // renderPaginas es asíncrono (precarga las imágenes antes de medir), así que dos
 // repintados seguidos —el maestro escribiendo— pueden terminar en desorden y
@@ -18,6 +18,13 @@ export async function pintarVistaPrevia(contenedor, examen, config, modoClave = 
   const papel = papelDeExamen(examen);
   contenedor.style.setProperty('--pagina-ancho', `${papel.ancho}cm`);
   contenedor.style.setProperty('--pagina-alto', `${papel.alto}cm`);
+  // Márgenes/interlineado/sangría del documento (solo un administrador los
+  // cambia, ver editor.js) — misma idea que el tamaño de hoja: hay que
+  // ponerlos aquí para que .page y lo que se mide en paginate.js coincidan.
+  const { margenCm, interlineado, sangriaCm } = estiloDocumentoDeExamen(examen);
+  contenedor.style.setProperty('--pagina-padding', `${margenCm}cm`);
+  contenedor.style.setProperty('--pagina-interlineado', `${interlineado}`);
+  contenedor.style.setProperty('--pagina-sangria', `${sangriaCm}cm`);
 
   const paginas = await renderPaginas(examen, config, modoClave);
   if (ultimoRepintado.get(contenedor) !== token) return; // llegó tarde: ya hay un repintado más nuevo

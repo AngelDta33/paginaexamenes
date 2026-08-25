@@ -11,7 +11,7 @@ import {
 } from './programasModel.js';
 import { obtenerConfig } from './store.js';
 import { esRevisorOAdmin } from './auth.js';
-import { coincideTexto, guardarFoco, restaurarFoco } from './filtros.js';
+import { coincideTexto, guardarFoco, restaurarFoco, campoBusqueda } from './filtros.js';
 
 const ANCHO_HOJA_CM = 27.94; // carta horizontal (11 x 8.5in)
 const ALTO_HOJA_CM = 21.59;
@@ -75,10 +75,7 @@ function renderizarResultadosProgramas(contenedor, contenedorResultados, sesion,
   let programas = programasCache || [];
 
   const barraFiltros = el('div', { class: 'barra-filtros' }, [
-    el('input', {
-      type: 'text', placeholder: 'Buscar por disciplina, campo formativo o grupos…', class: 'campo-busqueda', value: busquedaPrograma,
-      oninput: (e) => { busquedaPrograma = e.target.value; repintar(); },
-    }),
+    campoBusqueda({ placeholder: 'Buscar por disciplina, campo formativo o grupos…', valor: busquedaPrograma, onCambio: (v) => { busquedaPrograma = v; repintar(); } }),
     el('select', {
       onchange: (e) => { filtroTrimestrePrograma = e.target.value; repintar(); },
     }, [

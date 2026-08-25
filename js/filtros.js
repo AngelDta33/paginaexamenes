@@ -1,6 +1,8 @@
 // Helper mínimo de búsqueda de texto, compartido por las listas de Exámenes,
 // Grupos y Programas.
 
+import { el } from './dom.js';
+
 export function coincideTexto(consulta, ...campos) {
   if (!consulta) return true;
   const q = consulta.trim().toLowerCase();
@@ -28,4 +30,21 @@ export function restaurarFoco(contenedor, foco) {
   if (typeof campo.setSelectionRange === 'function' && foco.inicio != null) {
     campo.setSelectionRange(foco.inicio, foco.fin);
   }
+}
+
+// <input> de búsqueda usado en Exámenes/Grupos/Programas. Cuando se escribe
+// un acento o una letra compuesta (é, ñ, etc. armadas con tecla muerta o IME),
+// el navegador dispara "input" a medio componer (isComposing: true) antes del
+// evento final; si eso dispara un repintado que reemplaza el <input> a medio
+// camino, el navegador pierde la composición en curso y el acento no se
+// llega a escribir. Por eso solo se repinta cuando la composición ya terminó.
+export function campoBusqueda({ placeholder, valor, onCambio }) {
+  return el('input', {
+    type: 'text', placeholder, class: 'campo-busqueda', value: valor,
+    oninput: (e) => {
+      if (e.isComposing) return;
+      onCambio(e.target.value);
+    },
+    oncompositionend: (e) => { onCambio(e.target.value); },
+  });
 }

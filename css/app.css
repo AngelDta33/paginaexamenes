@@ -81,6 +81,20 @@ button {
 .barra-filtros select { width: auto; }
 .campo-busqueda { width: 260px !important; }
 
+/* --- Carpetas: navegación aparte de los filtros --- */
+.barra-carpetas { display: flex; gap: 0.4rem; margin-top: 0.8rem; flex-wrap: wrap; }
+.chip-carpeta {
+  background: #fff; border: 1px solid var(--borde); border-radius: 999px;
+  padding: 0.3rem 0.8rem; font-size: 0.85rem; color: var(--gris);
+  display: inline-flex; align-items: center; gap: 0.35rem;
+}
+.chip-carpeta.activo { background: var(--azul-suave); border-color: var(--azul); color: var(--azul); font-weight: bold; }
+.btn-quitar-chip { opacity: 0.6; }
+.btn-quitar-chip:hover { opacity: 1; color: var(--rojo); }
+.selector-carpeta-tarjeta { width: auto; margin: 0.3rem 0; font-size: 0.85rem; }
+
+.modal-nueva-carpeta { width: 100%; max-width: 360px; }
+
 /* --- Editor: layout 2 columnas --- */
 .editor-layout { display: grid; grid-template-columns: minmax(380px, 1fr) minmax(420px, 1.1fr); gap: 1.2rem; align-items: start; }
 @media (max-width: 980px) { .editor-layout { grid-template-columns: 1fr; } }
@@ -254,6 +268,16 @@ button {
 .acciones-modal .btn-primario, .acciones-modal .btn-secundario { flex: 1; }
 
 .modal-calendario { width: 100%; max-width: 520px; max-height: 85vh; overflow-y: auto; }
+
+.modal-duplicar { width: 100%; max-width: 420px; }
+.opciones-duplicar { display: flex; flex-direction: column; gap: 0.6rem; margin: 0.6rem 0; }
+.opcion-duplicar {
+  display: flex; align-items: flex-start; gap: 0.5rem; border: 1px solid var(--borde);
+  border-radius: 8px; padding: 0.6rem 0.7rem; cursor: pointer;
+}
+.opcion-duplicar:has(input:checked) { border-color: var(--azul); background: var(--azul-suave); }
+.opcion-duplicar input { margin-top: 0.2rem; flex: 0 0 auto; }
+.etiqueta-opcion-duplicar { font-weight: bold; }
 .fila-dias-clase { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.3rem; }
 .chip-dia-clase {
   display: flex; align-items: center; gap: 0.3rem; border: 1px solid var(--borde);
@@ -373,6 +397,27 @@ button {
 .comentario-texto { white-space: pre-wrap; }
 .comentario-meta { font-size: 0.78rem; color: #888; margin-top: 0.2rem; }
 .lista-comentarios .btn-icono { position: absolute; top: 0.35rem; right: 0.35rem; }
+
+/* Comentario de revisión por sección — solo se ve en el editor, nunca en el
+   examen ni en la vista previa. */
+.comentario-seccion { margin-top: 0.5rem; }
+.comentario-seccion-editable label { display: block; font-size: 0.82rem; color: var(--gris); margin-bottom: 0.2rem; }
+.comentario-seccion-editable textarea { border-color: #e0a800; }
+.comentario-seccion-aviso {
+  border-left: 4px solid #e0a800; background: #fff9e6; border-radius: 6px;
+  padding: 0.5rem 0.7rem; display: flex; flex-direction: column; gap: 0.3rem; align-items: flex-start;
+}
+.comentario-seccion-texto { white-space: pre-wrap; }
+
+/* Formato de sección / documento — solo lo ve un administrador */
+.formato-seccion-admin, .formato-documento-admin {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem;
+  margin-top: 0.5rem; padding: 0.5rem 0.7rem; background: #f1e9fe; border: 1px solid #c9a9f5; border-radius: 6px;
+  font-size: 0.85rem;
+}
+.etiqueta-formato-admin { font-weight: bold; color: #5f27c9; flex-basis: 100%; }
+.formato-seccion-admin select, .formato-documento-admin select,
+.formato-documento-admin input[type=number] { width: auto; }
 
 /* --- Soporte: botón flotante fijo abajo a la derecha (ver js/soporte.js) --- */
 .soporte-flotante {

@@ -642,6 +642,17 @@ function editorLecturaComprension(pregunta, onChange) {
         onChange,
         onDelete: () => { pregunta.subpreguntas.splice(i, 1); pintarSub(); onChange(); },
         subEtiqueta: `Subpregunta ${i + 1}`,
+        // Mover una subpregunta de lugar es la forma de "insertarla entre otras
+        // dos": se agrega al final con "+ Agregar subpregunta" y luego se sube
+        // hasta la posición donde debe quedar.
+        onMoveUp: i > 0 ? () => {
+          [pregunta.subpreguntas[i - 1], pregunta.subpreguntas[i]] = [pregunta.subpreguntas[i], pregunta.subpreguntas[i - 1]];
+          pintarSub(); onChange();
+        } : null,
+        onMoveDown: i < pregunta.subpreguntas.length - 1 ? () => {
+          [pregunta.subpreguntas[i + 1], pregunta.subpreguntas[i]] = [pregunta.subpreguntas[i], pregunta.subpreguntas[i + 1]];
+          pintarSub(); onChange();
+        } : null,
       }));
     });
   }
@@ -695,10 +706,18 @@ const ETIQUETAS_TIPO = {
 // compartido que agrega crearEditorPregunta).
 const TIPOS_IMAGEN_PROPIA = new Set(['identificar_imagen']);
 
-export function crearEditorPregunta(pregunta, { onChange, onDelete, subEtiqueta }) {
+export function crearEditorPregunta(pregunta, {
+  onChange, onDelete, subEtiqueta, onMoveUp, onMoveDown,
+}) {
   const cabecera = el('div', { class: 'cabecera-pregunta' }, [
     el('span', { class: 'etiqueta-tipo' }, subEtiqueta ? `${subEtiqueta} — ${ETIQUETAS_TIPO[pregunta.tipo]}` : ETIQUETAS_TIPO[pregunta.tipo]),
     pregunta.tipo !== 'lectura_comprension' ? campoValor(pregunta, onChange) : null,
+    el('button', {
+      type: 'button', class: 'btn-icono', title: 'Mover arriba', disabled: !onMoveUp, onclick: onMoveUp || null,
+    }, '▲'),
+    el('button', {
+      type: 'button', class: 'btn-icono', title: 'Mover abajo', disabled: !onMoveDown, onclick: onMoveDown || null,
+    }, '▼'),
     el('button', { type: 'button', class: 'btn-icono btn-eliminar', title: 'Eliminar reactivo', onclick: onDelete }, '🗑'),
   ]);
 

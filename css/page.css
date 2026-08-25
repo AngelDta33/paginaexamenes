@@ -1,25 +1,34 @@
 /* Estilos de la "hoja" — compartidos entre vista previa en pantalla e impresión.
-   El tamaño sale de --pagina-ancho / --pagina-alto, que js/preview.js le pone al
-   .hoja-contenedor a partir del papel elegido en el examen (ver TAMANOS_PAPEL en
-   js/paginate.js); los valores de aquí solo son el respaldo (oficio). El padding
-   de 1.8cm sí tiene que coincidir con PADDING_CM de js/paginate.js. */
+   El tamaño sale de --pagina-ancho / --pagina-alto, y el margen/interlineado de
+   --pagina-padding / --pagina-interlineado, que js/preview.js le pone al
+   .hoja-contenedor a partir del papel y del estiloDocumento del examen (ver
+   TAMANOS_PAPEL y estiloDocumentoDeExamen en js/paginate.js); los valores de
+   aquí solo son el respaldo (oficio, márgenes/interlineado de siempre). */
 
 .page {
   width: var(--pagina-ancho, 21.59cm);
   height: var(--pagina-alto, 33.02cm);
-  padding: 1.8cm;
+  padding: var(--pagina-padding, 1.8cm);
   box-sizing: border-box;
   background: #fff;
   color: #111;
   font-family: Arial, Helvetica, sans-serif;
   font-size: 11pt;
-  line-height: 1.5;
+  line-height: var(--pagina-interlineado, 1.5);
   position: relative;
   overflow: hidden;
   margin: 0 auto 1cm auto;
   box-shadow: 0 1px 6px rgba(0, 0, 0, 0.25);
   display: flex;
   flex-direction: column;
+}
+
+/* Sangría de todo el documento (solo administrador, ver editor.js) — se
+   aplica a los bloques de texto corrido; tablas, opciones y demás no llevan
+   sangría de primera línea porque no se ve bien ahí. */
+.instrucciones-generales, .instrucciones-seccion, .enunciado-texto,
+.texto-lectura-linea, .respuesta-modelo {
+  text-indent: var(--pagina-sangria, 0);
 }
 
 .page-header { flex: 0 0 auto; }

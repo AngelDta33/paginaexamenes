@@ -177,6 +177,31 @@ export function nuevaSubpregunta(tipo) {
   return nuevaPregunta(tipo);
 }
 
+function shuffleArray(arr) {
+  const copia = arr.slice();
+  for (let i = copia.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copia[i], copia[j]] = [copia[j], copia[i]];
+  }
+  return copia;
+}
+
+// Mezcla el orden de las secciones y, dentro de cada una, el orden de sus
+// reactivos — para que un examen Tipo B no quede con las preguntas en la
+// misma posición que su Tipo A (más difícil copiar mirando la hoja de al
+// lado), sin cambiar cuántas preguntas o subpreguntas tiene. Una lectura de
+// comprensión con sus subpreguntas se mueve como un solo bloque — nunca se
+// mete otro reactivo entre la lectura y sus preguntas — y el orden interno de
+// esas subpreguntas no se toca, porque suelen depender de leer el texto en
+// orden (pregunta 1 sobre el primer párrafo, etc.).
+export function mezclarOrdenExamen(examen) {
+  examen.secciones = shuffleArray(examen.secciones || []);
+  for (const seccion of examen.secciones) {
+    seccion.preguntas = shuffleArray(seccion.preguntas || []);
+  }
+  return examen;
+}
+
 // --- Cálculo de puntos ---
 
 function valorPregunta(p) {

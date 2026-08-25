@@ -11,7 +11,7 @@ import { montarRubrica } from './rubrica.js';
 import { montarEvaluacionesRubro } from './evaluacionesRubro.js';
 import { exportarGrupoExcel } from './exportarExcel.js';
 import { esRevisorOAdmin } from './auth.js';
-import { coincideTexto, guardarFoco, restaurarFoco } from './filtros.js';
+import { coincideTexto, guardarFoco, restaurarFoco, campoBusqueda } from './filtros.js';
 
 function fechaCorta(iso) {
   if (!iso) return '';
@@ -69,10 +69,7 @@ function renderizarResultadosGrupos(contenedor, contenedorResultados, sesion, { 
   let grupos = gruposCache || [];
 
   const barraFiltros = el('div', { class: 'barra-filtros' }, [
-    el('input', {
-      type: 'text', placeholder: 'Buscar por nombre, materia o grado…', class: 'campo-busqueda', value: busquedaGrupo,
-      oninput: (e) => { busquedaGrupo = e.target.value; repintar(); },
-    }),
+    campoBusqueda({ placeholder: 'Buscar por nombre, materia o grado…', valor: busquedaGrupo, onCambio: (v) => { busquedaGrupo = v; repintar(); } }),
   ]);
   if (soloConsulta) {
     const profesores = [...new Set(grupos.map((g) => g.profesorNombre).filter(Boolean))].sort();

@@ -8,7 +8,7 @@ import {
 } from './store.js';
 import {
   nuevoExamen, uid, ETIQUETAS_ESTADO, ETIQUETAS_ROL,
-  ENCABEZADO_INGLES_DEFECTO, ENCABEZADO_OFICIAL_DEFECTO,
+  ENCABEZADO_INGLES_DEFECTO, ENCABEZADO_OFICIAL_DEFECTO, mezclarOrdenExamen,
 } from './model.js';
 import { montarEditor } from './editor.js';
 import { montarPanelAdmin } from './admin.js';
@@ -17,7 +17,9 @@ import { montarListaGrupos, montarGrupo } from './grupos.js';
 import { montarListaProgramas, montarEditorPrograma } from './programas.js';
 import { montarSoporte } from './soporte.js';
 import { ETIQUETAS_TRIMESTRE } from './programasModel.js';
-import { coincideTexto, guardarFoco, restaurarFoco } from './filtros.js';
+import { coincideTexto, guardarFoco, restaurarFoco, campoBusqueda } from './filtros.js';
+import { listarCarpetas, guardarCarpeta, eliminarCarpeta } from './carpetasStore.js';
+import { nuevaCarpeta } from './carpetasModel.js';
 
 const vistaLogin = document.getElementById('vista-login');
 const vistaLista = document.getElementById('vista-lista');
@@ -99,6 +101,79 @@ function abrirModalCambiarContrasena() {
     mensaje,
   ]));
   document.body.appendChild(overlay);
+}
+
+// --- Modal: duplicar a Tipo B (elegir si se mezcla el orden de reactivos) ---
+
+function abrirModalDuplicarTipoB(examen, onListo) {
+  const overlay = el('div', { class: 'overlay-modal' });
+  let mezclar = false;
+  const opciones = [
+    { valor: false, etiqueta: 'Mantener orden de reactivos', detalle: 'El Tipo B queda con las secciones y preguntas en el mismo orden que el Tipo A.' },
+    { valor: true, etiqueta: 'Cambiar orden de reactivos', detalle: 'Se mezcla el orden de las secciones y de las preguntas dentro de cada una (mismas preguntas, mismas subpreguntas, distinto acomodo) para que no sea idéntico al Tipo A.' },
+  ];
+  const listaOpciones = el('div', { class: 'opciones-duplicar' }, opciones.map((op) => el('label', { class: 'opcion-duplicar' }, [
+    el('input', {
+      type: 'radio', name: 'orden-duplicar', checked: mezclar === op.valor,
+      onchange: () => { mezclar = op.valor; },
+    }),
+    el('div', {}, [
+      el('div', { class: 'etiqueta-opcion-duplicar' }, op.etiqueta),
+      el('div', { class: 'etiqueta-chica' }, op.detalle),
+    ]),
+  ])));
+
+  const btnConfirmar = el('button', {
+    type: 'button', class: 'btn-primario',
+    onclick: async () => {
+      const copia = JSON.parse(JSON.stringify(examen));
+      copia.id = uid('exam');
+      copia.tipoExamen = 'B';
+      copia.duplicadoDeId = examen.id;
+      copia.revisadoDistinto = false;
+      copia.estado = 'borrador';
+      copia.revisadoPor = null;
+      copia.revisadoEn = null;
+      copia.createdAt = new Date().toISOString();
+      if (mezclar) mezclarOrdenExamen(copia);
+      await guardarExamen(copia);
+      overlay.remove();
+      onListo(copia.id);
+    },
+  }, 'Duplicar');
+  const btnCancelar = el('button', { type: 'button', class: 'btn-secundario', onclick: () => overlay.remove() }, 'Cancelar');
+
+  overlay.appendChild(el('div', { class: 'panel modal-duplicar' }, [
+    el('h2', {}, 'Duplicar a Tipo B'),
+    listaOpciones,
+    el('div', { class: 'acciones-modal' }, [btnConfirmar, btnCancelar]),
+  ]));
+  document.body.appendChild(overlay);
+}
+
+// --- Modal: nueva carpeta (solo organiza la lista, no afecta los filtros) ---
+
+function abrirModalNuevaCarpeta(onListo) {
+  const overlay = el('div', { class: 'overlay-modal' });
+  const campoNombre = el('input', { type: 'text', placeholder: 'Ej. 1er trimestre, Exámenes finales…' });
+  const crear = async () => {
+    if (!campoNombre.value.trim()) return;
+    const carpeta = nuevaCarpeta(sesion, campoNombre.value);
+    await guardarCarpeta(carpeta);
+    overlay.remove();
+    onListo(carpeta.id);
+  };
+  campoNombre.addEventListener('keydown', (e) => { if (e.key === 'Enter') crear(); });
+  const btnCrear = el('button', { type: 'button', class: 'btn-primario', onclick: crear }, 'Crear');
+  const btnCancelar = el('button', { type: 'button', class: 'btn-secundario', onclick: () => overlay.remove() }, 'Cancelar');
+
+  overlay.appendChild(el('div', { class: 'panel modal-nueva-carpeta' }, [
+    el('h2', {}, '📁 Nueva carpeta'),
+    el('div', { class: 'campo' }, [el('label', {}, 'Nombre'), campoNombre]),
+    el('div', { class: 'acciones-modal' }, [btnCrear, btnCancelar]),
+  ]));
+  document.body.appendChild(overlay);
+  campoNombre.focus();
 }
 
 // --- Login ---
@@ -239,6 +314,11 @@ let busquedaExamen = '';
 // todavía está esperando la respuesta de red, así que pierde el foco y solo
 // se puede borrar de a un carácter (hay que volver a hacer clic cada vez).
 let examenesCache = null;
+let carpetasCache = null;
+// null = todos los exámenes; 'sin-carpeta' = solo los que no tienen carpeta;
+// cualquier otro valor = el id de la carpeta activa. Las carpetas solo
+// acomodan la lista — no son un filtro más, se aplican aparte de esos.
+let carpetaActivaId = null;
 
 async function pintarLista() {
   clear(vistaLista);
@@ -268,6 +348,10 @@ async function pintarLista() {
       onclick: () => { mostrarVista(vistaConfig); pintarConfig(irALista); },
     }, '⚙ Datos de la escuela'));
   }
+  controles.push(el('button', {
+    type: 'button', class: 'btn-secundario',
+    onclick: () => abrirModalNuevaCarpeta((carpetaId) => { carpetaActivaId = carpetaId; pintarLista(); }),
+  }, '📁 Nueva carpeta'));
   controles.push(el('label', { class: 'btn-secundario', style: 'display:inline-block;' }, [
     '⬆ Importar respaldo (.json)',
     el('input', {
@@ -302,7 +386,7 @@ async function pintarLista() {
   contenedorResultados.appendChild(cargando);
 
   try {
-    examenesCache = await listarExamenes(sesion);
+    [examenesCache, carpetasCache] = await Promise.all([listarExamenes(sesion), listarCarpetas(sesion)]);
   } catch (err) {
     cargando.textContent = `No se pudieron cargar los exámenes: ${err.message}`;
     return;
@@ -321,12 +405,50 @@ function renderizarResultadosExamenes(contenedorResultados) {
 
   const puedeVerTodos = esRevisorOAdmin(sesion);
   let examenes = examenesCache || [];
+  const todosLosExamenes = examenesCache || [];
+  const carpetas = carpetasCache || [];
+
+  // Carpetas: solo acomodan la lista, van aparte de la barra de filtros y no
+  // se cruzan con ella (un filtro de materia/tipo/estado se aplica dentro de
+  // la carpeta activa, no al revés).
+  if (carpetas.length > 0 || carpetaActivaId) {
+    const chip = (valor, etiqueta, cantidad) => el('button', {
+      type: 'button',
+      class: `chip-carpeta${carpetaActivaId === valor ? ' activo' : ''}`,
+      onclick: () => { carpetaActivaId = valor; renderizarResultadosExamenes(contenedorResultados); },
+    }, `${etiqueta} (${cantidad})`);
+    const barraCarpetas = el('div', { class: 'barra-carpetas' }, [
+      chip(null, 'Todos', todosLosExamenes.length),
+      chip('sin-carpeta', 'Sin carpeta', todosLosExamenes.filter((ex) => !ex.carpetaId).length),
+      ...carpetas.map((carp) => {
+        const chipEl = chip(carp.id, carp.nombre, todosLosExamenes.filter((ex) => ex.carpetaId === carp.id).length);
+        if (carp.profesorId === sesion.uid) {
+          chipEl.appendChild(el('span', {
+            class: 'btn-quitar-chip', title: 'Eliminar carpeta',
+            onclick: async (e) => {
+              e.stopPropagation();
+              if (!confirm(`¿Eliminar la carpeta "${carp.nombre}"? Los exámenes no se borran, solo dejan de estar en esta carpeta.`)) return;
+              const enEsaCarpeta = todosLosExamenes.filter((ex) => ex.carpetaId === carp.id);
+              await Promise.all(enEsaCarpeta.map((ex) => { ex.carpetaId = null; return guardarExamen(ex); }));
+              await eliminarCarpeta(carp.id);
+              if (carpetaActivaId === carp.id) carpetaActivaId = null;
+              pintarLista();
+            },
+          }, '✕'));
+        }
+        return chipEl;
+      }),
+    ]);
+    contenedorResultados.appendChild(barraCarpetas);
+  }
+  if (carpetaActivaId === 'sin-carpeta') {
+    examenes = examenes.filter((ex) => !ex.carpetaId);
+  } else if (carpetaActivaId) {
+    examenes = examenes.filter((ex) => ex.carpetaId === carpetaActivaId);
+  }
 
   const barraFiltros = el('div', { class: 'barra-filtros' }, [
-    el('input', {
-      type: 'text', placeholder: 'Buscar por materia, grado o profesor(a)…', class: 'campo-busqueda', value: busquedaExamen,
-      oninput: (e) => { busquedaExamen = e.target.value; renderizarResultadosExamenes(contenedorResultados); },
-    }),
+    campoBusqueda({ placeholder: 'Buscar por materia, grado o profesor(a)…', valor: busquedaExamen, onCambio: (v) => { busquedaExamen = v; renderizarResultadosExamenes(contenedorResultados); } }),
     el('select', {
       onchange: (e) => { filtroTipoExamen = e.target.value; renderizarResultadosExamenes(contenedorResultados); },
     }, [
@@ -385,23 +507,22 @@ function renderizarResultadosExamenes(contenedorResultados) {
       puedeVerTodos ? `Profesor(a): ${examen.profesorNombre || '—'}` : null,
     ]),
     el('div', { class: `insignia-estado insignia-${examen.estado || 'borrador'}` }, ETIQUETAS_ESTADO[examen.estado] || 'Borrador'),
+    carpetas.length > 0 ? el('select', {
+      class: 'selector-carpeta-tarjeta', title: 'Mover a una carpeta',
+      onchange: async (e) => {
+        examen.carpetaId = e.target.value || null;
+        await guardarExamen(examen);
+        renderizarResultadosExamenes(contenedorResultados);
+      },
+    }, [
+      el('option', { value: '', selected: !examen.carpetaId }, '📁 Sin carpeta'),
+      ...carpetas.map((c) => el('option', { value: c.id, selected: examen.carpetaId === c.id }, `📁 ${c.nombre}`)),
+    ]) : null,
     el('div', { class: 'acciones-tarjeta' }, [
       el('button', { type: 'button', class: 'btn-primario', onclick: () => irAEditor(examen.id) }, 'Abrir'),
       el('button', {
         type: 'button', class: 'btn-secundario',
-        onclick: async () => {
-          const copia = JSON.parse(JSON.stringify(examen));
-          copia.id = uid('exam');
-          copia.tipoExamen = 'B';
-          copia.duplicadoDeId = examen.id;
-          copia.revisadoDistinto = false;
-          copia.estado = 'borrador';
-          copia.revisadoPor = null;
-          copia.revisadoEn = null;
-          copia.createdAt = new Date().toISOString();
-          await guardarExamen(copia);
-          irAEditor(copia.id);
-        },
+        onclick: () => abrirModalDuplicarTipoB(examen, irAEditor),
       }, 'Duplicar → Tipo B'),
       el('button', { type: 'button', class: 'btn-secundario', onclick: () => exportarExamenJSON(examen) }, 'Exportar'),
       el('button', {
