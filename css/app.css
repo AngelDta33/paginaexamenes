@@ -269,6 +269,10 @@ button {
 
 .modal-calendario { width: 100%; max-width: 520px; max-height: 85vh; overflow-y: auto; }
 
+.modal-motivo-falta { width: 100%; max-width: 420px; }
+.modal-motivo-falta textarea { width: 100%; margin-bottom: 0.6rem; }
+.modal-motivo-falta .chip-escala { margin-bottom: 0.6rem; }
+
 .modal-duplicar { width: 100%; max-width: 420px; }
 .opciones-duplicar { display: flex; flex-direction: column; gap: 0.6rem; margin: 0.6rem 0; }
 .opcion-duplicar {
@@ -321,8 +325,18 @@ button {
 .tema-morado { --azul: #7c3aed; --azul-suave: #f1e9fe; --azul-oscuro: #5f27c9; }
 
 .lista-alumnos { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.6rem; }
-.selector-pestanas { display: flex; gap: 0.5rem; margin: 1rem 0 0.8rem 0; }
+.selector-pestanas { display: flex; gap: 0.5rem; margin: 1rem 0 0.8rem 0; align-items: center; flex-wrap: wrap; }
 .selector-pestanas button { font-weight: normal; }
+
+/* Recuadro "Mostrar como porcentaje" (barra de pestañas del grupo) y el de
+   "no preguntarme el motivo" del modal de faltas: misma casilla con etiqueta. */
+.chip-escala {
+  display: inline-flex; align-items: center; gap: 0.4rem; cursor: pointer;
+  font-size: 0.88rem; color: var(--gris); border: 1px solid var(--borde);
+  border-radius: 6px; padding: 0.35rem 0.6rem; white-space: nowrap;
+}
+.chip-escala:has(input:checked) { border-color: var(--azul); background: var(--azul-suave); color: var(--azul); }
+.chip-escala input { flex: 0 0 auto; margin: 0; }
 .aviso-vacio { color: var(--gris); }
 
 /* --- Tablas estilo Excel (pase de lista y rúbrica) --- */
@@ -360,8 +374,20 @@ button {
 .estado-falta .btn-celda-estado { background: #fbdcd8; border-color: #e79890; color: #9c2c22; }
 .estado-retardo .btn-celda-estado { background: #fdf0c4; border-color: #e8cb6a; color: #8a6d00; }
 .estado-justificada .btn-celda-estado { background: #e3e6ea; border-color: #b9c0c9; color: #444; }
+.fila-celda-asistencia { display: flex; align-items: center; justify-content: center; }
 .btn-nota-dia { background: none; border: none; opacity: 0.25; font-size: 0.85rem; padding: 0.1rem; }
 .btn-nota-dia.tiene-nota { opacity: 1; }
+
+/* Enlace "motivo" que aparece bajo una celda en falta: el maestro lo usa solo si
+   tiene algo que aclarar (casi nunca se sabe al momento de marcar la falta). */
+.btn-motivo-falta {
+  display: block; width: 100%; margin-top: 0.1rem; padding: 0.05rem;
+  background: none; border: none; font-size: 0.68rem; line-height: 1.2;
+  color: #9c2c22; opacity: 0.65; text-decoration: underline; cursor: pointer;
+}
+.btn-motivo-falta:hover:not(:disabled) { opacity: 1; }
+.btn-motivo-falta.tiene-motivo { opacity: 1; font-weight: bold; text-decoration: none; }
+.btn-motivo-falta:disabled { cursor: default; text-decoration: none; }
 .celda-totales { font-weight: bold; color: var(--rojo); }
 
 .leyenda-asistencia { display: flex; gap: 1.1rem; flex-wrap: wrap; margin: 0.5rem 0 0.9rem 0; font-size: 0.85rem; color: var(--gris); }
@@ -381,8 +407,37 @@ button {
 .input-porcentaje-rubro { width: 3.6rem !important; padding: 0.15rem !important; }
 .input-calificacion { width: 4rem !important; text-align: center; }
 .celda-promedio { font-weight: bold; color: var(--azul); }
+.col-calificacion-final { min-width: 6.5rem; }
+.celda-calificacion-final { font-weight: bold; color: var(--azul-oscuro); background: var(--azul-suave); font-size: 1.02rem; }
 .insignia-auto { display: inline-block; background: var(--azul-suave); color: var(--azul); border-radius: 4px; padding: 0 0.3rem; font-size: 0.7rem; font-weight: normal; margin-left: 0.3rem; vertical-align: middle; }
 .celda-asistencia-auto { font-weight: bold; color: var(--azul); background: var(--azul-suave); }
+
+/* Columnas informativas de "Pase de lista" en la rúbrica: no califican, solo
+   marcan quién llega al 80% de asistencia (derecho a examen). */
+.col-pase-lista { min-width: 7.5rem; }
+.insignia-info {
+  display: inline-block; background: #fff3cd; color: #8a6d00; border-radius: 4px;
+  padding: 0 0.3rem; font-size: 0.68rem; font-weight: normal;
+}
+.celda-pase-lista { font-weight: bold; }
+.celda-pase-lista.con-derecho { color: #1c6b3a; background: #eaf7ef; }
+.celda-pase-lista.sin-derecho { color: #9c2c22; background: #fdeeec; }
+.opcion-pase-lista {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 0.15rem;
+  text-align: left; background: #fff; width: 100%; font-size: 0.95rem;
+}
+.opcion-pase-lista:hover { border-color: var(--azul); background: var(--azul-suave); }
+.modal-pase-lista { width: 100%; max-width: 440px; }
+.titulo-modal-pase-lista { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.titulo-modal-pase-lista h2 { margin: 0; }
+.btn-config-pase-lista { font-size: 1.1rem; line-height: 1; flex: 0 0 auto; }
+.config-pase-lista {
+  border: 1px solid var(--borde); border-radius: 8px; padding: 0.7rem;
+  margin: 0.5rem 0; background: #fafafa;
+}
+.config-pase-lista .campo { margin-bottom: 0.3rem; }
+.fila-umbral { display: flex; align-items: center; gap: 0.35rem; }
+.fila-umbral input { width: 5rem !important; text-align: center; }
 
 /* Calificar una evaluación por número de aciertos (→ base 10 automática) */
 .fila-aciertos-rubro { display: flex; align-items: center; gap: 0.15rem; justify-content: center; font-weight: normal; font-size: 0.75rem; color: var(--texto-suave, #666); margin-top: 0.2rem; }

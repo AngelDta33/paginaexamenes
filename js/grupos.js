@@ -5,7 +5,7 @@ import { el, clear } from './dom.js';
 import {
   listarGrupos, obtenerGrupo, guardarGrupo, eliminarGrupo,
 } from './gruposStore.js';
-import { nuevoGrupo, nuevoAlumno } from './gruposModel.js';
+import { nuevoGrupo, nuevoAlumno, usaPorcentaje } from './gruposModel.js';
 import { montarListaAsistencia } from './listaAsistencia.js';
 import { montarRubrica } from './rubrica.js';
 import { montarEvaluacionesRubro } from './evaluacionesRubro.js';
@@ -272,8 +272,28 @@ export async function montarGrupo(contenedor, grupoId, sesion, { onVolver }) {
   btnTabLista.onclick = () => { pestanaActiva = 'lista'; pintarPestana(); };
   btnTabRubrica.onclick = () => { pestanaActiva = 'rubrica'; pintarPestana(); };
 
+  // Escala de todo el grupo: base 10 (por defecto) o porcentaje. Vive en la barra
+  // de pestañas, no dentro de una pestaña, porque afecta al pase de lista, a la
+  // rúbrica, a la captura de evaluaciones y al Excel por igual. Solo cambia cómo
+  // se ve y cómo se captura: lo guardado sigue siendo base 10 (ver gruposModel.js).
+  const chkPorcentaje = el('input', {
+    type: 'checkbox', checked: usaPorcentaje(grupo),
+    onchange: (e) => {
+      grupo.mostrarPorcentaje = e.target.checked;
+      // Un revisor/administrador no puede escribir en el grupo de otro maestro:
+      // para ellos el recuadro cambia la vista y el Excel de esta sesión, pero no
+      // se guarda (si se intentara, Firestore rechazaría la escritura).
+      if (!soloLectura) guardarConDebounce();
+      pintarPestana();
+    },
+  });
+  const recuadroPorcentaje = el('label', {
+    class: 'chip-escala', style: 'margin-left:auto;',
+    title: 'Muestra y captura las calificaciones de 0 a 100% en vez de 0 a 10. Se refleja igual en el Excel exportado.',
+  }, [chkPorcentaje, 'Mostrar como porcentaje']);
+
   const btnExportarExcel = el('button', {
-    type: 'button', class: 'btn-primario', style: 'margin-left:auto;',
+    type: 'button', class: 'btn-primario',
     onclick: async () => {
       btnExportarExcel.disabled = true; btnExportarExcel.textContent = 'Generando…';
       try {
@@ -292,7 +312,7 @@ export async function montarGrupo(contenedor, grupoId, sesion, { onVolver }) {
   }
   contenedor.appendChild(panelDatos);
   contenedor.appendChild(panelAlumnos);
-  contenedor.appendChild(el('div', { class: 'selector-pestanas' }, [btnTabLista, btnTabRubrica, btnExportarExcel]));
+  contenedor.appendChild(el('div', { class: 'selector-pestanas' }, [btnTabLista, btnTabRubrica, recuadroPorcentaje, btnExportarExcel]));
   contenedor.appendChild(contenedorPestana);
 
   pintarPestana();

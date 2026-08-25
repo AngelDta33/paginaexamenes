@@ -8,6 +8,7 @@ import { guardarGrupo } from './gruposStore.js';
 import {
   nuevaEvaluacion, calificacionAlumno, sumaPorcentajesEvaluaciones, validarEvaluaciones,
   notaDeEvaluacion, redistribuirPorcentajesEvaluaciones, esRubroExamen,
+  usaPorcentaje, formatearNota, notaAEscala, escalaANota, atributosInputNota,
 } from './gruposModel.js';
 
 export function montarEvaluacionesRubro(contenedor, grupo, rubroId, { onVolver, soloLectura = false }) {
@@ -19,6 +20,11 @@ export function montarEvaluacionesRubro(contenedor, grupo, rubroId, { onVolver, 
     return;
   }
 
+  // Misma escala que la rúbrica general (ver usaPorcentaje en gruposModel.js). No
+  // aplica a las casillas de aciertos: ahí se capturan aciertos, no una
+  // calificación — lo que sí cambia de escala es el "= 8.5" que las acompaña.
+  const escalaPorcentaje = usaPorcentaje(grupo);
+  const attrsNota = atributosInputNota(escalaPorcentaje);
   let guardarTimeout = null;
   const estadoGuardado = el('span', { class: 'estado-guardado' });
   function guardarConDebounce() {
@@ -58,7 +64,7 @@ export function montarEvaluacionesRubro(contenedor, grupo, rubroId, { onVolver, 
   // calificación en base 10 que se está calculando en vivo para ese alumno.
   function actualizarHintNota(ev, hint, cal) {
     const nota = notaDeEvaluacion(ev, cal.notasEvaluacion[ev.id]);
-    hint.textContent = nota === null ? '' : `= ${nota.toFixed(1)}`;
+    hint.textContent = nota === null ? '' : `= ${formatearNota(nota, escalaPorcentaje, 1)}`;
   }
 
   const barraValidacion = el('div', { class: 'barra-validacion' });
@@ -176,7 +182,7 @@ export function montarEvaluacionesRubro(contenedor, grupo, rubroId, { onVolver, 
           suma += nota * (Number(ev.porcentaje) || 0) / 100;
           porcentajeCapturado += Number(ev.porcentaje) || 0;
         }
-        celdaPromedio.textContent = porcentajeCapturado === 0 ? '—' : suma.toFixed(2);
+        celdaPromedio.textContent = porcentajeCapturado === 0 ? '—' : formatearNota(suma, escalaPorcentaje, 2);
       }
       actualizarPromedio();
       actualizadoresPromedio.push(actualizarPromedio);
@@ -184,14 +190,19 @@ export function montarEvaluacionesRubro(contenedor, grupo, rubroId, { onVolver, 
       const celdas = evaluaciones.map((ev) => {
         const total = Number(ev.totalAciertos) || 0;
         const hint = total > 0 ? el('span', { class: 'hint-nota-aciertos' }) : null;
+        const porAciertos = total > 0;
         const input = el('input', {
           type: 'number', class: 'input-calificacion',
-          min: '0', max: total > 0 ? String(total) : '10', step: total > 0 ? '1' : '0.1',
+          min: '0', max: porAciertos ? String(total) : attrsNota.max, step: porAciertos ? '1' : attrsNota.step,
           disabled: soloLectura,
-          value: cal.notasEvaluacion[ev.id] ?? '',
-          title: total > 0 ? `Escribe los aciertos (de ${total}); la calificación se calcula sola.` : 'Calificación 0-10',
+          value: porAciertos ? (cal.notasEvaluacion[ev.id] ?? '') : notaAEscala(cal.notasEvaluacion[ev.id], escalaPorcentaje),
+          title: porAciertos
+            ? `Escribe los aciertos (de ${total}); la calificación se calcula sola.`
+            : `Calificación ${escalaPorcentaje ? '0-100%' : '0-10'}`,
           oninput: (e) => {
-            cal.notasEvaluacion[ev.id] = e.target.value === '' ? null : parseFloat(e.target.value);
+            cal.notasEvaluacion[ev.id] = porAciertos
+              ? (e.target.value === '' ? null : parseFloat(e.target.value))
+              : escalaANota(e.target.value, escalaPorcentaje);
             if (hint) actualizarHintNota(ev, hint, cal);
             actualizarPromedio();
             guardarConDebounce();
@@ -231,7 +242,7 @@ export function montarEvaluacionesRubro(contenedor, grupo, rubroId, { onVolver, 
   contenedor.appendChild(el('button', { type: 'button', class: 'btn-secundario', onclick: onVolver, style: 'margin-bottom:0.8rem;' }, '← Volver a la rúbrica'));
   contenedor.appendChild(el('div', { class: 'panel' }, [
     el('h2', {}, [`${nombreRubro} `, estadoGuardado]),
-    el('p', { class: 'etiqueta-chica' }, soloLectura ? 'Solo lectura: no se puede editar esta captura.' : `Cada "${nombreRubro}" que agregues aquí es una captura distinta, con su propio porcentaje — igual que los rubros de la rúbrica. El resultado alimenta sola la calificación de este rubro en "Rúbrica y calificaciones"; ya no se captura nada allá para "${nombreRubro}". ${permiteAciertos ? 'Como es un rubro de examen, puedes poner un "total de aciertos": captura los aciertos de cada alumno y la calificación en base 10 se calcula sola. Si lo dejas vacío, capturas la calificación directo.' : 'Las calificaciones van en base 10 (0 a 10). La captura por número de aciertos solo está disponible en los rubros de examen.'}`),
+    el('p', { class: 'etiqueta-chica' }, soloLectura ? 'Solo lectura: no se puede editar esta captura.' : `Cada "${nombreRubro}" que agregues aquí es una captura distinta, con su propio porcentaje — igual que los rubros de la rúbrica. El resultado alimenta sola la calificación de este rubro en "Rúbrica y calificaciones"; ya no se captura nada allá para "${nombreRubro}". ${permiteAciertos ? 'Como es un rubro de examen, puedes poner un "total de aciertos": captura los aciertos de cada alumno y la calificación en base 10 se calcula sola. Si lo dejas vacío, capturas la calificación directo.' : `Las calificaciones van en escala ${escalaPorcentaje ? '0 a 100%' : '0 a 10'}. La captura por número de aciertos solo está disponible en los rubros de examen.`}`),
     soloLectura ? null : el('div', { class: 'rejilla-campos' }, [
       el('div', { class: 'campo' }, [el('label', {}, 'Nombre'), campoNombre]),
       el('div', { class: 'campo' }, [el('label', {}, 'Descripción (opcional)'), campoDescripcion]),

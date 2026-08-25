@@ -1,16 +1,20 @@
 // Rúbrica de evaluación estilo Excel: alumnos en filas, un rubro por columna,
 // con porcentaje editable por columna, puntos extra y promedio calculado en vivo.
 //
-// Dos tipos de rubro se calculan solos (celda de solo lectura, con insignia "auto"):
-// - Asistencia: a partir del pase de lista.
+// Se calculan solos (celda de solo lectura, con insignia "auto"):
 // - Cualquier rubro con evaluaciones (ej. varios exámenes dentro de "Examen"): el
 //   botón con su nombre, arriba de "+ Agregar rubro", abre esa captura detallada.
+// - El viejo rubro "Asistencia", en los grupos que todavía lo tengan: ya no se
+//   puede agregar (lo reemplazó la columna informativa de pase de lista), pero se
+//   sigue mostrando y contando para no alterar rúbricas ya armadas.
 
 import { el, clear } from './dom.js';
 import { guardarGrupo, listarAsistencias } from './gruposStore.js';
 import {
-  nuevoRubro, nuevoRubroAsistencia, esRubroAsistencia, tieneEvaluaciones, calificacionAlumno,
+  nuevoRubro, esRubroAsistencia, tieneEvaluaciones, calificacionAlumno,
   sumaPorcentajes, validarRubros, calcularPromedio, valorRubro, crearRubrosEstandar,
+  usaPorcentaje, formatearNota, notaAEscala, escalaANota, atributosInputNota, calificacionFinal,
+  columnasPaseDeLista, trimestresConFechas, porcentajeAsistencia, umbralDerechoExamen,
 } from './gruposModel.js';
 
 export async function montarRubrica(contenedor, grupo, { onAbrirEvaluaciones, soloLectura = false } = {}) {
@@ -26,6 +30,11 @@ export async function montarRubrica(contenedor, grupo, { onAbrirEvaluaciones, so
   }
 
   clear(contenedor);
+  // Base 10 o porcentaje: solo cambia lo que se ve y lo que se captura, nunca lo
+  // que se guarda (ver usaPorcentaje en gruposModel.js). El recuadro que lo
+  // prende vive en la barra de pestañas del grupo y vuelve a montar esta vista.
+  const escalaPorcentaje = usaPorcentaje(grupo);
+  const attrsNota = atributosInputNota(escalaPorcentaje);
   let guardarTimeout = null;
   const estadoGuardado = el('span', { class: 'estado-guardado' });
 
@@ -84,6 +93,9 @@ export async function montarRubrica(contenedor, grupo, { onAbrirEvaluaciones, so
       return;
     }
 
+    const columnasPase = columnasPaseDeLista(grupo, dias);
+    const umbral = umbralDerechoExamen(grupo);
+
     // Recalcular el promedio de cada alumno sin reconstruir la tabla — así el
     // input de porcentaje no pierde el foco entre teclas (antes se llamaba a
     // pintarTabla() en cada oninput y solo se alcanzaba a escribir un dígito).
@@ -127,14 +139,32 @@ export async function montarRubrica(contenedor, grupo, { onAbrirEvaluaciones, so
       }),
       el('th', {}, 'Extra'),
       el('th', {}, 'Promedio'),
+      el('th', { class: 'col-calificacion-final', title: 'El promedio redondeado: de 6 en adelante el .5 sube (6.5 → 7), pero abajo de 6 siempre baja (5.9 → 5).' }, 'Calificación Final'),
+      ...columnasPase.map((col) => el('th', { class: 'col-pase-lista' }, [
+        el('div', {}, col.titulo),
+        el('div', { class: 'fila-porcentaje-rubro' }, [
+          el('span', { class: 'insignia-info' }, 'informativa'),
+          soloLectura ? null : el('button', {
+            type: 'button', class: 'btn-icono btn-eliminar', title: 'Quitar el pase de lista de la rúbrica',
+            onclick: () => {
+              grupo.columnaPaseDeLista = null;
+              pintarTabla(); guardarConDebounce();
+            },
+          }, '✕'),
+        ]),
+      ])),
     ]);
 
     const filas = alumnosActivos.map((alumno) => {
       const cal = asegurarCalificacion(alumno.id);
       const celdaPromedio = el('td', { class: 'celda-promedio' });
+      const celdaFinal = el('td', { class: 'celda-calificacion-final' });
       function actualizarPromedio() {
         const p = calcularPromedio(grupo, alumno.id, dias);
-        celdaPromedio.textContent = p === null ? '—' : p.toFixed(2);
+        celdaPromedio.textContent = formatearNota(p, escalaPorcentaje, 2);
+        // El redondeo vive solo aquí: "Promedio" sigue mostrando la calificación
+        // real para que el maestro vea de dónde salió la que va a boleta.
+        celdaFinal.textContent = formatearNota(calificacionFinal(p), escalaPorcentaje, 0);
       }
       actualizarPromedio();
       actualizadoresPromedio.push(actualizarPromedio);
@@ -142,14 +172,14 @@ export async function montarRubrica(contenedor, grupo, { onAbrirEvaluaciones, so
       const celdasRubro = grupo.rubros.map((rubro) => {
         if (esRubroAsistencia(rubro) || tieneEvaluaciones(rubro)) {
           const valor = valorRubro(grupo, rubro, alumno.id, dias);
-          return el('td', { class: 'celda-asistencia-auto' }, valor === null ? '—' : valor.toFixed(1));
+          return el('td', { class: 'celda-asistencia-auto' }, formatearNota(valor, escalaPorcentaje, 1));
         }
         return el('td', {}, [
           el('input', {
-            type: 'number', class: 'input-calificacion', min: '0', max: '10', step: '0.1', disabled: soloLectura,
-            value: cal.valores[rubro.id] ?? '',
+            type: 'number', class: 'input-calificacion', min: '0', max: attrsNota.max, step: attrsNota.step, disabled: soloLectura,
+            value: notaAEscala(cal.valores[rubro.id], escalaPorcentaje),
             oninput: (e) => {
-              cal.valores[rubro.id] = e.target.value === '' ? null : parseFloat(e.target.value);
+              cal.valores[rubro.id] = escalaANota(e.target.value, escalaPorcentaje);
               actualizarPromedio();
               guardarConDebounce();
             },
@@ -159,16 +189,32 @@ export async function montarRubrica(contenedor, grupo, { onAbrirEvaluaciones, so
 
       const celdaExtra = el('td', {}, [
         el('input', {
-          type: 'number', class: 'input-calificacion', step: '0.1', value: cal.extra || 0, disabled: soloLectura,
-          oninput: (e) => { cal.extra = parseFloat(e.target.value) || 0; actualizarPromedio(); guardarConDebounce(); },
+          type: 'number', class: 'input-calificacion', step: attrsNota.step,
+          value: notaAEscala(cal.extra || 0, escalaPorcentaje), disabled: soloLectura,
+          oninput: (e) => { cal.extra = escalaANota(e.target.value, escalaPorcentaje) || 0; actualizarPromedio(); guardarConDebounce(); },
         }),
       ]);
+
+      // Siempre en porcentaje, aunque el grupo esté en base 10: lo que el maestro
+      // compara aquí es contra el 80% de asistencia que da derecho a examen.
+      const celdasPase = columnasPase.map((col) => {
+        const pct = porcentajeAsistencia(grupo, alumno.id, col.dias);
+        const cumple = pct !== null && pct >= umbral;
+        return el('td', {
+          class: `celda-pase-lista ${pct === null ? '' : (cumple ? 'con-derecho' : 'sin-derecho')}`,
+          title: pct === null
+            ? 'Sin días marcados en este periodo.'
+            : `${cumple ? 'Cumple' : 'No cumple'} el ${umbral}% de asistencia para tener derecho a examen.`,
+        }, pct === null ? '—' : `${pct.toFixed(0)}%`);
+      });
 
       return el('tr', {}, [
         el('td', { class: 'celda-nombre-alumno' }, alumno.nombre),
         ...celdasRubro,
         celdaExtra,
         celdaPromedio,
+        celdaFinal,
+        ...celdasPase,
       ]);
     });
 
@@ -186,17 +232,96 @@ export async function montarRubrica(contenedor, grupo, { onAbrirEvaluaciones, so
     },
   }, '+ Agregar rubro');
 
-  const btnAgregarRubroAsistencia = el('button', {
+  // Columna(s) de pase de lista: no califican, solo dejan ver quién llega al 80%
+  // de asistencia y tiene derecho a examen. El maestro elige si las quiere por
+  // trimestre o una sola del ciclo completo.
+  const btnPaseDeLista = el('button', {
     type: 'button', class: 'btn-secundario',
-    onclick: () => {
-      if ((grupo.rubros || []).some(esRubroAsistencia)) {
-        alert('Ya tienes un rubro de asistencia en esta rúbrica.');
+    onclick: () => abrirModalPaseDeLista(),
+  }, '+ Agregar pase de lista');
+
+  function abrirModalPaseDeLista() {
+    const overlay = el('div', { class: 'overlay-modal tema-verde' });
+    const mensaje = el('p', { class: 'mensaje-login' });
+
+    function alPresionarTecla(e) { if (e.key === 'Escape') cerrar(); }
+    function cerrar() {
+      document.removeEventListener('keydown', alPresionarTecla);
+      overlay.remove();
+    }
+    document.addEventListener('keydown', alPresionarTecla);
+
+    function elegir(modo) {
+      if (modo === 'trimestral' && trimestresConFechas(grupo).length === 0) {
+        mensaje.textContent = 'Este grupo todavía no tiene trimestres con fechas. Captúralos en "Calendario del curso", dentro de la pestaña Pase de lista.';
         return;
       }
-      grupo.rubros.push(nuevoRubroAsistencia(0));
-      pintarValidacion(); pintarBotonesRubro(); pintarTabla(); guardarConDebounce();
-    },
-  }, '+ Agregar rubro de asistencia');
+      grupo.columnaPaseDeLista = modo;
+      cerrar();
+      pintarTabla();
+      guardarConDebounce();
+    }
+
+    // Engranaje: el mínimo de asistencia que da derecho a examen es 80% en la
+    // escuela, pero varía por materia, así que se puede ajustar por grupo. Va
+    // plegado para no estorbarle a quien solo viene a elegir la lista.
+    const campoUmbral = el('input', {
+      type: 'number', min: '0', max: '100', step: '1', value: umbralDerechoExamen(grupo),
+      oninput: (e) => {
+        const n = parseFloat(e.target.value);
+        if (!Number.isFinite(n) || n < 0 || n > 100) return; // se ignora hasta que sea válido
+        grupo.umbralDerechoExamen = n;
+        textoUmbral.textContent = textoAyudaUmbral();
+        pintarTabla(); // recolorea las columnas al vuelo
+        guardarConDebounce();
+      },
+    });
+    const panelConfig = el('div', { class: 'config-pase-lista oculto' }, [
+      el('div', { class: 'campo' }, [
+        el('label', {}, 'Porcentaje mínimo necesario para examen'),
+        el('div', { class: 'fila-umbral' }, [campoUmbral, el('span', {}, '%')]),
+      ]),
+      el('p', { class: 'etiqueta-chica' }, 'Se guarda en este grupo: cada materia puede pedir un porcentaje distinto. Las columnas de pase de lista se pintan en verde a partir de este valor y en rojo por debajo.'),
+    ]);
+    const btnConfig = el('button', {
+      type: 'button', class: 'btn-icono btn-config-pase-lista', title: 'Configuración',
+      onclick: () => {
+        const oculto = panelConfig.classList.toggle('oculto');
+        if (!oculto) campoUmbral.focus();
+      },
+    }, '⚙');
+
+    const textoAyudaUmbral = () => `Agrega a la rúbrica el porcentaje de asistencia de cada alumno. No cuenta para el promedio ni para la calificación final: sirve para ver de un vistazo quién llega al ${umbralDerechoExamen(grupo)}% y tiene derecho a examen.`;
+    const textoUmbral = el('p', { class: 'etiqueta-chica' }, textoAyudaUmbral());
+
+    overlay.appendChild(el('div', { class: 'panel modal-pase-lista' }, [
+      el('div', { class: 'titulo-modal-pase-lista' }, [
+        el('h2', {}, 'Elige la lista que deseas importar'),
+        btnConfig,
+      ]),
+      textoUmbral,
+      panelConfig,
+      el('div', { class: 'opciones-duplicar' }, [
+        el('button', {
+          type: 'button', class: 'opcion-duplicar opcion-pase-lista', onclick: () => elegir('trimestral'),
+        }, [
+          el('span', { class: 'etiqueta-opcion-duplicar' }, 'Trimestral'),
+          el('span', { class: 'etiqueta-chica' }, 'Una columna por cada trimestre del calendario del curso, con la asistencia de ese periodo.'),
+        ]),
+        el('button', {
+          type: 'button', class: 'opcion-duplicar opcion-pase-lista', onclick: () => elegir('ciclo'),
+        }, [
+          el('span', { class: 'etiqueta-opcion-duplicar' }, 'Ciclo completo'),
+          el('span', { class: 'etiqueta-chica' }, 'Una sola columna con la asistencia acumulada de todo el ciclo escolar.'),
+        ]),
+      ]),
+      mensaje,
+      el('div', { class: 'acciones-modal' }, [
+        el('button', { type: 'button', class: 'btn-secundario', onclick: cerrar }, 'Cancelar'),
+      ]),
+    ]));
+    document.body.appendChild(overlay);
+  }
 
   // Genera de un golpe las 5 rúbricas estándar (Examen, Tareas, Actividades,
   // Proyectos, Participación). No duplica las que ya existan por nombre, así que
@@ -214,10 +339,12 @@ export async function montarRubrica(contenedor, grupo, { onAbrirEvaluaciones, so
 
   contenedor.appendChild(el('div', { class: 'panel' }, [
     el('h2', {}, ['Rúbrica y calificaciones ', estadoGuardado]),
-    el('p', { class: 'etiqueta-chica' }, soloLectura ? 'Solo lectura: no se puede editar la rúbrica ni las calificaciones.' : 'Calificaciones en escala 0–10. Puedes agregar o quitar rubros y cambiar los porcentajes cuando quieras — el promedio se recalcula solo. Haz clic en el nombre de un rubro (abajo) para capturar varias evaluaciones dentro de él (ej. varios exámenes); su calificación se calcula sola, ya no se captura aquí.'),
+    el('p', { class: 'etiqueta-chica' }, soloLectura
+      ? `Solo lectura: no se puede editar la rúbrica ni las calificaciones. Escala: ${escalaPorcentaje ? '0 a 100%' : '0 a 10'}.`
+      : `Calificaciones en escala ${escalaPorcentaje ? '0–100% (el recuadro "Mostrar como porcentaje" está activo)' : '0–10'}. Puedes agregar o quitar rubros y cambiar los porcentajes cuando quieras — el promedio se recalcula solo. Haz clic en el nombre de un rubro (abajo) para capturar varias evaluaciones dentro de él (ej. varios exámenes); su calificación se calcula sola, ya no se captura aquí. La columna "Calificación Final" es el promedio ya redondeado: el .5 sube solo a partir del 6 (6.5 → 7), abajo de 6 siempre baja (5.9 → 5).`),
     barraValidacion,
     contenedorBotonesRubro,
-    soloLectura ? null : el('div', { class: 'barra-nueva' }, [btnRubrosEstandar, btnAgregarRubro, btnAgregarRubroAsistencia]),
+    soloLectura ? null : el('div', { class: 'barra-nueva' }, [btnRubrosEstandar, btnAgregarRubro, btnPaseDeLista]),
     contenedorTabla,
   ]));
 

@@ -8,6 +8,7 @@ import {
   ESTADOS_ASISTENCIA, ETIQUETAS_ESTADO_ASISTENCIA, INICIALES_ESTADO_ASISTENCIA, fechaHoyISO, fechaCortaMX,
   valoresAsistenciaDeGrupo, promedioAsistenciaAlumno,
   DIAS_SEMANA_NOMBRES, calendarioDeGrupo, nuevoTrimestre, crearTrimestresEstandar, fechasDeClase,
+  fechasEnTrimestre, usaPorcentaje, formatearNota,
 } from './gruposModel.js';
 
 // Ciclo al hacer clic: sin marcar → presente → falta → justificada → sin marcar.
@@ -17,8 +18,9 @@ const SIGUIENTE_ESTADO = { null: 'presente', presente: 'falta', falta: 'justific
 const INICIALES_ESTADO = INICIALES_ESTADO_ASISTENCIA;
 
 // La tabla solo muestra 10 fechas a la vez (más que eso, las columnas se ponen
-// demasiado angostas) — "Faltas" y "Asistencia" no cuentan para esto: siempre se
-// calculan con TODAS las fechas, aunque no estén visibles en la ventana actual.
+// demasiado angostas) — "Faltas" y "Asistencia" no cuentan para esto: se calculan
+// con todas las fechas del periodo elegido en el filtro de trimestre (todo el
+// ciclo por defecto), aunque no estén visibles en la ventana actual.
 const TAM_VENTANA_FECHAS = 10;
 
 const DIAS_SEMANA_CORTOS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
@@ -37,6 +39,9 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
   clear(contenedor);
 
   const alumnosActivos = (grupo.alumnos || []).filter((a) => a.activo !== false);
+  // Misma escala que la rúbrica: la columna "Asistencia" se ve 0-10 o 0-100%
+  // según el recuadro del grupo (ver usaPorcentaje en gruposModel.js).
+  const escalaPorcentaje = usaPorcentaje(grupo);
 
   const campoFecha = el('input', { type: 'date', value: fechaHoyISO() });
   const btnAgregarFecha = el('button', { type: 'button', class: 'btn-primario' }, '+ Agregar fecha');
@@ -44,9 +49,13 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
 
   const contenedorTabla = el('div', { class: 'envoltura-tabla-excel' });
 
-  function alturaFila(alumno) {
+  // Cuenta los estados de un alumno dentro de los días que se le pasen — no de
+  // todo el ciclo: con un trimestre seleccionado, "Faltas" y "Asistencia" se
+  // recalculan sobre ese trimestre para que el maestro pueda cerrarlo de un
+  // vistazo (con "Todo el ciclo" vuelven a ser el acumulado de siempre).
+  function totalesDeAlumno(alumno, diasIncluidos) {
     const totales = { presente: 0, falta: 0, retardo: 0, justificada: 0 };
-    for (const dia of porFecha.values()) {
+    for (const dia of diasIncluidos) {
       const reg = dia.registros[alumno.id];
       if (reg && reg.estado) totales[reg.estado] = (totales[reg.estado] || 0) + 1;
     }
@@ -59,6 +68,92 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
   let ventanaInicio = 0;
   let ventanaInicializada = false;
 
+  // Filtro por trimestre: con los trimestres capturados en "Calendario del curso",
+  // acota la tabla (y sus totales) a las fechas de uno solo, para no tener que
+  // navegar todo el ciclo de 10 en 10. Se muestra también en solo lectura, porque
+  // revisores y administradores lo necesitan igual que los maestros — por eso va
+  // fuera de la barra de botones de captura, que sí se les oculta.
+  const trimestres = (calendarioDeGrupo(grupo).trimestres || []).filter((t) => t.inicio && t.fin);
+  let filtroTrimestre = 'todos';
+  const barraFiltroTrimestre = el('div', { class: 'barra-filtros' });
+  let selectTrimestre = null;
+  if (trimestres.length > 0) {
+    barraFiltroTrimestre.appendChild(el('span', { class: 'etiqueta-chica' }, 'Ver:'));
+    selectTrimestre = el('select', {
+      title: 'Muestra solo las fechas de un trimestre; "Faltas" y "Asistencia" se recalculan sobre él.',
+      onchange: (e) => {
+        filtroTrimestre = e.target.value;
+        // Se recalcula la ventana igual que al entrar: las 10 fechas MÁS
+        // RECIENTES del periodo elegido. Arrancar al principio del trimestre
+        // dejaba al maestro en agosto teniendo que avanzar de 10 en 10 hasta hoy,
+        // que es justo donde necesita pasar lista.
+        ventanaInicializada = false;
+        pintarTabla();
+      },
+    }, [
+      el('option', { value: 'todos' }, 'Todo el ciclo'),
+      ...trimestres.map((t, i) => el('option', { value: t.id }, t.nombre || `Trimestre ${i + 1}`)),
+    ]);
+    barraFiltroTrimestre.appendChild(selectTrimestre);
+  }
+
+  // Una fecha nueva que cae fuera del trimestre filtrado no se vería, y el
+  // maestro solo notaría que "no pasó nada" al agregarla: se quita el filtro.
+  function asegurarFechaVisible(fecha) {
+    const trimestreActivo = trimestres.find((t) => t.id === filtroTrimestre);
+    if (!trimestreActivo) return;
+    if (fechasEnTrimestre([fecha], trimestreActivo).length > 0) return;
+    filtroTrimestre = 'todos';
+    if (selectTrimestre) selectTrimestre.value = 'todos';
+  }
+
+  // El motivo de una falta casi nunca se sabe en el momento de marcarla (el alumno
+  // aparece después, o avisa la orientadora), así que NO se pregunta al marcarla:
+  // las celdas en falta muestran un enlace "motivo" debajo y el modal solo se abre
+  // si el maestro lo pide. El texto se guarda en la misma nota del día que usa el
+  // ícono 📝 del resto de las celdas, para no tener dos textos por alumno y día.
+  function abrirModalMotivo(alumno, fecha, dia, reg) {
+    const overlay = el('div', { class: 'overlay-modal tema-verde' });
+    const campo = el('textarea', { rows: '3', placeholder: 'Ej. se presentó con la orientadora, cita médica, permiso…' });
+    campo.value = reg.nota || '';
+    const mensaje = el('p', { class: 'mensaje-login' });
+    const btnGuardar = el('button', { type: 'button', class: 'btn-primario' }, 'Guardar motivo');
+    const btnCancelar = el('button', { type: 'button', class: 'btn-secundario' }, 'Cancelar');
+
+    function alPresionarTecla(e) { if (e.key === 'Escape') cerrar(); }
+    function cerrar() {
+      document.removeEventListener('keydown', alPresionarTecla);
+      overlay.remove();
+    }
+    document.addEventListener('keydown', alPresionarTecla);
+    btnCancelar.onclick = cerrar;
+
+    btnGuardar.onclick = async () => {
+      reg.nota = campo.value.trim();
+      dia.registros[alumno.id] = reg;
+      btnGuardar.disabled = true; btnGuardar.textContent = 'Guardando…';
+      try {
+        await guardarAsistencia(dia);
+      } catch (err) {
+        mensaje.textContent = `No se pudo guardar el motivo: ${err.message}`;
+        btnGuardar.disabled = false; btnGuardar.textContent = 'Guardar motivo';
+        return;
+      }
+      cerrar();
+      pintarTabla();
+    };
+
+    overlay.appendChild(el('div', { class: 'panel modal-motivo-falta' }, [
+      el('h2', {}, 'Motivo de la falta'),
+      el('p', { class: 'etiqueta-chica' }, `${alumno.nombre} — ${fechaCortaMX(fecha)}. Déjalo vacío y guarda si quieres borrar el motivo que ya tenía.`),
+      campo,
+      el('div', { class: 'acciones-modal' }, [btnGuardar, btnCancelar]),
+      mensaje,
+    ]));
+    document.body.appendChild(overlay);
+    campo.focus();
+  }
+
   function pintarTabla() {
     clear(contenedorTabla);
 
@@ -67,8 +162,15 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
       return;
     }
 
-    const fechas = Array.from(porFecha.keys()).sort();
-    const diasArray = Array.from(porFecha.values());
+    const trimestreActivo = trimestres.find((t) => t.id === filtroTrimestre) || null;
+    const todasLasFechas = Array.from(porFecha.keys()).sort();
+    const fechas = trimestreActivo ? fechasEnTrimestre(todasLasFechas, trimestreActivo) : todasLasFechas;
+    const diasArray = fechas.map((f) => porFecha.get(f));
+
+    if (trimestreActivo && fechas.length === 0) {
+      contenedorTabla.appendChild(el('p', { class: 'aviso-vacio' }, `No hay fechas capturadas dentro de "${trimestreActivo.nombre || 'ese trimestre'}" (${trimestreActivo.inicio} a ${trimestreActivo.fin}).`));
+      return;
+    }
 
     const maxVentanaInicio = Math.max(0, fechas.length - TAM_VENTANA_FECHAS);
     if (!ventanaInicializada) {
@@ -111,7 +213,12 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
       const celdas = fechasVisibles.map((f) => {
         const dia = porFecha.get(f);
         const reg = dia.registros[alumno.id] || { estado: null, nota: '' };
+        // En una falta, la nota del día ES el motivo: en vez del ícono 📝 genérico
+        // se ofrece un enlace "motivo" con todas sus letras debajo de la celda,
+        // que el maestro usa solo si tiene algo que aclarar.
+        const esFalta = reg.estado === 'falta';
         const celda = el('td', { class: `celda-asistencia ${reg.estado ? `estado-${reg.estado}` : ''}` }, [
+          el('div', { class: 'fila-celda-asistencia' }, [
           el('button', {
             type: 'button', class: 'btn-celda-estado', disabled: soloLectura,
             title: ETIQUETAS_ESTADO_ASISTENCIA[reg.estado] || 'Sin marcar',
@@ -128,7 +235,7 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
               pintarTabla();
             },
           }, reg.estado ? INICIALES_ESTADO[reg.estado] : '·'),
-          el('button', {
+          esFalta ? null : el('button', {
             type: 'button', class: `btn-nota-dia ${reg.nota ? 'tiene-nota' : ''}`, disabled: soloLectura,
             title: reg.nota ? `Nota: ${reg.nota}` : 'Agregar nota',
             onclick: soloLectura ? undefined : async () => {
@@ -144,17 +251,25 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
               pintarTabla();
             },
           }, '📝'),
+          ]),
+          // En solo lectura no hay nada que agregar: el enlace solo aparece si ya
+          // hay un motivo escrito, para poder consultarlo.
+          !esFalta || (soloLectura && !reg.nota) ? null : el('button', {
+            type: 'button', class: `btn-motivo-falta ${reg.nota ? 'tiene-motivo' : ''}`, disabled: soloLectura,
+            title: reg.nota ? reg.nota : 'Anotar por qué faltó el alumno (opcional)',
+            onclick: soloLectura ? undefined : () => abrirModalMotivo(alumno, f, dia, reg),
+          }, reg.nota ? 'motivo ✓' : 'motivo'),
         ]);
         return celda;
       });
 
-      const totales = alturaFila(alumno);
+      const totales = totalesDeAlumno(alumno, diasArray);
       const promedio = promedioAsistenciaAlumno(grupo, alumno.id, diasArray);
       return el('tr', {}, [
         el('td', { class: 'celda-nombre-alumno' }, alumno.nombre),
         ...celdas,
         el('td', { class: 'celda-totales' }, String(totales.falta || 0)),
-        el('td', { class: 'celda-promedio' }, promedio === null ? '—' : (promedio * 10).toFixed(1)),
+        el('td', { class: 'celda-promedio' }, formatearNota(promedio === null ? null : promedio * 10, escalaPorcentaje, 1)),
       ]);
     });
 
@@ -180,6 +295,7 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
     }
     // Salta la ventana visible hasta el final, para que la fecha recién
     // agregada (siempre la más reciente) quede a la vista de inmediato.
+    asegurarFechaVisible(fecha);
     ventanaInicio = Number.MAX_SAFE_INTEGER;
     ventanaInicializada = true;
     pintarTabla();
@@ -404,9 +520,12 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
 
   contenedor.appendChild(el('div', { class: 'panel' }, [
     el('h2', {}, 'Pase de lista'),
-    el('p', { class: 'etiqueta-chica' }, soloLectura ? 'Solo lectura: no se puede editar la asistencia.' : 'Haz clic en una celda para marcar Presente → Falta → Justificada. El ícono 📝 agrega una nota para ese alumno ese día.'),
+    el('p', { class: 'etiqueta-chica' }, soloLectura
+      ? 'Solo lectura: no se puede editar la asistencia.'
+      : 'Haz clic en una celda para marcar Presente → Falta → Justificada. Debajo de cada falta aparece "motivo" por si quieres aclarar por qué faltó el alumno — es opcional y lo puedes anotar cuando lo sepas. El ícono 📝 agrega una nota en los demás días.'),
     leyenda,
     soloLectura ? null : el('div', { class: 'barra-nueva' }, [campoFecha, btnAgregarFecha, btnAgregarHoy, btnValores, btnCalendario]),
+    barraFiltroTrimestre,
     contenedorTabla,
   ]));
 

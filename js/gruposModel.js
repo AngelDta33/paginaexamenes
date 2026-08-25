@@ -42,6 +42,9 @@ export function nuevoGrupo(sesion) {
     rubros: [],
     calificaciones: {},
     valoresAsistencia: { ...VALORES_ASISTENCIA_POR_DEFECTO },
+    mostrarPorcentaje: false,
+    columnaPaseDeLista: null,
+    umbralDerechoExamen: UMBRAL_DERECHO_EXAMEN_POR_DEFECTO,
   };
 }
 
@@ -53,14 +56,12 @@ export function nuevoRubro(nombre = '', porcentaje = 0) {
   return { id: uid('rub'), nombre, porcentaje };
 }
 
-// Rubro especial: su calificación no se captura a mano, se calcula sola a partir
-// del pase de lista (ver promedioAsistenciaAlumno).
-export function nuevoRubroAsistencia(porcentaje = 0) {
-  return {
-    id: uid('rub'), nombre: 'Asistencia', porcentaje, tipoEspecial: 'asistencia',
-  };
-}
-
+// El rubro especial "Asistencia" (calificación calculada sola desde el pase de
+// lista) ya no se puede crear: lo reemplazó la columna informativa de pase de
+// lista de la rúbrica, que no califica y solo sirve para ver el 80% que da
+// derecho a examen (ver columnasPaseDeLista). Esta función se queda para que las
+// rúbricas que YA lo tenían lo sigan mostrando y contando en el promedio, igual
+// que el estado "retardo" del pase de lista.
 export function esRubroAsistencia(rubro) {
   return rubro.tipoEspecial === 'asistencia';
 }
@@ -243,6 +244,63 @@ export function calcularPromedio(grupo, alumnoId, dias = []) {
   return Math.round((suma + extra) * 100) / 100;
 }
 
+// --- Calificación final ---
+// La escuela redondea el .5 hacia arriba SOLO a partir del 6: un 5.9 se queda en
+// 5 (el redondeo nunca puede convertir un reprobado en aprobado), mientras que un
+// 6.5 sí sube a 7 y un 6.4 baja a 6. Debajo del 6 siempre se trunca; del 6 en
+// adelante es el redondeo normal.
+//
+// Es el ÚNICO lugar del programa donde se redondea: ni los rubros ni el promedio
+// se tocan, para que el maestro siga viendo la calificación real antes del
+// redondeo y solo la columna "Calificación Final" muestre la que va a boleta.
+export function calificacionFinal(promedio) {
+  if (promedio === null || promedio === undefined || promedio === '') return null;
+  const n = Number(promedio);
+  if (!Number.isFinite(n)) return null;
+  return n < 6 ? Math.floor(n) : Math.round(n);
+}
+
+// --- Escala de despliegue: base 10 o porcentaje ---
+// Todo se guarda SIEMPRE en base 10 (0-10). El recuadro "Mostrar como porcentaje"
+// del grupo solo cambia cómo se ve y cómo se captura: un 8.5 se muestra "85%" y
+// el maestro escribe 85 en vez de 8.5. Nunca cambia lo guardado, así que se puede
+// prender y apagar cuantas veces quiera sin recalcular ni migrar nada.
+export function usaPorcentaje(grupo) {
+  return !!(grupo && grupo.mostrarPorcentaje);
+}
+
+// Texto de una calificación base 10 (o null) en la escala activa. `decimales` es
+// el detalle que se quiere en base 10; en porcentaje se muestra uno menos, porque
+// multiplicar por 10 ya corre el punto un lugar (8.75 → "87.5%", 8.5 → "85%").
+export function formatearNota(valor, porcentaje, decimales = 2) {
+  if (valor === null || valor === undefined || valor === '') return '—';
+  const n = Number(valor);
+  if (!Number.isFinite(n)) return '—';
+  if (!porcentaje) return n.toFixed(decimales);
+  return `${(n * 10).toFixed(Math.max(0, decimales - 1))}%`;
+}
+
+// base 10 → el número que se muestra dentro de un <input> de captura, y de
+// regreso, para que el maestro escriba en la misma escala que ve en la tabla.
+export function notaAEscala(valor, porcentaje) {
+  if (valor === null || valor === undefined || valor === '') return '';
+  const n = Number(valor);
+  if (!Number.isFinite(n)) return '';
+  return porcentaje ? Math.round(n * 1000) / 100 : n;
+}
+
+export function escalaANota(valor, porcentaje) {
+  if (valor === null || valor === undefined || valor === '') return null;
+  const n = parseFloat(valor);
+  if (!Number.isFinite(n)) return null;
+  return porcentaje ? Math.round((n / 10) * 1000) / 1000 : n;
+}
+
+// Tope y paso del <input> de calificación según la escala activa.
+export function atributosInputNota(porcentaje) {
+  return porcentaje ? { max: '100', step: '1' } : { max: '10', step: '0.1' };
+}
+
 // Calificación (escala 0-10) que le toca al rubro de asistencia — el promedio de
 // asistencia (0-1) escalado a 0-10, igual que se muestra en el pase de lista.
 export function valorRubroAsistencia(grupo, alumnoId, dias) {
@@ -352,4 +410,50 @@ export function fechasDeClase(calendario) {
 export function fechasEnTrimestre(fechas, trimestre) {
   if (!trimestre.inicio || !trimestre.fin) return [];
   return fechas.filter((f) => f >= trimestre.inicio && f <= trimestre.fin);
+}
+
+// --- Columna(s) informativas de "Pase de lista" en la rúbrica ---
+// NO cuentan para el promedio ni son un rubro: son una ayuda para ver de un
+// vistazo qué alumno llega al 80% de asistencia y por lo tanto tiene derecho a
+// examen. El maestro elige entre verlas por trimestre o una sola del ciclo
+// completo (grupo.columnaPaseDeLista = 'trimestral' | 'ciclo' | null).
+//
+// Siempre se expresan en porcentaje, aunque el grupo esté en base 10: el umbral
+// que le importa al maestro es "80% de asistencia", no "8 de 10".
+//
+// El 80% es el mínimo de la escuela, pero se puede cambiar por grupo desde el
+// engranaje del modal de pase de lista: hay materias que piden otro porcentaje.
+export const UMBRAL_DERECHO_EXAMEN_POR_DEFECTO = 80;
+
+// Grupos creados antes de que existiera este campo no lo tienen guardado.
+export function umbralDerechoExamen(grupo) {
+  const n = Number(grupo && grupo.umbralDerechoExamen);
+  return Number.isFinite(n) && n >= 0 && n <= 100 ? n : UMBRAL_DERECHO_EXAMEN_POR_DEFECTO;
+}
+
+export function columnasPaseDeLista(grupo, dias) {
+  const modo = grupo && grupo.columnaPaseDeLista;
+  if (modo === 'ciclo') return [{ id: 'ciclo', titulo: 'Pase de lista', dias }];
+  if (modo !== 'trimestral') return [];
+  return trimestresConFechas(grupo).map((trimestre, i) => {
+    const fechas = fechasEnTrimestre(dias.map((d) => d.fecha), trimestre);
+    return {
+      id: trimestre.id,
+      titulo: trimestre.nombre || `Trimestre ${i + 1}`,
+      dias: dias.filter((d) => fechas.includes(d.fecha)),
+    };
+  });
+}
+
+// Trimestres utilizables: los que tienen inicio y fin capturados (sin fechas no
+// se puede saber qué días les tocan).
+export function trimestresConFechas(grupo) {
+  return (calendarioDeGrupo(grupo).trimestres || []).filter((t) => t.inicio && t.fin);
+}
+
+// Porcentaje de asistencia (0-100) de un alumno en un conjunto de días, o null si
+// no hay ningún día marcado.
+export function porcentajeAsistencia(grupo, alumnoId, dias) {
+  const prom = promedioAsistenciaAlumno(grupo, alumnoId, dias);
+  return prom === null ? null : prom * 100;
 }
