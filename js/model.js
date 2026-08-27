@@ -168,6 +168,32 @@ const DEFAULTS_POR_TIPO = {
   }),
 };
 
+// Opciones de formato de texto que ofrece la app (formato estándar de la
+// escuela en Panel Administrador → Parámetros, y formato por sección en el
+// editor). Viven aquí porque las usan las dos pantallas.
+export const FAMILIAS_FUENTE = [
+  { valor: '', etiqueta: 'Predeterminada' },
+  { valor: 'Arial, Helvetica, sans-serif', etiqueta: 'Arial' },
+  { valor: "'Times New Roman', Times, serif", etiqueta: 'Times New Roman' },
+  { valor: 'Georgia, serif', etiqueta: 'Georgia' },
+  { valor: "'Courier New', Courier, monospace", etiqueta: 'Courier New' },
+  { valor: 'Verdana, Geneva, sans-serif', etiqueta: 'Verdana' },
+];
+
+export const TAMANOS_FUENTE = ['', '8', '9', '10', '11', '12', '13', '14', '16'];
+
+// El ajuste "sin_ajuste" (una sola línea, sin envolver) solo tiene sentido
+// aplicado a una sección suelta: puesto a todo el documento dejaría el examen
+// completo desbordado fuera de la hoja, así que el formato estándar de la
+// escuela solo ofrece las dos primeras (ver AJUSTES_TEXTO_DOCUMENTO).
+export const AJUSTES_TEXTO = [
+  { valor: '', etiqueta: 'Normal' },
+  { valor: 'justificado', etiqueta: 'Justificado' },
+  { valor: 'sin_ajuste', etiqueta: 'Sin ajuste (una línea)' },
+];
+
+export const AJUSTES_TEXTO_DOCUMENTO = AJUSTES_TEXTO.filter((a) => a.valor !== 'sin_ajuste');
+
 export const ETIQUETAS_ESTADO = {
   borrador: 'Borrador',
   en_revision: 'En revisión',

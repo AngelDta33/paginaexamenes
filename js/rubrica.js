@@ -14,7 +14,8 @@ import {
   nuevoRubro, esRubroAsistencia, tieneEvaluaciones, calificacionAlumno,
   sumaPorcentajes, validarRubros, calcularPromedio, valorRubro, crearRubrosEstandar,
   usaPorcentaje, formatearNota, notaAEscala, escalaANota, atributosInputNota, calificacionFinal,
-  columnasPaseDeLista, trimestresConFechas, porcentajeAsistencia, umbralDerechoExamen,
+  columnasPaseDeLista, columnasPaseDeListaOcultas, trimestresConFechas, porcentajeAsistencia,
+  umbralDerechoExamen,
 } from './gruposModel.js';
 
 export async function montarRubrica(contenedor, grupo, { onAbrirEvaluaciones, soloLectura = false } = {}) {
@@ -78,6 +79,30 @@ export async function montarRubrica(contenedor, grupo, { onAbrirEvaluaciones, so
   function asegurarCalificacion(alumnoId) {
     if (!grupo.calificaciones[alumnoId]) grupo.calificaciones[alumnoId] = { valores: {}, extra: 0, notasEvaluacion: {} };
     return grupo.calificaciones[alumnoId];
+  }
+
+  function esPaseDeListaPorTrimestre() {
+    return grupo.columnaPaseDeLista === 'trimestral';
+  }
+
+  // La "✕" de una columna de pase de lista. Con la lista por trimestre esconde
+  // SOLO ese trimestre —el maestro cierra el primero y quiere seguir viendo los
+  // otros dos—; el pase de lista completo se quita nada más cuando ya no queda
+  // ninguna columna a la vista (o cuando la lista es la del ciclo, que es una
+  // sola columna). Volver a elegirla en "+ Agregar pase de lista" las regresa.
+  function ocultarColumnaPase(columnaId) {
+    if (!esPaseDeListaPorTrimestre()) {
+      grupo.columnaPaseDeLista = null;
+      grupo.paseDeListaOcultos = [];
+    } else {
+      const ocultas = [...columnasPaseDeListaOcultas(grupo), columnaId];
+      grupo.paseDeListaOcultos = ocultas;
+      if (columnasPaseDeLista(grupo, dias).length === 0) {
+        grupo.columnaPaseDeLista = null;
+        grupo.paseDeListaOcultos = [];
+      }
+    }
+    pintarTabla(); guardarConDebounce();
   }
 
   function pintarTabla() {
@@ -145,11 +170,11 @@ export async function montarRubrica(contenedor, grupo, { onAbrirEvaluaciones, so
         el('div', { class: 'fila-porcentaje-rubro' }, [
           el('span', { class: 'insignia-info' }, 'informativa'),
           soloLectura ? null : el('button', {
-            type: 'button', class: 'btn-icono btn-eliminar', title: 'Quitar el pase de lista de la rúbrica',
-            onclick: () => {
-              grupo.columnaPaseDeLista = null;
-              pintarTabla(); guardarConDebounce();
-            },
+            type: 'button', class: 'btn-icono btn-eliminar',
+            title: esPaseDeListaPorTrimestre()
+              ? `Ocultar solo la columna "${col.titulo}" (las de los demás trimestres se quedan)`
+              : 'Quitar el pase de lista de la rúbrica',
+            onclick: () => { ocultarColumnaPase(col.id); },
           }, '✕'),
         ]),
       ])),
@@ -257,6 +282,7 @@ export async function montarRubrica(contenedor, grupo, { onAbrirEvaluaciones, so
         return;
       }
       grupo.columnaPaseDeLista = modo;
+      grupo.paseDeListaOcultos = []; // vuelven a aparecer las columnas que se hayan escondido antes
       cerrar();
       pintarTabla();
       guardarConDebounce();
@@ -306,7 +332,7 @@ export async function montarRubrica(contenedor, grupo, { onAbrirEvaluaciones, so
           type: 'button', class: 'opcion-duplicar opcion-pase-lista', onclick: () => elegir('trimestral'),
         }, [
           el('span', { class: 'etiqueta-opcion-duplicar' }, 'Trimestral'),
-          el('span', { class: 'etiqueta-chica' }, 'Una columna por cada trimestre del calendario del curso, con la asistencia de ese periodo.'),
+          el('span', { class: 'etiqueta-chica' }, 'Una columna por cada trimestre del calendario del curso, con la asistencia de ese periodo. Puedes esconder los trimestres uno por uno con su "✕"; volver a elegir esta opción los muestra todos otra vez.'),
         ]),
         el('button', {
           type: 'button', class: 'opcion-duplicar opcion-pase-lista', onclick: () => elegir('ciclo'),

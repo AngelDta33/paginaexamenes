@@ -226,8 +226,25 @@ button {
 .fila-marcador-inactiva input { opacity: 0.55; }
 .num-marcador { font-weight: bold; min-width: 1.3rem; }
 
-.pantalla-config .panel { max-width: 520px; }
+/* Parámetros (Panel Administrador → ⚙ Parámetros): a la izquierda lo que se
+   imprime tal cual (datos de la escuela y membretes), a la derecha cómo se
+   acomoda en la hoja (formato estándar). Antes era una sola columna angosta y
+   dejaba media pantalla vacía. */
+.pantalla-config {
+  display: grid; grid-template-columns: minmax(0, 520px) minmax(0, 1fr);
+  gap: 0 1rem; align-items: start;
+}
+.pantalla-config .panel { max-width: none; }
+@media (max-width: 900px) {
+  .pantalla-config { grid-template-columns: 1fr; }
+}
 .logo-config-preview img { max-height: 4rem; margin-top: 0.4rem; }
+
+/* Baja de cuentas (Panel Administrador): el modal pide confirmación y motivo,
+   y el historial muestra por qué se eliminó cada una. */
+.modal-eliminar-usuario { width: 100%; max-width: 30rem; }
+.modal-eliminar-usuario textarea { width: 100%; }
+.motivo-baja { font-size: 0.82rem; color: var(--gris); }
 
 /* --- Módulo de Programas: editor de criterios de evaluación --- */
 .lista-criterios-programa { display: flex; flex-direction: column; gap: 0.3rem; margin-bottom: 0.5rem; }
@@ -311,7 +328,9 @@ button {
 .fila-credencial { display: flex; align-items: center; gap: 0.6rem; margin: 0.3rem 0; }
 .fila-credencial code { background: #fff; border: 1px solid #b7ddc3; border-radius: 5px; padding: 0.3rem 0.6rem; font-size: 1rem; letter-spacing: 0.5px; }
 .tabla-usuarios { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.5rem; }
-.fila-usuario { display: flex; align-items: center; gap: 0.8rem; border: 1px solid var(--borde); border-radius: 8px; padding: 0.5rem 0.8rem; }
+/* flex-wrap porque la fila creció con el botón "Eliminar" del Panel Administrador:
+   en pantallas angostas los botones pasan abajo en vez de aplastar el nombre. */
+.fila-usuario { display: flex; align-items: center; gap: 0.8rem; flex-wrap: wrap; border: 1px solid var(--borde); border-radius: 8px; padding: 0.5rem 0.8rem; }
 .info-usuario { display: flex; flex-direction: column; flex: 1; min-width: 0; }
 .email-usuario { font-size: 0.82rem; color: var(--gris); }
 .etiqueta-rol { background: var(--azul-suave); color: var(--azul); border-radius: 4px; padding: 0.1rem 0.5rem; font-size: 0.78rem; font-weight: bold; white-space: nowrap; }
@@ -463,6 +482,15 @@ button {
   padding: 0.5rem 0.7rem; display: flex; flex-direction: column; gap: 0.3rem; align-items: flex-start;
 }
 .comentario-seccion-texto { white-space: pre-wrap; }
+
+/* Casilla "empezar en una página nueva" al pie de cada sección/reactivo/subpregunta
+   (ver campoSaltoPagina en questionTypes.js). */
+.campo-salto-pagina {
+  display: flex; align-items: center; gap: 0.35rem;
+  margin-top: 0.5rem; font-size: 0.82rem; color: var(--gris);
+  cursor: pointer; width: fit-content;
+}
+.campo-salto-pagina input[type=checkbox] { width: auto; margin: 0; }
 
 /* Formato de sección / documento — solo lo ve un administrador */
 .formato-seccion-admin, .formato-documento-admin {

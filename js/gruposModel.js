@@ -44,6 +44,7 @@ export function nuevoGrupo(sesion) {
     valoresAsistencia: { ...VALORES_ASISTENCIA_POR_DEFECTO },
     mostrarPorcentaje: false,
     columnaPaseDeLista: null,
+    paseDeListaOcultos: [],
     umbralDerechoExamen: UMBRAL_DERECHO_EXAMEN_POR_DEFECTO,
   };
 }
@@ -431,10 +432,20 @@ export function umbralDerechoExamen(grupo) {
   return Number.isFinite(n) && n >= 0 && n <= 100 ? n : UMBRAL_DERECHO_EXAMEN_POR_DEFECTO;
 }
 
+// Columnas que el maestro escondió una por una con su "✕", sin quitar el pase
+// de lista completo de la rúbrica: se guardan por id de trimestre para que
+// esconder el primer trimestre ya cerrado no se lleve también los otros dos.
+// Vuelven a aparecer todas al elegir de nuevo la lista desde el modal.
+export function columnasPaseDeListaOcultas(grupo) {
+  const ocultas = grupo && grupo.paseDeListaOcultos;
+  return Array.isArray(ocultas) ? ocultas : [];
+}
+
 export function columnasPaseDeLista(grupo, dias) {
   const modo = grupo && grupo.columnaPaseDeLista;
   if (modo === 'ciclo') return [{ id: 'ciclo', titulo: 'Pase de lista', dias }];
   if (modo !== 'trimestral') return [];
+  const ocultas = columnasPaseDeListaOcultas(grupo);
   return trimestresConFechas(grupo).map((trimestre, i) => {
     const fechas = fechasEnTrimestre(dias.map((d) => d.fecha), trimestre);
     return {
@@ -442,7 +453,7 @@ export function columnasPaseDeLista(grupo, dias) {
       titulo: trimestre.nombre || `Trimestre ${i + 1}`,
       dias: dias.filter((d) => fechas.includes(d.fecha)),
     };
-  });
+  }).filter((col) => !ocultas.includes(col.id));
 }
 
 // Trimestres utilizables: los que tienen inicio y fin capturados (sin fechas no

@@ -3,18 +3,22 @@
    --pagina-padding / --pagina-interlineado, que js/preview.js le pone al
    .hoja-contenedor a partir del papel y del estiloDocumento del examen (ver
    TAMANOS_PAPEL y estiloDocumentoDeExamen en js/paginate.js); los valores de
-   aquí solo son el respaldo (oficio, márgenes/interlineado de siempre). */
+   aquí solo son el respaldo (oficio y el formato de fábrica). */
 
 .page {
   width: var(--pagina-ancho, 21.59cm);
   height: var(--pagina-alto, 33.02cm);
-  padding: var(--pagina-padding, 1.8cm);
+  padding: var(--pagina-padding, 1cm);
   box-sizing: border-box;
   background: #fff;
   color: #111;
-  font-family: Arial, Helvetica, sans-serif;
-  font-size: 11pt;
+  font-family: var(--pagina-fuente, Arial, Helvetica, sans-serif);
+  font-size: var(--pagina-tamano, 11pt);
   line-height: var(--pagina-interlineado, 1.5);
+  /* Justificado o no, según el formato estándar de la escuela. Los bloques que
+     llevan su propia alineación (título centrado, subtotal a la derecha) la
+     siguen fijando aparte, así que no se ven afectados. */
+  text-align: var(--pagina-ajuste, left);
   position: relative;
   overflow: hidden;
   margin: 0 auto 1cm auto;

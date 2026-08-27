@@ -112,13 +112,20 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
   // las celdas en falta muestran un enlace "motivo" debajo y el modal solo se abre
   // si el maestro lo pide. El texto se guarda en la misma nota del día que usa el
   // ícono 📝 del resto de las celdas, para no tener dos textos por alumno y día.
+  // En solo lectura (revisor/administrador consultando el grupo de otro maestro)
+  // el mismo modal sirve para CONSULTAR el motivo: se ve el texto completo, pero
+  // el campo va bloqueado y no hay botón de guardar — pueden saber por qué faltó
+  // el alumno sin poder cambiar lo que anotó el maestro.
   function abrirModalMotivo(alumno, fecha, dia, reg) {
     const overlay = el('div', { class: 'overlay-modal tema-verde' });
-    const campo = el('textarea', { rows: '3', placeholder: 'Ej. se presentó con la orientadora, cita médica, permiso…' });
+    const campo = el('textarea', {
+      rows: '3', disabled: soloLectura,
+      placeholder: soloLectura ? 'El maestro no anotó ningún motivo.' : 'Ej. se presentó con la orientadora, cita médica, permiso…',
+    });
     campo.value = reg.nota || '';
     const mensaje = el('p', { class: 'mensaje-login' });
     const btnGuardar = el('button', { type: 'button', class: 'btn-primario' }, 'Guardar motivo');
-    const btnCancelar = el('button', { type: 'button', class: 'btn-secundario' }, 'Cancelar');
+    const btnCancelar = el('button', { type: 'button', class: 'btn-secundario' }, soloLectura ? 'Cerrar' : 'Cancelar');
 
     function alPresionarTecla(e) { if (e.key === 'Escape') cerrar(); }
     function cerrar() {
@@ -145,13 +152,15 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
 
     overlay.appendChild(el('div', { class: 'panel modal-motivo-falta' }, [
       el('h2', {}, 'Motivo de la falta'),
-      el('p', { class: 'etiqueta-chica' }, `${alumno.nombre} — ${fechaCortaMX(fecha)}. Déjalo vacío y guarda si quieres borrar el motivo que ya tenía.`),
+      el('p', { class: 'etiqueta-chica' }, soloLectura
+        ? `${alumno.nombre} — ${fechaCortaMX(fecha)}. Solo lectura: puedes consultar el motivo, pero no cambiarlo.`
+        : `${alumno.nombre} — ${fechaCortaMX(fecha)}. Déjalo vacío y guarda si quieres borrar el motivo que ya tenía.`),
       campo,
-      el('div', { class: 'acciones-modal' }, [btnGuardar, btnCancelar]),
+      el('div', { class: 'acciones-modal' }, soloLectura ? [btnCancelar] : [btnGuardar, btnCancelar]),
       mensaje,
     ]));
     document.body.appendChild(overlay);
-    campo.focus();
+    if (!soloLectura) campo.focus();
   }
 
   function pintarTabla() {
@@ -252,13 +261,15 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
             },
           }, '📝'),
           ]),
-          // En solo lectura no hay nada que agregar: el enlace solo aparece si ya
-          // hay un motivo escrito, para poder consultarlo.
+          // En solo lectura no hay nada que agregar, así que el enlace solo
+          // aparece cuando ya hay un motivo escrito — pero sí se puede abrir:
+          // revisores y administradores necesitan leerlo completo (el title se
+          // queda corto con textos largos), aunque no puedan modificarlo.
           !esFalta || (soloLectura && !reg.nota) ? null : el('button', {
-            type: 'button', class: `btn-motivo-falta ${reg.nota ? 'tiene-motivo' : ''}`, disabled: soloLectura,
+            type: 'button', class: `btn-motivo-falta ${reg.nota ? 'tiene-motivo' : ''}`,
             title: reg.nota ? reg.nota : 'Anotar por qué faltó el alumno (opcional)',
-            onclick: soloLectura ? undefined : () => abrirModalMotivo(alumno, f, dia, reg),
-          }, reg.nota ? 'motivo ✓' : 'motivo'),
+            onclick: () => abrirModalMotivo(alumno, f, dia, reg),
+          }, soloLectura ? 'ver motivo' : (reg.nota ? 'motivo ✓' : 'motivo')),
         ]);
         return celda;
       });
@@ -521,7 +532,7 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
   contenedor.appendChild(el('div', { class: 'panel' }, [
     el('h2', {}, 'Pase de lista'),
     el('p', { class: 'etiqueta-chica' }, soloLectura
-      ? 'Solo lectura: no se puede editar la asistencia.'
+      ? 'Solo lectura: no se puede editar la asistencia. Donde haya un motivo de falta anotado, aparece "ver motivo" debajo de la celda para consultarlo.'
       : 'Haz clic en una celda para marcar Presente → Falta → Justificada. Debajo de cada falta aparece "motivo" por si quieres aclarar por qué faltó el alumno — es opcional y lo puedes anotar cuando lo sepas. El ícono 📝 agrega una nota en los demás días.'),
     leyenda,
     soloLectura ? null : el('div', { class: 'barra-nueva' }, [campoFecha, btnAgregarFecha, btnAgregarHoy, btnValores, btnCalendario]),

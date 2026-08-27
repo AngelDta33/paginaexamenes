@@ -30,8 +30,19 @@ service cloud.firestore {
       allow write: if esRevisorOAdmin() && rol() == 'administrador';
     }
 
-    // configuracion/escuela: datos institucionales compartidos. Lectura para cualquier
-    // cuenta activa; solo el administrador los edita.
+    // usuariosEliminados/{uid}: constancia de las bajas de cuentas (a quién, quién
+    // la dio de baja, cuándo y por qué). Se escribe justo antes de borrar
+    // usuarios/{uid}, que es donde vivía esa información. Solo el administrador
+    // la escribe y la consulta: es información sobre el personal, no tiene por
+    // qué verla el resto de la plantilla.
+    match /usuariosEliminados/{uid} {
+      allow read, write: if rol() == 'administrador';
+    }
+
+    // configuracion/escuela: datos institucionales compartidos (datos de la escuela,
+    // membretes y formato estándar de los exámenes — "Parámetros" del Panel
+    // Administrador). Lectura para cualquier cuenta activa, porque cada examen se
+    // arma con ellos; solo el administrador los edita (un revisor NO).
     match /configuracion/{docId} {
       allow read: if autenticado();
       allow write: if rol() == 'administrador';

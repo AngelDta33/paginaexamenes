@@ -706,6 +706,24 @@ const ETIQUETAS_TIPO = {
 // compartido que agrega crearEditorPregunta).
 const TIPOS_IMAGEN_PROPIA = new Set(['identificar_imagen']);
 
+// Casilla "empezar en una página nueva" que llevan abajo las secciones, los
+// reactivos y las subpreguntas: marca `elemento.saltoPagina`, y el paginador
+// empuja el primer bloque de ese elemento al inicio de la hoja siguiente (ver
+// construirBloques en paginate.js). Sirve para que un reactivo largo no quede
+// partido a la mitad entre dos hojas.
+export function campoSaltoPagina(elemento, onChange, etiqueta = '📄 Empezar en una página nueva') {
+  return el('label', {
+    class: 'campo-salto-pagina',
+    title: 'Manda este contenido al inicio de la siguiente hoja para que no quede cortado a la mitad.',
+  }, [
+    el('input', {
+      type: 'checkbox', checked: !!elemento.saltoPagina,
+      onchange: (e) => { elemento.saltoPagina = e.target.checked; onChange(); },
+    }),
+    etiqueta,
+  ]);
+}
+
 export function crearEditorPregunta(pregunta, {
   onChange, onDelete, subEtiqueta, onMoveUp, onMoveDown,
 }) {
@@ -730,6 +748,10 @@ export function crearEditorPregunta(pregunta, {
   if (pregunta.tipo !== 'lectura_comprension' && !TIPOS_IMAGEN_PROPIA.has(pregunta.tipo)) {
     cuerpo.push(campoImagen(pregunta, onChange));
   }
+  cuerpo.push(campoSaltoPagina(
+    pregunta, onChange,
+    subEtiqueta ? '📄 Empezar esta subpregunta en una página nueva' : '📄 Empezar este reactivo en una página nueva',
+  ));
 
   return el('div', { class: 'tarjeta-pregunta' }, cuerpo);
 }

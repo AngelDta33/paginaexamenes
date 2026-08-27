@@ -1,6 +1,6 @@
 // Lista de programas de actividades académicas y su editor: un formato fijo de
-// una sola hoja (carta horizontal) con vista previa e impresión, sin reactivos
-// ni paginación — solo sirve para este documento.
+// una sola hoja horizontal (del tamaño de papel que elija el maestro) con vista
+// previa e impresión, sin reactivos ni paginación — solo sirve para este documento.
 
 import { el, clear } from './dom.js';
 import {
@@ -12,9 +12,25 @@ import {
 import { obtenerConfig } from './store.js';
 import { esRevisorOAdmin } from './auth.js';
 import { coincideTexto, guardarFoco, restaurarFoco, campoBusqueda } from './filtros.js';
+import { TAMANOS_PAPEL } from './paginate.js';
 
-const ANCHO_HOJA_CM = 27.94; // carta horizontal (11 x 8.5in)
-const ALTO_HOJA_CM = 21.59;
+// El formato de programa siempre va HORIZONTAL, así que cada papel se usa
+// acostado: el ancho de la hoja es el lado largo. Mismo mecanismo que en los
+// exámenes (ver TAMANOS_PAPEL y papelDeExamen en paginate.js): si el papel que
+// se elige en el diálogo de impresión no es el mismo con el que se armó la
+// vista previa, el contenido sale cortado y con hojas casi en blanco de más.
+const ETIQUETAS_PAPEL_PROGRAMA = {
+  carta: 'Carta horizontal (27.94 × 21.59 cm)',
+  oficio: 'Oficio / Folio horizontal (33.02 × 21.59 cm)',
+  a4: 'A4 horizontal (29.7 × 21 cm)',
+};
+
+const PAPEL_PROGRAMA_POR_DEFECTO = 'carta';
+
+function papelDePrograma(programa) {
+  const base = TAMANOS_PAPEL[programa && programa.tamanoPapel] || TAMANOS_PAPEL[PAPEL_PROGRAMA_POR_DEFECTO];
+  return { ancho: base.alto, alto: base.ancho }; // acostado
+}
 
 function fechaCorta(iso) {
   if (!iso) return '';
@@ -145,6 +161,7 @@ function columnaTemario(titulo, texto) {
 }
 
 function renderPaginaPrograma(programa, config) {
+  const papel = papelDePrograma(programa);
   const criterios = programa.criterios || [];
   const total = totalPorcentajeCriterios(programa);
 
@@ -173,7 +190,7 @@ function renderPaginaPrograma(programa, config) {
 
   return el('div', {
     class: 'page pagina-programa',
-    style: `--pagina-ancho:${ANCHO_HOJA_CM}cm; --pagina-alto:${ALTO_HOJA_CM}cm;`,
+    style: `--pagina-ancho:${papel.ancho}cm; --pagina-alto:${papel.alto}cm;`,
   }, [
     el('div', { class: 'encabezado-programa' }, [
       config.logoDataUrl ? el('img', { class: 'logo-programa', src: config.logoDataUrl }) : null,
@@ -219,23 +236,23 @@ function renderPaginaPrograma(programa, config) {
   ]);
 }
 
-function fijarTamanoPapelImpresion() {
+function fijarTamanoPapelImpresion(papel) {
   let estilo = document.getElementById('estilo-papel-impresion');
   if (!estilo) {
     estilo = el('style', { id: 'estilo-papel-impresion' });
     document.head.appendChild(estilo);
   }
-  estilo.textContent = `@media print { @page { size: ${ANCHO_HOJA_CM}cm ${ALTO_HOJA_CM}cm; margin: 0; } }`;
+  estilo.textContent = `@media print { @page { size: ${papel.ancho}cm ${papel.alto}cm; margin: 0; } }`;
 }
 
-// Mismo mecanismo que imprimir() en preview.js (sacar la hoja de su lugar y
-// colgarla directo de <body> para que no queden páginas en blanco), pero con
-// el tamaño fijo de esta hoja en vez del que elige el examen.
+// Mismo mecanismo que imprimir() en preview.js: sacar la hoja de su lugar y
+// colgarla directo de <body> para que no queden páginas en blanco, con el
+// tamaño de papel que el maestro eligió para este programa.
 function imprimirPrograma(programa) {
   const contenedor = document.querySelector('.hoja-contenedor');
   if (!contenedor) return;
 
-  fijarTamanoPapelImpresion();
+  fijarTamanoPapelImpresion(papelDePrograma(programa));
 
   const tituloOriginal = document.title;
   document.title = `Programa_${programa.disciplina || 'materia'}_${ETIQUETAS_TRIMESTRE[programa.trimestre] || ''}`.replace(/\s+/g, '_');
@@ -384,12 +401,23 @@ export async function montarEditorPrograma(contenedor, programaId, sesion, { onV
     campoArea('', programa.observaciones, (v) => { programa.observaciones = v; }, '3'),
   ]);
 
+  // Igual que en los exámenes: el tamaño de hoja tiene que ser el mismo aquí y
+  // en el diálogo de impresión, si no cada hoja se parte en dos al imprimir.
+  const selectorPapel = el('select', {
+    class: 'selector-papel', title: 'Tamaño de hoja con el que se arma e imprime el programa',
+    disabled: !puedeEditar,
+    onchange: (e) => { programa.tamanoPapel = e.target.value; guardarConDebounce(); },
+  }, Object.entries(ETIQUETAS_PAPEL_PROGRAMA).map(([valor, etiqueta]) => el('option', {
+    value: valor, selected: (programa.tamanoPapel || PAPEL_PROGRAMA_POR_DEFECTO) === valor,
+  }, etiqueta)));
+
   const panelPreview = el('div', { class: 'panel panel-preview' }, [
     el('h2', {}, ['Vista previa ', estadoGuardado]),
     el('div', { class: 'acciones-preview' }, [
+      el('label', { class: 'campo-papel' }, ['Hoja: ', selectorPapel]),
       el('button', { type: 'button', class: 'btn-primario', onclick: () => imprimirPrograma(programa) }, '🖨 Imprimir / Descargar PDF'),
     ]),
-    el('p', { class: 'etiqueta-chica nota-impresion' }, 'Al imprimir, pon Márgenes: Ninguno y Escala: 100% (sin "Ajustar al área de impresión") y elige orientación horizontal. Así el PDF sale idéntico a esta vista previa.'),
+    el('p', { class: 'etiqueta-chica nota-impresion' }, 'Al imprimir, elige el mismo tamaño de hoja de aquí arriba (en orientación horizontal) y pon Márgenes: Ninguno y Escala: 100% (sin "Ajustar al área de impresión"). Así el PDF sale idéntico a esta vista previa.'),
     contenedorPreview,
   ]);
 

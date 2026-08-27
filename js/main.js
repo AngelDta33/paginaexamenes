@@ -9,6 +9,7 @@ import {
 import {
   nuevoExamen, uid, ETIQUETAS_ESTADO, ETIQUETAS_ROL,
   ENCABEZADO_INGLES_DEFECTO, ENCABEZADO_OFICIAL_DEFECTO, mezclarOrdenExamen,
+  FAMILIAS_FUENTE, TAMANOS_FUENTE, AJUSTES_TEXTO_DOCUMENTO,
 } from './model.js';
 import { montarEditor } from './editor.js';
 import { montarPanelAdmin } from './admin.js';
@@ -16,6 +17,9 @@ import { redimensionarImagen } from './questionTypes.js';
 import { montarListaGrupos, montarGrupo } from './grupos.js';
 import { montarListaProgramas, montarEditorPrograma } from './programas.js';
 import { montarSoporte } from './soporte.js';
+import {
+  MARGEN_POR_DEFECTO_CM, INTERLINEADO_POR_DEFECTO, SANGRIA_POR_DEFECTO_CM, TAMANO_POR_DEFECTO_PT,
+} from './paginate.js';
 import { ETIQUETAS_TRIMESTRE } from './programasModel.js';
 import { coincideTexto, guardarFoco, restaurarFoco, campoBusqueda } from './filtros.js';
 import { listarCarpetas, guardarCarpeta, eliminarCarpeta } from './carpetasStore.js';
@@ -61,7 +65,7 @@ function pintarInfoSesion() {
   infoSesion.appendChild(el('span', { class: 'nombre-sesion' }, sesion.nombre || sesion.email));
   infoSesion.appendChild(el('span', { class: 'insignia-rol' }, ETIQUETAS_ROL[sesion.rol] || 'Sin rol'));
   if (sesion.rol === 'administrador') {
-    infoSesion.appendChild(el('button', { type: 'button', class: 'btn-secundario', onclick: irAAdmin }, 'Usuarios'));
+    infoSesion.appendChild(el('button', { type: 'button', class: 'btn-secundario', onclick: irAAdmin }, '🛠 Panel Administrador'));
   }
   infoSesion.appendChild(el('button', { type: 'button', class: 'btn-secundario', onclick: abrirModalCambiarContrasena }, 'Cambiar contraseña'));
   infoSesion.appendChild(el('button', { type: 'button', class: 'btn-secundario', onclick: () => cerrarSesion() }, 'Cerrar sesión'));
@@ -267,7 +271,14 @@ async function renderEditor(examenId) {
 function renderAdmin() {
   marcarModuloActivo('examenes');
   mostrarVista(vistaAdmin);
-  montarPanelAdmin(vistaAdmin, { onVolver: irALista });
+  montarPanelAdmin(vistaAdmin, {
+    sesion,
+    onVolver: irALista,
+    // "Parámetros" (antes "Datos de la escuela", que estaba en Exámenes): datos
+    // de la escuela, membretes y formato estándar de los exámenes. Al volver se
+    // regresa al Panel Administrador, que es de donde se entró.
+    onParametros: () => { mostrarVista(vistaConfig); pintarConfig(irAAdmin); },
+  });
 }
 
 function renderGrupos() {
@@ -342,12 +353,6 @@ async function pintarLista() {
       },
     }, '+ Nuevo examen inglés'),
   ];
-  if (sesion.rol === 'administrador') {
-    controles.push(el('button', {
-      type: 'button', class: 'btn-secundario',
-      onclick: () => { mostrarVista(vistaConfig); pintarConfig(irALista); },
-    }, '⚙ Datos de la escuela'));
-  }
   controles.push(el('button', {
     type: 'button', class: 'btn-secundario',
     onclick: () => abrirModalNuevaCarpeta((carpetaId) => { carpetaActivaId = carpetaId; pintarLista(); }),
@@ -558,11 +563,20 @@ function renderizarResultadosExamenes(contenedorResultados) {
   ]))));
 }
 
-// --- Configuración de escuela (solo administrador) ---
+// --- Parámetros: datos de la escuela, membretes y formato estándar de los
+// exámenes (solo administrador). Se entra desde el Panel Administrador; el
+// botón vivía antes en la lista de Exámenes y se llamaba "Datos de la escuela".
+// Un revisor no llega aquí: la vista sale del Panel Administrador, que solo
+// abre un administrador (ver manejarHash), y estas mismas reglas las repite
+// firestore.rules para configuracion/escuela.
 
 async function pintarConfig(onVolver) {
   clear(vistaConfig);
   const config = await obtenerConfig();
+  // El formato estándar se guarda aparte de los datos de la escuela, dentro del
+  // mismo documento — lo lee estiloDocumentoDeExamen (paginate.js) como valor
+  // por defecto de TODOS los exámenes que no traigan su propio formato.
+  config.formatoExamen = config.formatoExamen || {};
 
   let guardarConfigTimeout = null;
   function guardarConfigConDebounce() {
@@ -577,59 +591,118 @@ async function pintarConfig(onVolver) {
   }
   pintarPreviewLogo();
 
-  vistaConfig.appendChild(el('button', { type: 'button', class: 'btn-secundario', onclick: onVolver, style: 'margin-bottom:0.8rem;' }, '← Volver'));
+  // Un campo numérico del formato estándar. Vacío = "usa el valor de fábrica",
+  // así que se distingue del 0 puesto a propósito (ej. margen 0): por eso el
+  // valor se compara contra null/'' en vez de con `||`, igual que en
+  // numeroODefecto de paginate.js.
+  const campoFormatoNumero = (etiqueta, valor, porDefecto, onInput, paso = '0.1') => el('div', { class: 'campo' }, [
+    el('label', {}, etiqueta),
+    el('input', {
+      type: 'number', step: paso, min: '0', placeholder: `${porDefecto} (de fábrica)`,
+      value: valor === null || valor === undefined || valor === '' ? '' : valor,
+      oninput: (e) => {
+        const texto = e.target.value;
+        onInput(texto === '' || texto === '-' ? null : Math.max(0, parseFloat(texto) || 0));
+        guardarConfigConDebounce();
+      },
+    }),
+  ]);
+
+  const panelFormato = el('div', { class: 'panel' }, [
+    el('h2', {}, '🛠 Formato estándar de los exámenes'),
+    el('p', { class: 'etiqueta-chica' }, 'Con esto salen todos los exámenes mientras nadie les cambie el formato a mano. Si un examen trae su propio formato (editor → "Formato de todo el documento"), ese gana; los demás se reacomodan solos al guardar aquí. Deja un campo vacío para usar el valor de fábrica.'),
+    el('div', { class: 'rejilla-campos' }, [
+      campoFormatoNumero('Márgenes (cm)', config.formatoExamen.margenCm, MARGEN_POR_DEFECTO_CM, (v) => { config.formatoExamen.margenCm = v; }),
+      campoFormatoNumero('Sangría (cm)', config.formatoExamen.sangriaCm, SANGRIA_POR_DEFECTO_CM, (v) => { config.formatoExamen.sangriaCm = v; }),
+      campoFormatoNumero('Interlineado', config.formatoExamen.interlineado, INTERLINEADO_POR_DEFECTO, (v) => { config.formatoExamen.interlineado = v; }),
+      el('div', { class: 'campo' }, [
+        el('label', {}, 'Tipografía'),
+        el('select', {
+          onchange: (e) => { config.formatoExamen.familia = e.target.value; guardarConfigConDebounce(); },
+        }, FAMILIAS_FUENTE.map((f) => el('option', {
+          value: f.valor, selected: (config.formatoExamen.familia || '') === f.valor,
+        }, f.valor === '' ? 'Arial (de fábrica)' : f.etiqueta))),
+      ]),
+      el('div', { class: 'campo' }, [
+        el('label', {}, 'Tamaño de letra'),
+        el('select', {
+          onchange: (e) => { config.formatoExamen.tamano = e.target.value; guardarConfigConDebounce(); },
+        }, TAMANOS_FUENTE.map((t) => el('option', {
+          value: t, selected: String(config.formatoExamen.tamano || '') === t,
+        }, t ? `${t} pt` : `${TAMANO_POR_DEFECTO_PT} pt (de fábrica)`))),
+      ]),
+      el('div', { class: 'campo' }, [
+        el('label', {}, 'Ajuste del texto'),
+        el('select', {
+          onchange: (e) => { config.formatoExamen.ajuste = e.target.value; guardarConfigConDebounce(); },
+        }, AJUSTES_TEXTO_DOCUMENTO.map((a) => el('option', {
+          value: a.valor, selected: (config.formatoExamen.ajuste || '') === a.valor,
+        }, a.etiqueta))),
+      ]),
+    ]),
+    el('p', { class: 'etiqueta-chica' }, 'Cambiar los márgenes, el interlineado o el tamaño de letra repagina los exámenes: revisa en la vista previa que ninguno se haya recorrido de hoja antes de mandarlos a imprimir.'),
+  ]);
+
+  vistaConfig.appendChild(el('button', { type: 'button', class: 'btn-secundario', onclick: onVolver, style: 'margin-bottom:0.8rem;' }, '← Volver al Panel Administrador'));
   vistaConfig.appendChild(el('div', { class: 'pantalla-config' }, [
-    el('div', { class: 'panel' }, [
-      el('h2', {}, 'Datos de la escuela (se precargan en cada examen nuevo)'),
-      el('div', { class: 'campo' }, [
-        el('label', {}, 'Nombre de la escuela'),
-        el('input', {
-          type: 'text', value: config.nombreEscuela,
-          oninput: (e) => { config.nombreEscuela = e.target.value; guardarConfigConDebounce(); },
-        }),
+    // Columna izquierda: lo que se imprime tal cual en la hoja (datos y membretes).
+    el('div', { class: 'columna-config' }, [
+      el('div', { class: 'panel' }, [
+        el('h2', {}, 'Datos de la escuela (se precargan en cada examen nuevo)'),
+        el('div', { class: 'campo' }, [
+          el('label', {}, 'Nombre de la escuela'),
+          el('input', {
+            type: 'text', value: config.nombreEscuela,
+            oninput: (e) => { config.nombreEscuela = e.target.value; guardarConfigConDebounce(); },
+          }),
+        ]),
+        el('div', { class: 'campo' }, [
+          el('label', {}, 'Ciclo escolar'),
+          el('input', {
+            type: 'text', value: config.cicloEscolar, placeholder: 'Ej. 2026-2027',
+            oninput: (e) => { config.cicloEscolar = e.target.value; guardarConfigConDebounce(); },
+          }),
+        ]),
+        el('div', { class: 'campo' }, [
+          el('label', {}, 'Logo de la escuela'),
+          el('input', {
+            type: 'file', accept: 'image/*',
+            onchange: async (e) => {
+              const file = e.target.files[0];
+              if (!file) return;
+              config.logoDataUrl = await redimensionarImagen(file, 400);
+              await guardarConfig(config);
+              pintarPreviewLogo();
+            },
+          }),
+          previewLogo,
+        ]),
       ]),
-      el('div', { class: 'campo' }, [
-        el('label', {}, 'Ciclo escolar'),
-        el('input', {
-          type: 'text', value: config.cicloEscolar, placeholder: 'Ej. 2026-2027',
-          oninput: (e) => { config.cicloEscolar = e.target.value; guardarConfigConDebounce(); },
-        }),
+      el('div', { class: 'panel' }, [
+        el('h2', {}, 'Membrete de los exámenes'),
+        el('p', { class: 'etiqueta-chica' }, 'Las líneas de la dependencia que van en la caja del encabezado, junto al logo (punto I del formato oficial). Una línea por renglón.'),
+        el('div', { class: 'campo' }, [
+          el('textarea', {
+            rows: '7',
+            oninput: (e) => { config.encabezadoOficial = e.target.value; guardarConfigConDebounce(); },
+          }, config.encabezadoOficial || ENCABEZADO_OFICIAL_DEFECTO),
+        ]),
       ]),
-      el('div', { class: 'campo' }, [
-        el('label', {}, 'Logo de la escuela'),
-        el('input', {
-          type: 'file', accept: 'image/*',
-          onchange: async (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            config.logoDataUrl = await redimensionarImagen(file, 400);
-            await guardarConfig(config);
-            pintarPreviewLogo();
-          },
-        }),
-        previewLogo,
+      el('div', { class: 'panel' }, [
+        el('h2', {}, 'Membrete de los exámenes de inglés'),
+        el('p', { class: 'etiqueta-chica' }, 'Reemplaza el logo/nombre de la escuela cuando el examen se crea con el botón "+ Nuevo examen inglés". Una línea por renglón.'),
+        el('div', { class: 'campo' }, [
+          el('textarea', {
+            rows: '7',
+            oninput: (e) => { config.encabezadoIngles = e.target.value; guardarConfigConDebounce(); },
+          }, config.encabezadoIngles || ENCABEZADO_INGLES_DEFECTO),
+        ]),
       ]),
     ]),
-    el('div', { class: 'panel' }, [
-      el('h2', {}, 'Membrete de los exámenes'),
-      el('p', { class: 'etiqueta-chica' }, 'Las líneas de la dependencia que van en la caja del encabezado, junto al logo (punto I del formato oficial). Una línea por renglón.'),
-      el('div', { class: 'campo' }, [
-        el('textarea', {
-          rows: '7',
-          oninput: (e) => { config.encabezadoOficial = e.target.value; guardarConfigConDebounce(); },
-        }, config.encabezadoOficial || ENCABEZADO_OFICIAL_DEFECTO),
-      ]),
-    ]),
-    el('div', { class: 'panel' }, [
-      el('h2', {}, 'Membrete de los exámenes de inglés'),
-      el('p', { class: 'etiqueta-chica' }, 'Reemplaza el logo/nombre de la escuela cuando el examen se crea con el botón "+ Nuevo examen inglés". Una línea por renglón.'),
-      el('div', { class: 'campo' }, [
-        el('textarea', {
-          rows: '7',
-          oninput: (e) => { config.encabezadoIngles = e.target.value; guardarConfigConDebounce(); },
-        }, config.encabezadoIngles || ENCABEZADO_INGLES_DEFECTO),
-      ]),
-    ]),
+    // Columna derecha: cómo se acomoda ese contenido en la hoja. Va aquí al lado
+    // y no hasta abajo porque los paneles de la izquierda son angostos y dejaban
+    // media pantalla vacía.
+    el('div', { class: 'columna-config' }, [panelFormato]),
   ]));
 }
 

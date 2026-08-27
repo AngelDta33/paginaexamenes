@@ -27,10 +27,17 @@ export async function pintarVistaPrevia(contenedor, examen, config, modoClave = 
   const papel = papelDeExamen(examen);
   contenedor.style.setProperty('--pagina-ancho', `${papel.ancho}cm`);
   contenedor.style.setProperty('--pagina-alto', `${papel.alto}cm`);
-  const { margenCm, interlineado, sangriaCm } = estiloDocumentoDeExamen(examen);
+  const { margenCm, interlineado, sangriaCm, familia, tamano, ajuste } = estiloDocumentoDeExamen(examen, config);
   contenedor.style.setProperty('--pagina-padding', `${margenCm}cm`);
   contenedor.style.setProperty('--pagina-interlineado', `${interlineado}`);
   contenedor.style.setProperty('--pagina-sangria', `${sangriaCm}cm`);
+  // Tipografía, tamaño y ajuste del formato estándar de la escuela (Panel
+  // Administrador → Parámetros). Van por variable CSS y no como estilo en línea
+  // de cada bloque para que el estilo por sección —que sí es en línea— siga
+  // pudiendo sobreescribirlos (ver aplicarEstiloSeccion en paginate.js).
+  contenedor.style.setProperty('--pagina-fuente', familia);
+  contenedor.style.setProperty('--pagina-tamano', `${tamano}pt`);
+  contenedor.style.setProperty('--pagina-ajuste', ajuste === 'justificado' ? 'justify' : 'left');
 
   clear(contenedor);
   paginas.forEach((pagina) => contenedor.appendChild(pagina));

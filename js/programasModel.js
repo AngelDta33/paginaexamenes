@@ -25,6 +25,11 @@ export function nuevoPrograma(sesion) {
     disciplina: '',
     campoFormativo: '',
     trimestre: '1', // '1' | '2' | '3'
+    // Tamaño de hoja (siempre horizontal) con el que se arma la vista previa y
+    // se imprime, igual que en los exámenes — ver papelDePrograma en
+    // js/programas.js. Los programas guardados antes de que existiera este
+    // campo caen solos en carta, que era el fijo de antes.
+    tamanoPapel: 'carta',
     cicloEscolar: '',
     profesor: '',
     grupos: '',

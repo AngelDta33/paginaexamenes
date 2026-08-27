@@ -5,8 +5,9 @@ import { el, clear } from './dom.js';
 import {
   nuevaSeccion, nuevaPregunta, TIPOS_PREGUNTA, subtotalSeccion, totalExamen, numerarReactivos,
   validarExamen, puntosDeclarados, ETIQUETAS_ESTADO, moverElemento,
+  FAMILIAS_FUENTE, TAMANOS_FUENTE, AJUSTES_TEXTO,
 } from './model.js';
-import { crearEditorPregunta } from './questionTypes.js';
+import { crearEditorPregunta, campoSaltoPagina } from './questionTypes.js';
 import { guardarExamen, obtenerConfig, exportarExamenJSON } from './store.js';
 import { pintarVistaPrevia, imprimir } from './preview.js';
 import { TAMANOS_PAPEL, PAPEL_POR_DEFECTO } from './paginate.js';
@@ -18,22 +19,6 @@ function fechaCorta(iso) {
   return new Date(iso).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
-// Formato por sección (solo administrador, ver pintarSeccion más abajo).
-const FAMILIAS_FUENTE = [
-  { valor: '', etiqueta: 'Predeterminada' },
-  { valor: 'Arial, Helvetica, sans-serif', etiqueta: 'Arial' },
-  { valor: "'Times New Roman', Times, serif", etiqueta: 'Times New Roman' },
-  { valor: 'Georgia, serif', etiqueta: 'Georgia' },
-  { valor: "'Courier New', Courier, monospace", etiqueta: 'Courier New' },
-  { valor: 'Verdana, Geneva, sans-serif', etiqueta: 'Verdana' },
-];
-const TAMANOS_FUENTE = ['', '8', '9', '10', '11', '12', '13', '14', '16'];
-const AJUSTES_TEXTO = [
-  { valor: '', etiqueta: 'Normal' },
-  { valor: 'justificado', etiqueta: 'Justificado' },
-  { valor: 'sin_ajuste', etiqueta: 'Sin ajuste (una línea)' },
-];
-
 // sesion = { uid, nombre, rol } de quien tiene la pantalla abierta.
 export function montarEditor(contenedor, examen, { sesion, onVolver }) {
   let modoVista = 'examen'; // 'examen' | 'clave'
@@ -41,6 +26,10 @@ export function montarEditor(contenedor, examen, { sesion, onVolver }) {
   let configCache = null;
 
   const esRevisorOAdmin = calcularEsRevisorOAdmin(sesion);
+  // El formato (márgenes, sangría, interlineado, tipografía de cada sección) es
+  // cosa del administrador nada más: un revisor puede corregir el contenido del
+  // examen, pero no cambiar el formato estándar de la escuela.
+  const esAdministrador = !!sesion && sesion.rol === 'administrador';
   const puedeEditar = esRevisorOAdmin || examen.estado === 'borrador';
 
   const estadoGuardado = el('span', { class: 'estado-guardado' });
@@ -211,10 +200,10 @@ export function montarEditor(contenedor, examen, { sesion, onVolver }) {
       // en un <input type=number> es solo una sugerencia visual para las
       // flechitas — no bloquea que se teclee o pegue un negativo, por eso se
       // recorta a mano en oninput.
-      const campoNumero = (etiqueta, valor, defecto, onInput) => el('label', {}, [
+      const campoNumero = (etiqueta, valor, onInput) => el('label', {}, [
         `${etiqueta} `,
         el('input', {
-          type: 'number', step: '0.1', min: '0', placeholder: String(defecto),
+          type: 'number', step: '0.1', min: '0', placeholder: 'estándar',
           value: valor === null || valor === undefined || valor === '' ? '' : valor,
           oninput: (e) => {
             const texto = e.target.value;
@@ -226,9 +215,10 @@ export function montarEditor(contenedor, examen, { sesion, onVolver }) {
       ]);
       return el('div', { class: 'formato-documento-admin' }, [
         el('span', { class: 'etiqueta-formato-admin' }, '🛠 Formato de todo el documento (solo administrador):'),
-        campoNumero('Márgenes (cm)', examen.estiloDocumento.margenCm, 1.8, (v) => { examen.estiloDocumento.margenCm = v; }),
-        campoNumero('Sangría (cm)', examen.estiloDocumento.sangriaCm, 0, (v) => { examen.estiloDocumento.sangriaCm = v; }),
-        campoNumero('Interlineado', examen.estiloDocumento.interlineado, 1.5, (v) => { examen.estiloDocumento.interlineado = v; }),
+        campoNumero('Márgenes (cm)', examen.estiloDocumento.margenCm, (v) => { examen.estiloDocumento.margenCm = v; }),
+        campoNumero('Sangría (cm)', examen.estiloDocumento.sangriaCm, (v) => { examen.estiloDocumento.sangriaCm = v; }),
+        campoNumero('Interlineado', examen.estiloDocumento.interlineado, (v) => { examen.estiloDocumento.interlineado = v; }),
+        el('span', { class: 'etiqueta-chica', style: 'flex-basis:100%;' }, 'Solo para este examen. Déjalos vacíos ("estándar") para que use el formato estándar de la escuela, que se captura en Panel Administrador → Parámetros.'),
       ]);
     }
 
@@ -262,7 +252,7 @@ export function montarEditor(contenedor, examen, { sesion, onVolver }) {
           oninput: (e) => { examen.instruccionesGenerales = e.target.value; guardarYActualizar(); },
         }, examen.instruccionesGenerales),
       ]),
-      esRevisorOAdmin ? panelFormatoDocumento() : null,
+      esAdministrador ? panelFormatoDocumento() : null,
     ]);
 
     const contenedorSecciones = el('div', { class: 'contenedor-secciones' });
@@ -345,7 +335,7 @@ export function montarEditor(contenedor, examen, { sesion, onVolver }) {
       // lo puede tocar un administrador, y solo afecta esta sección (no el
       // resto del examen). Se aplica en la vista previa/impresión, nunca en
       // el editor mismo.
-      if (esRevisorOAdmin) {
+      if (esAdministrador) {
         seccion.estilo = seccion.estilo || {};
         const selectorFamilia = el('select', {
           onchange: (e) => { seccion.estilo.familia = e.target.value; guardarYActualizar(); },
@@ -402,6 +392,8 @@ export function montarEditor(contenedor, examen, { sesion, onVolver }) {
           },
         }, '+ Agregar reactivo'),
       ]));
+
+      bloque.appendChild(campoSaltoPagina(seccion, guardarYActualizar, '📄 Empezar esta sección en una página nueva'));
 
       return bloque;
     }

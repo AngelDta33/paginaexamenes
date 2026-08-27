@@ -12,8 +12,15 @@ import { precargarImagenes, atributosTamano } from './imagenes.js';
 import { ETIQUETAS_TRIMESTRE } from './programasModel.js';
 
 const PX_POR_CM = 96 / 2.54;
-const PADDING_CM = 1.8;
 const MIN_RESTANTE_PARA_TITULO_CM = 4;
+
+// Formato "de fábrica" de un examen: lo que se usa cuando ni el examen ni los
+// parámetros de la escuela (Panel Administrador → Parámetros) dicen otra cosa.
+export const MARGEN_POR_DEFECTO_CM = 1;
+export const INTERLINEADO_POR_DEFECTO = 1.5;
+export const SANGRIA_POR_DEFECTO_CM = 0;
+export const FUENTE_POR_DEFECTO = 'Arial, Helvetica, sans-serif';
+export const TAMANO_POR_DEFECTO_PT = 11;
 
 // Colchón que se le resta al alto útil de la hoja al empaquetar los bloques. La
 // medición previa y el render final nunca coinciden al milímetro (redondeo a
@@ -51,15 +58,25 @@ function numeroODefecto(valor, porDefecto) {
   return valor == null || valor === '' || Number.isNaN(n) || n < 0 ? porDefecto : n;
 }
 
-// Márgenes/interlineado/sangría de todo el documento: solo un administrador
-// los puede tocar (ver editor.js), en examen.estiloDocumento. Si el examen no
-// trae nada guardado ahí, se usan los valores de siempre.
-export function estiloDocumentoDeExamen(examen) {
+// Formato de todo el documento, resuelto en tres escalones: lo que el
+// administrador guardó EN ESTE examen (examen.estiloDocumento) gana sobre el
+// formato estándar de la escuela (config.formatoExamen, que se captura en
+// Panel Administrador → Parámetros), y ese gana sobre los valores de fábrica.
+// Así, cambiar el estándar reacomoda todos los exámenes que no lo hayan
+// sobreescrito, sin tener que tocarlos uno por uno.
+export function estiloDocumentoDeExamen(examen, config) {
   const e = (examen && examen.estiloDocumento) || {};
+  const estandar = (config && config.formatoExamen) || {};
+  const numero = (delExamen, deLaEscuela, deFabrica) => numeroODefecto(delExamen, numeroODefecto(deLaEscuela, deFabrica));
+  const texto = (delExamen, deLaEscuela, deFabrica) => delExamen || deLaEscuela || deFabrica;
   return {
-    margenCm: numeroODefecto(e.margenCm, PADDING_CM),
-    interlineado: numeroODefecto(e.interlineado, 1.5),
-    sangriaCm: numeroODefecto(e.sangriaCm, 0),
+    margenCm: numero(e.margenCm, estandar.margenCm, MARGEN_POR_DEFECTO_CM),
+    interlineado: numero(e.interlineado, estandar.interlineado, INTERLINEADO_POR_DEFECTO),
+    sangriaCm: numero(e.sangriaCm, estandar.sangriaCm, SANGRIA_POR_DEFECTO_CM),
+    familia: texto(e.familia, estandar.familia, FUENTE_POR_DEFECTO),
+    tamano: numero(e.tamano, estandar.tamano, TAMANO_POR_DEFECTO_PT),
+    // '' = ajuste normal; 'justificado' = texto justificado de orilla a orilla.
+    ajuste: e.ajuste || estandar.ajuste || '',
   };
 }
 
@@ -254,7 +271,10 @@ function renderEncabezadoMini(examen, modoClave) {
 }
 
 // Punto VI: la numeración va centrada y arriba, con el formato "- 2 -" del
-// ejemplo oficial, encima del mini encabezado de materia/grado.
+// ejemplo oficial, encima del mini encabezado de materia/grado. La hoja 1 SÍ
+// cuenta para la numeración (la hoja 2 es "- 2 -"), pero no lleva su número
+// impreso: el encabezado completo ya la identifica y así queda como el formato
+// que usa la escuela (ver renderHeader).
 function renderNumeroPagina(numPagina) {
   return el('div', { class: 'numero-pagina' }, `- ${numPagina} -`);
 }
@@ -280,6 +300,14 @@ function aplicarEstiloSeccion(elemento, estilo) {
 function construirBloques(examen, modoClave) {
   const numeros = numerarReactivos(examen);
   const bloques = [];
+  // "Empezar en una página nueva" (seccion/pregunta/subpregunta.saltoPagina):
+  // se marca el PRIMER bloque de ese elemento, y el empaquetado de abajo cierra
+  // la página antes de colocarlo. Va sobre el bloque y no sobre el elemento
+  // porque un reactivo puede volverse varios bloques (una opción por bloque,
+  // por ejemplo) y el salto solo aplica al primero.
+  const marcarSalto = (indiceDelPrimerBloque, activo) => {
+    if (activo && bloques[indiceDelPrimerBloque]) bloques[indiceDelPrimerBloque].saltoAntes = true;
+  };
   for (const seccion of examen.secciones || []) {
     const inicioSeccion = bloques.length;
     if (seccion.titulo || seccion.instrucciones) {
@@ -289,15 +317,20 @@ function construirBloques(examen, modoClave) {
       // el subtotal se agrega visualmente después de las preguntas de la sección (ver abajo)
     }
     for (const p of seccion.preguntas || []) {
+      const inicioPregunta = bloques.length;
       if (p.tipo === 'lectura_comprension') {
         bloques.push(...renderLecturaBloques(p));
         for (const sp of p.subpreguntas || []) {
+          const inicioSubpregunta = bloques.length;
           bloques.push(...renderPreguntaBloques(sp, numeros[sp.id], modoClave));
+          marcarSalto(inicioSubpregunta, sp.saltoPagina);
         }
       } else {
         bloques.push(...renderPreguntaBloques(p, numeros[p.id], modoClave));
       }
+      marcarSalto(inicioPregunta, p.saltoPagina);
     }
+    marcarSalto(inicioSeccion, seccion.saltoPagina);
     if ((seccion.preguntas || []).length > 0) {
       bloques.push({ tipo: 'subtotal-seccion', el: renderValorSeccion(seccion) });
     }
@@ -351,7 +384,7 @@ export async function renderPaginas(examen, config, modoClave = false) {
   await precargarImagenes(urlsDeImagenes(examen, config));
 
   const papel = papelDeExamen(examen);
-  const { margenCm, interlineado, sangriaCm } = estiloDocumentoDeExamen(examen);
+  const { margenCm, interlineado, sangriaCm, familia, tamano, ajuste } = estiloDocumentoDeExamen(examen, config);
   const anchoContenidoCm = papel.ancho - margenCm * 2;
   const altoUtilPaginaCm = papel.alto - margenCm * 2 - MARGEN_SEGURIDAD_CM;
   const altoUtilPaginaPx = altoUtilPaginaCm * PX_POR_CM;
@@ -364,10 +397,10 @@ export async function renderPaginas(examen, config, modoClave = false) {
     class: 'medicion-oculta',
     // Misma tipografía que .page (page.css) — si no coincide, lo medido aquí no
     // predice la altura real y el contenido se desborda y se recorta en la hoja.
-    // El interlineado también tiene que coincidir con el de .page (variable
-    // --pagina-interlineado que pone preview.js) porque cambia la altura de
-    // cada bloque igual que el tamaño de letra.
-    style: `position:absolute; visibility:hidden; left:-9999px; top:0; width:${cm(anchoContenidoCm)}; font-family: Arial, Helvetica, sans-serif; font-size: 11pt; line-height: ${interlineado}; --pagina-sangria: ${cm(sangriaCm)};`,
+    // Por eso la fuente, el tamaño y el interlineado salen del MISMO
+    // estiloDocumentoDeExamen que preview.js vuelca en las variables CSS de la
+    // hoja: si el administrador cambia el formato estándar, se mide con él.
+    style: `position:absolute; visibility:hidden; left:-9999px; top:0; width:${cm(anchoContenidoCm)}; font-family: ${familia}; font-size: ${tamano}pt; line-height: ${interlineado}; text-align: ${ajuste === 'justificado' ? 'justify' : 'left'}; --pagina-sangria: ${cm(sangriaCm)};`,
   });
   document.body.appendChild(medicion);
 
@@ -379,7 +412,7 @@ export async function renderPaginas(examen, config, modoClave = false) {
   // variantes miden lo mismo de alto.
   function renderHeader(indicePagina, numPagina) {
     return el('div', { class: 'page-header' }, [
-      esIngles ? null : renderNumeroPagina(numPagina),
+      esIngles || indicePagina === 0 ? null : renderNumeroPagina(numPagina),
       indicePagina === 0
         ? renderEncabezadoCompleto(examen, config, modoClave)
         : renderEncabezadoMini(examen, modoClave),
@@ -416,7 +449,9 @@ export async function renderPaginas(examen, config, modoClave = false) {
     const cabeEnPaginaActual = altoAcumulado + altoBloque <= disponible;
     const esTituloYQuedaPoco = bloque.tipo === 'titulo-seccion' && (disponible - (altoAcumulado + altoBloque)) < minRestanteTituloPx;
 
-    if (paginaActual.length > 0 && (!cabeEnPaginaActual || esTituloYQuedaPoco)) {
+    // bloque.saltoAntes = el docente pidió que este reactivo/sección arranque
+    // hoja nueva, para que no le quede partido a la mitad (ver construirBloques).
+    if (paginaActual.length > 0 && (bloque.saltoAntes || !cabeEnPaginaActual || esTituloYQuedaPoco)) {
       cerrarPagina();
     }
     paginaActual.push(bloque);
