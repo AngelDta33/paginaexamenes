@@ -370,7 +370,8 @@ function editorOpcionMultiple(pregunta, onChange) {
           type: 'button', class: 'btn-icono', title: 'Quitar opción',
           onclick: () => {
             pregunta.opciones.splice(i, 1);
-            if (pregunta.respuestaCorrecta >= pregunta.opciones.length) pregunta.respuestaCorrecta = 0;
+            if (pregunta.respuestaCorrecta === i) pregunta.respuestaCorrecta = 0;
+            else if (pregunta.respuestaCorrecta > i) pregunta.respuestaCorrecta -= 1;
             pintar(); onChange();
           },
         }, '✕'),
@@ -395,9 +396,12 @@ function editorRelacionColumnas(pregunta, onChange) {
     pregunta.columnaA.forEach((valA, i) => {
       const selector = el('select', {
         onchange: (e) => { pregunta.relaciones[i] = parseInt(e.target.value, 10); onChange(); },
-      }, pregunta.columnaB.map((valB, j) => el('option', {
-        value: j, selected: pregunta.relaciones[i] === j,
-      }, `${letraOpcion(j)} — ${valB || '(vacío)'}`)));
+      }, [
+        el('option', { value: -1, selected: pregunta.relaciones[i] == null || pregunta.relaciones[i] === -1 }, '-- sin relación --'),
+        ...pregunta.columnaB.map((valB, j) => el('option', {
+          value: j, selected: pregunta.relaciones[i] === j,
+        }, `${letraOpcion(j)} — ${valB || '(vacío)'}`)),
+      ]);
       filas.appendChild(el('div', { class: 'fila-relacion' }, [
         el('input', {
           type: 'text', value: valA, placeholder: `Columna A #${i + 1}`,
@@ -450,7 +454,12 @@ function editorRelacionColumnas(pregunta, onChange) {
           type: 'button', class: 'btn-icono', title: 'Quitar de columna B',
           onclick: () => {
             pregunta.columnaB.splice(j, 1);
-            pregunta.relaciones = pregunta.relaciones.map((r) => (r >= j ? Math.max(0, r - 1) : r));
+            // Si la fila apuntaba justo a la opción borrada, queda "sin relación"
+            // en vez de reasignarse en silencio a otra opción distinta.
+            pregunta.relaciones = pregunta.relaciones.map((r) => {
+              if (r === j) return -1;
+              return r > j ? r - 1 : r;
+            });
             pintar(); onChange();
           },
         }, '✕'),
@@ -812,7 +821,7 @@ function renderRelacionColumnasBloques(pregunta, numero, modoClave) {
   permutado.forEach(([, idxOriginal], posMostrada) => { letraPorIndiceOriginal[idxOriginal] = letraOpcion(posMostrada); });
 
   const celdasA = pregunta.columnaA.map((valA, i) => el('td', { class: 'celda-relacion celda-a' }, [
-    el('span', { class: modoClave ? 'resp-relacion resp-correcta' : 'resp-relacion' }, modoClave ? `(${letraPorIndiceOriginal[pregunta.relaciones[i]]}) ` : '(   ) '),
+    el('span', { class: modoClave ? 'resp-relacion resp-correcta' : 'resp-relacion' }, modoClave ? `(${letraPorIndiceOriginal[pregunta.relaciones[i]] || '?'}) ` : '(   ) '),
     `${i + 1}. `,
     ...renderTextoFormulas(valA),
   ]));

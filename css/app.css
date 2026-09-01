@@ -357,6 +357,7 @@ button {
 .chip-escala:has(input:checked) { border-color: var(--azul); background: var(--azul-suave); color: var(--azul); }
 .chip-escala input { flex: 0 0 auto; margin: 0; }
 .aviso-vacio { color: var(--gris); }
+.aviso-trimestres-superpuestos { background: #fdecea; color: #9c2c22; border-radius: 8px; padding: 0.6rem 0.8rem; }
 
 /* --- Tablas estilo Excel (pase de lista y rúbrica) --- */
 .envoltura-tabla-excel { overflow-x: auto; border: 1px solid var(--borde); border-radius: 8px; margin-top: 0.6rem; }

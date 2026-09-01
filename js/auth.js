@@ -18,18 +18,47 @@ async function obtenerPerfil(uid) {
   return snap.exists() ? snap.data() : null;
 }
 
-// callback recibe null (sin sesión) o { uid, email, nombre, rol, activo }
+function armarSesion(user, perfil) {
+  if (!perfil) {
+    // Cuenta de Auth sin documento en usuarios/ (no debería pasar salvo mal bootstrap)
+    return { uid: user.uid, email: user.email, nombre: user.email, rol: null, activo: false };
+  }
+  return { uid: user.uid, email: user.email, ...perfil };
+}
+
+// Se vuelve a llamar en cada disparo de onAuthStateChanged (login, logout,
+// refresco de token cada ~1h) — no cuando un administrador cambia el
+// documento de otro usuario ya logueado: eso no dispara ningún evento de
+// Auth, así que a alguien que reactivan mientras su pestaña ya estaba abierta
+// en "Tu cuenta no tiene acceso" no le alcanza con esperar — necesita volver a
+// intentar (ver reintentarSesion, que usa esto mismo bajo el botón "Reintentar").
+let tokenSesion = 0;
 export function observarSesion(callback) {
   return onAuthStateChanged(auth, async (user) => {
-    if (!user) { callback(null); return; }
+    const token = ++tokenSesion;
+    if (!user) { if (token === tokenSesion) callback(null); return; }
     const perfil = await obtenerPerfil(user.uid);
-    if (!perfil) {
-      // Cuenta de Auth sin documento en usuarios/ (no debería pasar salvo mal bootstrap)
-      callback({ uid: user.uid, email: user.email, nombre: user.email, rol: null, activo: false });
-      return;
-    }
-    callback({ uid: user.uid, email: user.email, ...perfil });
+    // Dos disparos de onAuthStateChanged pueden superponerse (ej. el login dispara
+    // uno y, casi al mismo tiempo, un refresco de token dispara otro) y la red
+    // puede resolver sus getDoc en cualquier orden — sin este freno, la consulta
+    // más vieja podía llegar después y pisar con datos obsoletos (ej. activo:false)
+    // la sesión que ya se había actualizado correctamente.
+    if (token !== tokenSesion) return;
+    callback(armarSesion(user, perfil));
   });
+}
+
+// Vuelve a consultar el perfil del usuario ya logueado sin pasar por Auth (no
+// hay evento de onAuthStateChanged que dispare esto solo) — para el botón
+// "Reintentar" de la pantalla "Tu cuenta no tiene acceso": si un administrador
+// reactivó la cuenta mientras esa pestaña seguía abierta, esto es lo único que
+// vuelve a leer el activo:true sin pedirle a la persona que cierre sesión y
+// vuelva a entrar (ni que sepa que tiene que recargar la página a mano).
+export async function reintentarSesion() {
+  const user = auth.currentUser;
+  if (!user) return null;
+  const perfil = await obtenerPerfil(user.uid);
+  return armarSesion(user, perfil);
 }
 
 export async function iniciarSesion(email, password) {

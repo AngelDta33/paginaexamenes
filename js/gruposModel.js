@@ -242,7 +242,11 @@ export function calcularPromedio(grupo, alumnoId, dias = []) {
   if (porcentajeCapturado === 0) return extra > 0 ? extra : null;
   // Suma acumulada de lo ya capturado (no se proyecta ni se rescala) — a mitad de
   // ciclo el promedio simplemente va creciendo conforme se capturan más rubros.
-  return Math.round((suma + extra) * 100) / 100;
+  // Sin redondear aquí: redondear a centésimas antes de calificacionFinal podía
+  // convertir un 5.995 (reprobado) en un 6.00 que ya redondea hacia arriba,
+  // justo lo que ese redondeo dice evitar. Quien muestra el promedio (formatearNota,
+  // celdaNota) ya redondea para pantalla/Excel por su cuenta.
+  return suma + extra;
 }
 
 // --- Calificación final ---
@@ -325,7 +329,10 @@ export function promedioAsistenciaAlumno(grupo, alumnoId, dias) {
     if (reg && reg.estado) estados.push(reg.estado);
   }
   if (estados.length === 0) return null;
-  const suma = estados.reduce((acc, e) => acc + (Number(valores[e]) ?? 0), 0);
+  // Number(x) nunca da null/undefined para una clave ausente (da NaN), así que
+  // "?? 0" no la protegía de verdad — un estado sin valor configurado volvía
+  // NaN todo el promedio en silencio.
+  const suma = estados.reduce((acc, e) => acc + (Number.isFinite(Number(valores[e])) ? Number(valores[e]) : 0), 0);
   return suma / estados.length;
 }
 
@@ -411,6 +418,24 @@ export function fechasDeClase(calendario) {
 export function fechasEnTrimestre(fechas, trimestre) {
   if (!trimestre.inicio || !trimestre.fin) return [];
   return fechas.filter((f) => f >= trimestre.inicio && f <= trimestre.fin);
+}
+
+// Dos trimestres que comparten una fecha (ej. Trimestre 1 termina el 14 y
+// Trimestre 2 también empieza el 14) cuentan esa fecha en ambos: sus Faltas/
+// Asistencia, sus columnas de pase de lista y su hoja de Excel se inflan igual
+// para ese día. Se detecta para avisarle al maestro, no se corrige solo —
+// no hay forma de adivinar a cuál de los dos le pertenece esa fecha.
+export function trimestresSuperpuestos(trimestres) {
+  const validos = (trimestres || []).filter((t) => t.inicio && t.fin);
+  const pares = [];
+  for (let i = 0; i < validos.length; i++) {
+    for (let j = i + 1; j < validos.length; j++) {
+      const a = validos[i];
+      const b = validos[j];
+      if (a.inicio <= b.fin && b.inicio <= a.fin) pares.push([a, b]);
+    }
+  }
+  return pares;
 }
 
 // --- Columna(s) informativas de "Pase de lista" en la rúbrica ---

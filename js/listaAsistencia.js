@@ -8,7 +8,7 @@ import {
   ESTADOS_ASISTENCIA, ETIQUETAS_ESTADO_ASISTENCIA, INICIALES_ESTADO_ASISTENCIA, fechaHoyISO, fechaCortaMX,
   valoresAsistenciaDeGrupo, promedioAsistenciaAlumno,
   DIAS_SEMANA_NOMBRES, calendarioDeGrupo, nuevoTrimestre, crearTrimestresEstandar, fechasDeClase,
-  fechasEnTrimestre, usaPorcentaje, formatearNota,
+  fechasEnTrimestre, usaPorcentaje, formatearNota, trimestresSuperpuestos,
 } from './gruposModel.js';
 
 // Ciclo al hacer clic: sin marcar → presente → falta → justificada → sin marcar.
@@ -401,6 +401,21 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
 
     let trimestres = cal.trimestres.map((t) => ({ ...t }));
     const contenedorTrimestres = el('div', {});
+    // El aviso vive en su propio contenedor, fuera de las filas: si estuviera
+    // adentro, actualizarlo en cada tecla de una fecha forzaría un pintarTrimestres()
+    // completo que reconstruye (clear + appendChild) el mismísimo <input> en el que
+    // el maestro sigue escribiendo — el navegador truena con "removeChild" a media
+    // pulsación (mismo motivo por el que campoBusqueda, en filtros.js, no repinta
+    // el campo en cada tecla).
+    const contenedorAvisoTrimestres = el('div', {});
+    function actualizarAvisoSuperpuestos() {
+      clear(contenedorAvisoTrimestres);
+      const superpuestos = trimestresSuperpuestos(trimestres);
+      if (superpuestos.length > 0) {
+        contenedorAvisoTrimestres.appendChild(el('p', { class: 'aviso-vacio aviso-trimestres-superpuestos' },
+          `⚠ ${superpuestos.map(([a, b]) => `"${a.nombre || 'Trimestre'}" y "${b.nombre || 'Trimestre'}"`).join(', ')} comparten fechas — esos días se contarían dos veces en Faltas/Asistencia y en el Excel. Ajusta que un trimestre empiece justo un día después de que termine el anterior.`));
+      }
+    }
     function pintarTrimestres() {
       clear(contenedorTrimestres);
       if (trimestres.length === 0) {
@@ -410,16 +425,17 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
         contenedorTrimestres.appendChild(el('div', { class: 'fila-trimestre' }, [
           el('input', {
             type: 'text', placeholder: `Trimestre ${i + 1}`, value: tri.nombre,
-            oninput: (e) => { tri.nombre = e.target.value; },
+            oninput: (e) => { tri.nombre = e.target.value; actualizarAvisoSuperpuestos(); },
           }),
-          el('input', { type: 'date', value: tri.inicio || '', oninput: (e) => { tri.inicio = e.target.value; } }),
-          el('input', { type: 'date', value: tri.fin || '', oninput: (e) => { tri.fin = e.target.value; } }),
+          el('input', { type: 'date', value: tri.inicio || '', oninput: (e) => { tri.inicio = e.target.value; actualizarAvisoSuperpuestos(); } }),
+          el('input', { type: 'date', value: tri.fin || '', oninput: (e) => { tri.fin = e.target.value; actualizarAvisoSuperpuestos(); } }),
           el('button', {
             type: 'button', class: 'btn-icono btn-eliminar', title: 'Quitar trimestre',
             onclick: () => { trimestres = trimestres.filter((t) => t.id !== tri.id); pintarTrimestres(); },
           }, '✕'),
         ]));
       });
+      actualizarAvisoSuperpuestos();
     }
     pintarTrimestres();
 
@@ -522,6 +538,7 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
       el('p', { class: 'etiqueta-chica' }, 'Da de alta de una vez todas las fechas del ciclo que caen en los días marcados arriba, para no ir agregándolas una por una. Las fechas que ya tengas capturadas no se tocan.'),
       el('h2', { style: 'margin-top:1rem;' }, 'Trimestres (opcional)'),
       contenedorTrimestres,
+      contenedorAvisoTrimestres,
       el('div', { class: 'barra-nueva' }, [btnAgregarTrimestre, btnTrimestresEstandar]),
       el('div', { class: 'acciones-modal' }, [btnGuardar, btnCancelar]),
       mensaje,

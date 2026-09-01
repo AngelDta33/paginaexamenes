@@ -45,11 +45,25 @@ export function montarEvaluacionesRubro(contenedor, grupo, rubroId, { onVolver, 
   // siempre en base 10 (ver esRubroExamen). Si el rubro se renombró y dejó de ser
   // de examen, se limpian los totales que hubieran quedado guardados: si no, las
   // casillas seguirían reescalando aciertos → base 10 sin que se vea por qué.
+  // Antes de limpiar totalAciertos hay que reescalar lo ya capturado (que hoy es
+  // un número de aciertos, ej. 18) a la calificación 0-10 que representaba (9.0):
+  // si no, ese número crudo queda guardado tal cual y se malinterpreta como
+  // calificación directa, inflando al alumno silenciosamente.
   const permiteAciertos = esRubroExamen(rubro);
   if (!permiteAciertos && !soloLectura) {
     const conAciertos = (rubro.evaluaciones || []).filter((ev) => ev.totalAciertos);
     if (conAciertos.length > 0) {
-      conAciertos.forEach((ev) => { ev.totalAciertos = null; });
+      for (const ev of conAciertos) {
+        const total = Number(ev.totalAciertos) || 0;
+        for (const cal of Object.values(grupo.calificaciones || {})) {
+          const crudo = cal.notasEvaluacion ? cal.notasEvaluacion[ev.id] : undefined;
+          if (crudo === null || crudo === undefined || crudo === '' || total <= 0) continue;
+          const n = Number(crudo);
+          if (!Number.isFinite(n)) continue;
+          cal.notasEvaluacion[ev.id] = Math.round(Math.max(0, Math.min(10, (n / total) * 10)) * 100) / 100;
+        }
+        ev.totalAciertos = null;
+      }
       guardarGrupo(grupo).catch(console.error);
     }
   }

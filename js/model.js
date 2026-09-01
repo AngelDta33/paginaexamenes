@@ -248,12 +248,19 @@ function firmaOrden(secciones) {
 // mete otro reactivo entre la lectura y sus preguntas — y el orden interno de
 // esas subpreguntas no se toca, porque suelen depender de leer el texto en
 // orden (pregunta 1 sobre el primer párrafo, etc.).
+// Un examen solo se puede reacomodar de verdad si hay algo que permutar:
+// 2+ secciones, o 2+ reactivos dentro de alguna sección. Con una sola sección
+// de un solo reactivo, cualquier "mezcla" es forzosamente idéntica al original.
+function sePuedeMezclar(secciones) {
+  if (secciones.length >= 2) return true;
+  return secciones.some((s) => (s.preguntas || []).length >= 2);
+}
+
 export function mezclarOrdenExamen(examen) {
   const secciones = examen.secciones || [];
+  if (!sePuedeMezclar(secciones)) return false; // no hay nada que mezclar
+
   const firmaOriginal = firmaOrden(secciones);
-  const totalUnidades = secciones.length
-    + secciones.reduce((acc, s) => acc + (s.preguntas || []).length, 0);
-  if (totalUnidades < 2) return examen; // no hay nada que mezclar
 
   // Con pocas secciones/preguntas, mezclar al azar puede devolver el mismo
   // orden por pura casualidad (ej. 2 secciones tienen 50% de probabilidad de
@@ -268,7 +275,7 @@ export function mezclarOrdenExamen(examen) {
     if (firmaOrden(resultado) !== firmaOriginal) break;
   }
   examen.secciones = resultado;
-  return examen;
+  return firmaOrden(resultado) !== firmaOriginal;
 }
 
 // --- Cálculo de puntos ---

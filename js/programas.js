@@ -47,6 +47,14 @@ let filtroProfesorPrograma = 'todos';
 // y pierde el foco — solo dejaba borrar de a un carácter).
 let programasCache = null;
 
+// Ver el comentario junto a reiniciarFiltrosExamenes en main.js — mismo motivo.
+export function reiniciarFiltrosProgramas() {
+  busquedaPrograma = '';
+  filtroTrimestrePrograma = 'todos';
+  filtroProfesorPrograma = 'todos';
+  programasCache = null;
+}
+
 // ---------------------------------------------------------------------------
 // LISTA
 // ---------------------------------------------------------------------------

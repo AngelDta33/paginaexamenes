@@ -331,11 +331,14 @@ function construirBloques(examen, modoClave) {
       marcarSalto(inicioPregunta, p.saltoPagina);
     }
     marcarSalto(inicioSeccion, seccion.saltoPagina);
-    if ((seccion.preguntas || []).length > 0) {
-      bloques.push({ tipo: 'subtotal-seccion', el: renderValorSeccion(seccion) });
-    }
+    // El estilo de sección se aplica antes del subtotal — ese renglón siempre
+    // va alineado a la derecha (ver .subtotal-seccion en page.css) y no debe
+    // heredar, por ejemplo, un ajuste "justificado" que rompería esa alineación.
     if (seccion.estilo) {
       for (let i = inicioSeccion; i < bloques.length; i++) aplicarEstiloSeccion(bloques[i].el, seccion.estilo);
+    }
+    if ((seccion.preguntas || []).length > 0) {
+      bloques.push({ tipo: 'subtotal-seccion', el: renderValorSeccion(seccion) });
     }
   }
   // Los formatos de inglés que mandó el maestro no llevan firma del padre/tutor.

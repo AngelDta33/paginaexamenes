@@ -176,12 +176,18 @@ export function montarPanelAdmin(contenedor, { sesion, onVolver, onParametros })
         tablaUsuarios.appendChild(el('p', {}, 'Aún no hay cuentas.'));
         return;
       }
+      // Solo un administrador ACTIVO puede escribir en usuarios/ (ver firestore.rules),
+      // así que desactivar al último que queda deja la cuenta sin nadie que pueda
+      // reactivarla ni dar de alta a nadie más — quedaría fuera de Firestore mismo,
+      // sin forma de arreglarlo desde la app.
+      const administradoresActivos = usuarios.filter((u) => u.rol === 'administrador' && u.activo).length;
       usuarios.forEach((u) => {
         // Las cuentas de administrador no se pueden eliminar desde aquí: son las
         // únicas que pueden dar de alta cuentas y editar la configuración de la
         // escuela, así que borrar la última dejaría la app sin quién la
         // administre (y no hay forma de recuperarla sin tocar Firebase a mano).
         const esAdministrador = u.rol === 'administrador';
+        const esUltimoAdminActivo = esAdministrador && u.activo && administradoresActivos <= 1;
         tablaUsuarios.appendChild(el('div', { class: 'fila-usuario' }, [
           el('div', { class: 'info-usuario' }, [
             el('strong', {}, u.nombre || u.email),
@@ -189,13 +195,15 @@ export function montarPanelAdmin(contenedor, { sesion, onVolver, onParametros })
           ]),
           el('span', { class: 'etiqueta-rol' }, ETIQUETAS_ROL[u.rol] || u.rol),
           el('span', { class: u.activo ? 'estado-activo' : 'estado-inactivo' }, u.activo ? 'Activo' : 'Inactivo'),
-          el('button', {
-            type: 'button', class: 'btn-secundario',
-            onclick: async () => {
-              await cambiarActivo(u.uid, !u.activo);
-              recargarUsuarios();
-            },
-          }, u.activo ? 'Desactivar' : 'Activar'),
+          esUltimoAdminActivo
+            ? el('span', { class: 'etiqueta-chica', title: 'Es el único administrador activo — desactivarlo dejaría la app sin nadie que pueda dar de alta cuentas ni reactivar a nadie.' }, 'Único admin activo')
+            : el('button', {
+              type: 'button', class: 'btn-secundario',
+              onclick: async () => {
+                await cambiarActivo(u.uid, !u.activo);
+                recargarUsuarios();
+              },
+            }, u.activo ? 'Desactivar' : 'Activar'),
           esAdministrador
             ? el('span', { class: 'etiqueta-chica', title: 'Las cuentas de administrador no se pueden eliminar desde el panel.' }, 'No se elimina')
             : el('button', {

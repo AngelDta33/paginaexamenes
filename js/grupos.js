@@ -27,6 +27,13 @@ let filtroProfesorGrupo = 'todos';
 // y pierde el foco — solo dejaba borrar de a un carácter).
 let gruposCache = null;
 
+// Ver el comentario junto a reiniciarFiltrosExamenes en main.js — mismo motivo.
+export function reiniciarFiltrosGrupos() {
+  busquedaGrupo = '';
+  filtroProfesorGrupo = 'todos';
+  gruposCache = null;
+}
+
 export async function montarListaGrupos(contenedor, sesion, { onAbrirGrupo }) {
   clear(contenedor);
   // Revisor/administrador solo consultan: ven los grupos de todos los maestros

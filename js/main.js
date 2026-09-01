@@ -1,6 +1,6 @@
 import { el, clear, campoContrasena } from './dom.js';
 import {
-  observarSesion, iniciarSesion, cerrarSesion, cambiarContrasena, esRevisorOAdmin,
+  observarSesion, iniciarSesion, cerrarSesion, cambiarContrasena, esRevisorOAdmin, reintentarSesion,
 } from './auth.js';
 import {
   listarExamenes, obtenerExamen, guardarExamen, eliminarExamen,
@@ -14,8 +14,8 @@ import {
 import { montarEditor } from './editor.js';
 import { montarPanelAdmin } from './admin.js';
 import { redimensionarImagen } from './questionTypes.js';
-import { montarListaGrupos, montarGrupo } from './grupos.js';
-import { montarListaProgramas, montarEditorPrograma } from './programas.js';
+import { montarListaGrupos, montarGrupo, reiniciarFiltrosGrupos } from './grupos.js';
+import { montarListaProgramas, montarEditorPrograma, reiniciarFiltrosProgramas } from './programas.js';
 import { montarSoporte } from './soporte.js';
 import {
   MARGEN_POR_DEFECTO_CM, INTERLINEADO_POR_DEFECTO, SANGRIA_POR_DEFECTO_CM, TAMANO_POR_DEFECTO_PT,
@@ -44,6 +44,7 @@ const todasLasVistas = [
 ];
 
 let sesion = null; // { uid, email, nombre, rol, activo } | null
+let huboSesionAntes = false; // distingue "primer disparo de observarSesion" de "alguien cerró sesión"
 
 function mostrarVista(vista) {
   todasLasVistas.forEach((v) => v.classList.toggle('oculto', v !== vista));
@@ -139,9 +140,12 @@ function abrirModalDuplicarTipoB(examen, onListo) {
       copia.revisadoPor = null;
       copia.revisadoEn = null;
       copia.createdAt = new Date().toISOString();
-      if (mezclar) mezclarOrdenExamen(copia);
+      const seMezclo = mezclar ? mezclarOrdenExamen(copia) : true;
       await guardarExamen(copia);
       overlay.remove();
+      if (mezclar && !seMezclo) {
+        alert('Este examen tiene muy pocas secciones y reactivos para cambiar su orden (no hay nada que reacomodar), así que el Tipo B quedó igual al Tipo A. Modifica las preguntas manualmente si necesitas que sean distintas.');
+      }
       onListo(copia.id);
     },
   }, 'Duplicar');
@@ -220,11 +224,34 @@ function pintarLogin() {
 
 function pintarSinAcceso() {
   clear(vistaLogin);
+  const mensaje = el('p', { class: 'mensaje-login' });
+  const btnReintentar = el('button', {
+    type: 'button', class: 'btn-primario',
+    onclick: async () => {
+      btnReintentar.disabled = true; btnReintentar.textContent = 'Comprobando…';
+      // Si un administrador reactivó la cuenta (o le asignó rol) mientras esta
+      // pestaña seguía abierta aquí, no hay ningún evento que avise solo —
+      // reintentarSesion() vuelve a leer el perfil sin necesidad de recargar
+      // la página ni de cerrar sesión y volver a entrar.
+      const nuevaSesion = await reintentarSesion();
+      if (nuevaSesion && nuevaSesion.rol && nuevaSesion.activo !== false) {
+        aplicarNuevaSesion(nuevaSesion);
+        return;
+      }
+      sesion = nuevaSesion;
+      btnReintentar.disabled = false; btnReintentar.textContent = 'Reintentar';
+      mensaje.textContent = 'Sigue sin tener acceso — si un administrador ya te dio de alta o te reactivó, espera un momento y vuelve a intentar.';
+    },
+  }, 'Reintentar');
   vistaLogin.appendChild(el('div', { class: 'pantalla-login' }, [
     el('div', { class: 'panel panel-login' }, [
       el('h2', {}, 'Tu cuenta no tiene acceso'),
       el('p', {}, 'Inicia sesión pero no encontramos un rol asignado (o está desactivada). Pide a un administrador que revise tu cuenta.'),
-      el('button', { type: 'button', class: 'btn-secundario', onclick: () => cerrarSesion() }, 'Cerrar sesión'),
+      el('div', { class: 'acciones-modal' }, [
+        btnReintentar,
+        el('button', { type: 'button', class: 'btn-secundario', onclick: () => cerrarSesion() }, 'Cerrar sesión'),
+      ]),
+      mensaje,
     ]),
   ]));
 }
@@ -262,7 +289,18 @@ async function renderLista() {
 
 async function renderEditor(examenId) {
   marcarModuloActivo('examenes');
-  const examen = await obtenerExamen(examenId);
+  // Sin este try/catch, un link a un examen de otro profesor (Firestore lo
+  // rechaza con permission-denied) dejaba la promesa rechazada sin atrapar en
+  // ningún lado: la app se quedaba congelada en lo que se veía antes, sin
+  // ningún mensaje de qué pasó.
+  let examen;
+  try {
+    examen = await obtenerExamen(examenId);
+  } catch (err) {
+    alert(`No se pudo abrir el examen: ${err.message}`);
+    irALista();
+    return;
+  }
   if (!examen) { irALista(); return; }
   montarEditor(vistaEditor, examen, { sesion, onVolver: irALista });
   mostrarVista(vistaEditor);
@@ -330,6 +368,26 @@ let carpetasCache = null;
 // cualquier otro valor = el id de la carpeta activa. Las carpetas solo
 // acomodan la lista — no son un filtro más, se aplican aparte de esos.
 let carpetaActivaId = null;
+// Se incrementa en cada llamada a pintarLista(); si dos llamadas se
+// superponen (ej. navegación rápida antes de que la primera termine de
+// consultar Firestore) y la red las resuelve en desorden, la más vieja no
+// debe pisar la caché con datos ya obsoletos — solo cuenta la última.
+let tokenListaExamenes = 0;
+
+// Si dos personas usan la misma computadora sin recargar la página entre una
+// sesión y otra (cerrar sesión no recarga), estos filtros y la carpeta activa
+// seguían siendo los de quien ya se fue: la lista del nuevo usuario podía
+// aparecer vacía por un filtro/carpeta que ni siquiera existe para él, sin
+// ninguna pista de por qué. Se reinicia al cambiar de sesión (ver main.js abajo).
+function reiniciarFiltrosExamenes() {
+  filtroEstado = 'todos';
+  filtroTipoExamen = 'todos';
+  filtroProfesorExamen = 'todos';
+  busquedaExamen = '';
+  examenesCache = null;
+  carpetasCache = null;
+  carpetaActivaId = null;
+}
 
 async function pintarLista() {
   clear(vistaLista);
@@ -372,6 +430,11 @@ async function pintarLista() {
           examen.estado = 'borrador';
           examen.revisadoPor = null;
           examen.revisadoEn = null;
+          // El respaldo puede venir de otro profesor (o de una carpeta ya
+          // borrada); su carpetaId no significa nada para quien importa —
+          // dejarlo apuntando a una carpeta ajena lo dejaba mal contado en
+          // todos los chips y el selector de carpeta sin mostrarlo.
+          examen.carpetaId = null;
           await guardarExamen(examen);
           irAEditor(examen.id);
         } catch (err) {
@@ -393,7 +456,9 @@ async function pintarLista() {
   // allSettled y no Promise.all: las carpetas son un extra de organización,
   // no algo esencial — si esa consulta falla no tiene que tumbar la lista de
   // exámenes, que puede haberse cargado bien de todas formas.
+  const token = ++tokenListaExamenes;
   const [examenesResultado, carpetasResultado] = await Promise.allSettled([listarExamenes(sesion), listarCarpetas(sesion)]);
+  if (token !== tokenListaExamenes) return; // llegó tarde: ya hay una llamada más nueva en curso
   if (examenesResultado.status === 'rejected') {
     cargando.textContent = `No se pudieron cargar los exámenes: ${examenesResultado.reason.message}`;
     return;
@@ -746,8 +811,26 @@ window.addEventListener('hashchange', manejarHash);
 // entrar, ese es justo el momento en que más necesita el contacto de soporte.
 montarSoporte();
 
-observarSesion((nuevaSesion) => {
+// Compartida entre el observador de Auth de abajo y el botón "Reintentar" de
+// pintarSinAcceso (que llama a reintentarSesion() sin pasar por Auth) — las
+// dos formas en que puede llegar una sesión nueva deben acomodarse igual.
+function aplicarNuevaSesion(nuevaSesion) {
+  // Un cambio real de usuario (no solo un refresco de token del mismo uid, ni
+  // el primer disparo al cargar la página) deja atrás filtros/carpeta activa/
+  // cachés que le pertenecían a la sesión anterior — ver reiniciarFiltrosExamenes.
+  // "sesion" ya vale null tanto antes del primer disparo como tras cerrar
+  // sesión, así que no alcanza para distinguir esos dos casos por sí solo.
+  const uidAnterior = sesion ? sesion.uid : null;
+  const uidNuevo = nuevaSesion ? nuevaSesion.uid : null;
+  if (huboSesionAntes && uidAnterior !== uidNuevo) {
+    reiniciarFiltrosExamenes();
+    reiniciarFiltrosGrupos();
+    reiniciarFiltrosProgramas();
+  }
+  huboSesionAntes = true;
   sesion = nuevaSesion;
   pintarInfoSesion();
   manejarHash();
-});
+}
+
+observarSesion(aplicarNuevaSesion);
