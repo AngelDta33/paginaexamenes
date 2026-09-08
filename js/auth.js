@@ -4,7 +4,9 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/fireba
 import {
   getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, updatePassword,
 } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
-import { getFirestore, doc, getDoc } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+import {
+  getFirestore, doc, getDoc, collection, getDocs,
+} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
 import { firebaseConfig } from './firebase-config.js';
 
 export const app = initializeApp(firebaseConfig);
@@ -79,4 +81,18 @@ export function cambiarContrasena(nuevaContrasena) {
 
 export function esRevisorOAdmin(sesion) {
   return !!sesion && (sesion.rol === 'revisor' || sesion.rol === 'administrador');
+}
+
+// Mapa uid → rol de todas las cuentas. Lo usa el filtro "Grupos de profesores" de
+// la lista de grupos: ahora que revisores y administradores también llevan sus
+// propios grupos, "de un profesor" ya no es lo mismo que "no es mío", y el
+// documento del grupo solo guarda profesorId/profesorNombre, no el rol de quien
+// lo creó (guardarlo ahí lo dejaría congelado en el momento del alta, además de
+// que los grupos que ya existen no lo traen). Cualquier cuenta autenticada puede
+// leer usuarios/ — ver firestore.rules.
+export async function rolesPorUsuario() {
+  const snap = await getDocs(collection(db, 'usuarios'));
+  const roles = new Map();
+  snap.docs.forEach((d) => roles.set(d.id, (d.data() || {}).rol || null));
+  return roles;
 }

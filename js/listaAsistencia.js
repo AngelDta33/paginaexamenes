@@ -23,13 +23,31 @@ const INICIALES_ESTADO = INICIALES_ESTADO_ASISTENCIA;
 // ciclo por defecto), aunque no estén visibles en la ventana actual.
 const TAM_VENTANA_FECHAS = 10;
 
+const AYUDA_MARCAR = 'Haz clic en una celda para marcar Presente → Falta → Justificada. Debajo de cada falta aparece "motivo" por si quieres aclarar por qué faltó el alumno — es opcional y lo puedes anotar cuando lo sepas. El ícono 📝 agrega una nota en los demás días.';
+
+function textoAyuda(soloLectura, puedeEditarGrupo) {
+  if (soloLectura) {
+    return 'Solo lectura: no se puede editar la asistencia. Donde haya un motivo de falta anotado, aparece "ver motivo" debajo de la celda para consultarlo.';
+  }
+  if (!puedeEditarGrupo) {
+    return `${AYUDA_MARCAR} Este grupo es de otro maestro: puedes corregirle la asistencia y agregar fechas, pero los valores de asistencia y el calendario del curso solo los cambia él.`;
+  }
+  return AYUDA_MARCAR;
+}
+
 const DIAS_SEMANA_CORTOS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
 function diaSemanaCorto(fechaISO) {
   const [anio, mes, dia] = fechaISO.split('-').map(Number);
   return DIAS_SEMANA_CORTOS[new Date(anio, mes - 1, dia).getDay()];
 }
 
-export async function montarListaAsistencia(contenedor, grupo, { soloLectura = false } = {}) {
+// soloLectura: no se puede tocar la asistencia (hoy ya no lo usa nadie, pero se
+// mantiene porque es el interruptor natural de esta vista).
+// puedeEditarGrupo: además de marcar asistencias, se pueden abrir "Valores de
+// asistencia" y "Calendario del curso" — los dos únicos botones de aquí que
+// escriben el documento del grupo. Un revisor o administrador corrigiendo el pase
+// de lista de otro maestro entra con soloLectura:false y puedeEditarGrupo:false.
+export async function montarListaAsistencia(contenedor, grupo, { soloLectura = false, puedeEditarGrupo = !soloLectura } = {}) {
   clear(contenedor);
   contenedor.appendChild(el('p', {}, 'Cargando pase de lista…'));
 
@@ -548,11 +566,16 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
 
   contenedor.appendChild(el('div', { class: 'panel' }, [
     el('h2', {}, 'Pase de lista'),
-    el('p', { class: 'etiqueta-chica' }, soloLectura
-      ? 'Solo lectura: no se puede editar la asistencia. Donde haya un motivo de falta anotado, aparece "ver motivo" debajo de la celda para consultarlo.'
-      : 'Haz clic en una celda para marcar Presente → Falta → Justificada. Debajo de cada falta aparece "motivo" por si quieres aclarar por qué faltó el alumno — es opcional y lo puedes anotar cuando lo sepas. El ícono 📝 agrega una nota en los demás días.'),
+    el('p', { class: 'etiqueta-chica' }, textoAyuda(soloLectura, puedeEditarGrupo)),
     leyenda,
-    soloLectura ? null : el('div', { class: 'barra-nueva' }, [campoFecha, btnAgregarFecha, btnAgregarHoy, btnValores, btnCalendario]),
+    soloLectura ? null : el('div', { class: 'barra-nueva' }, [
+      // Agregar una fecha sí entra en "corregir el pase de lista" (sin columna no
+      // hay dónde marcar el día que faltó capturar); los valores de asistencia y el
+      // calendario no: escriben el grupo y son configuración del curso.
+      campoFecha, btnAgregarFecha, btnAgregarHoy,
+      puedeEditarGrupo ? btnValores : null,
+      puedeEditarGrupo ? btnCalendario : null,
+    ]),
     barraFiltroTrimestre,
     contenedorTabla,
   ]));

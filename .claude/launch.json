@@ -3,8 +3,12 @@
   "configurations": [
     {
       "name": "paginaexamenes",
-      "runtimeExecutable": "node",
-      "runtimeArgs": ["/Users/revertdata/Documents/paginaexamenes/.claude/serve.js", "8420", "/Users/revertdata/Documents/paginaexamenes"],
+      "runtimeExecutable": "/Users/raulsolis/.local/node/bin/node",
+      "runtimeArgs": [
+        "/Users/raulsolis/Documents/Trabajo/Secundaria/paginaexamenes/.claude/serve.js",
+        "8420",
+        "/Users/raulsolis/Documents/Trabajo/Secundaria/paginaexamenes"
+      ],
       "port": 8420,
       "autoPort": true
     }

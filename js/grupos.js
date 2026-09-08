@@ -10,7 +10,7 @@ import { montarListaAsistencia } from './listaAsistencia.js';
 import { montarRubrica } from './rubrica.js';
 import { montarEvaluacionesRubro } from './evaluacionesRubro.js';
 import { exportarGrupoExcel } from './exportarExcel.js';
-import { esRevisorOAdmin } from './auth.js';
+import { esRevisorOAdmin, rolesPorUsuario } from './auth.js';
 import { coincideTexto, guardarFoco, restaurarFoco, campoBusqueda } from './filtros.js';
 
 function fechaCorta(iso) {
@@ -20,38 +20,57 @@ function fechaCorta(iso) {
 
 let busquedaGrupo = '';
 let filtroProfesorGrupo = 'todos';
+// 'todos' | 'mios' | 'profesores'. Solo se muestra a revisor/administrador, que
+// desde ahora llevan sus propios grupos además de ver los de toda la plantilla:
+// sin esto, sus grupos quedaban perdidos entre los de la escuela entera.
+let filtroAmbitoGrupo = 'todos';
 // gruposCache guarda el último listarGrupos(): teclear en el buscador o
 // cambiar un filtro solo re-filtra y repinta esta copia en memoria, sin
 // volver a consultar Firestore en cada tecla (si no, el <input> se reemplaza
 // por uno nuevo justo cuando el navegador está esperando la respuesta de red
 // y pierde el foco — solo dejaba borrar de a un carácter).
 let gruposCache = null;
+// uid → rol, para distinguir "grupos de profesores" de los de otros revisores o
+// administradores. Se guarda junto a gruposCache y por el mismo motivo: cambiar
+// de filtro no debe disparar una consulta más.
+let rolesCache = null;
 
 // Ver el comentario junto a reiniciarFiltrosExamenes en main.js — mismo motivo.
 export function reiniciarFiltrosGrupos() {
   busquedaGrupo = '';
   filtroProfesorGrupo = 'todos';
+  filtroAmbitoGrupo = 'todos';
   gruposCache = null;
+  rolesCache = null;
+}
+
+// Un grupo "de profesor" es el de alguien con rol maestro, no simplemente uno que
+// no sea mío: revisores y administradores también tienen grupos propios y esos no
+// son lo que se quiere revisar. Si el mapa de roles no se pudo cargar, se cae al
+// criterio viejo ("no es mío") en vez de dejar el filtro vacío.
+function esGrupoDeProfesor(grupo, sesion) {
+  if (grupo.profesorId === sesion.uid) return false;
+  if (!rolesCache) return true;
+  return rolesCache.get(grupo.profesorId) === 'maestro';
 }
 
 export async function montarListaGrupos(contenedor, sesion, { onAbrirGrupo }) {
   clear(contenedor);
-  // Revisor/administrador solo consultan: ven los grupos de todos los maestros
-  // (con el nombre del profesor en la tarjeta) pero no crean ni eliminan ninguno.
-  const soloConsulta = esRevisorOAdmin(sesion);
+  // Revisor/administrador ven los grupos de toda la plantilla (con el nombre del
+  // profesor en la tarjeta) y pueden corregirles el pase de lista, pero no editar
+  // ni eliminar el grupo de nadie más. Crear los suyos sí: también dan clase.
+  const veTodosLosGrupos = esRevisorOAdmin(sesion);
 
-  if (!soloConsulta) {
-    contenedor.appendChild(el('div', { class: 'barra-nueva' }, [
-      el('button', {
-        type: 'button', class: 'btn-primario',
-        onclick: async () => {
-          const grupo = nuevoGrupo(sesion);
-          await guardarGrupo(grupo);
-          onAbrirGrupo(grupo.id);
-        },
-      }, '+ Nuevo grupo'),
-    ]));
-  }
+  contenedor.appendChild(el('div', { class: 'barra-nueva' }, [
+    el('button', {
+      type: 'button', class: 'btn-primario',
+      onclick: async () => {
+        const grupo = nuevoGrupo(sesion);
+        await guardarGrupo(grupo);
+        onAbrirGrupo(grupo.id);
+      },
+    }, '+ Nuevo grupo'),
+  ]));
 
   const contenedorResultados = el('div', {});
   contenedor.appendChild(contenedorResultados);
@@ -65,20 +84,54 @@ export async function montarListaGrupos(contenedor, sesion, { onAbrirGrupo }) {
     cargando.textContent = `No se pudieron cargar los grupos: ${err.message}`;
     return;
   }
+  // Solo hace falta para el filtro por ámbito, que solo ellos ven. Si falla, la
+  // lista se pinta igual: esGrupoDeProfesor se degrada a "no es mío".
+  if (veTodosLosGrupos && !rolesCache) {
+    try {
+      rolesCache = await rolesPorUsuario();
+    } catch (err) {
+      rolesCache = null;
+    }
+  }
   clear(contenedorResultados);
-  renderizarResultadosGrupos(contenedor, contenedorResultados, sesion, { onAbrirGrupo }, soloConsulta);
+  renderizarResultadosGrupos(contenedor, contenedorResultados, sesion, { onAbrirGrupo }, veTodosLosGrupos);
 }
 
-function renderizarResultadosGrupos(contenedor, contenedorResultados, sesion, { onAbrirGrupo }, soloConsulta) {
+function renderizarResultadosGrupos(contenedor, contenedorResultados, sesion, { onAbrirGrupo }, veTodosLosGrupos) {
   const foco = guardarFoco(contenedorResultados, '.campo-busqueda');
   clear(contenedorResultados);
-  const repintar = () => renderizarResultadosGrupos(contenedor, contenedorResultados, sesion, { onAbrirGrupo }, soloConsulta);
+  const repintar = () => renderizarResultadosGrupos(contenedor, contenedorResultados, sesion, { onAbrirGrupo }, veTodosLosGrupos);
   let grupos = gruposCache || [];
+
+  // El ámbito se aplica ANTES de armar el resto de la barra: así el desplegable de
+  // profesores solo ofrece a quienes de verdad quedan en la lista (en "Solo mis
+  // grupos" no tiene sentido ofrecer a nadie más).
+  if (veTodosLosGrupos && filtroAmbitoGrupo === 'mios') {
+    grupos = grupos.filter((g) => g.profesorId === sesion.uid);
+  } else if (veTodosLosGrupos && filtroAmbitoGrupo === 'profesores') {
+    grupos = grupos.filter((g) => esGrupoDeProfesor(g, sesion));
+  }
 
   const barraFiltros = el('div', { class: 'barra-filtros' }, [
     campoBusqueda({ placeholder: 'Buscar por nombre, materia o grado…', valor: busquedaGrupo, onCambio: (v) => { busquedaGrupo = v; repintar(); } }),
   ]);
-  if (soloConsulta) {
+  if (veTodosLosGrupos) {
+    barraFiltros.appendChild(el('select', {
+      title: 'Acota la lista a tus propios grupos o a los de los maestros.',
+      onchange: (e) => {
+        filtroAmbitoGrupo = e.target.value;
+        // El profesor elegido casi nunca sobrevive al cambio de ámbito (en "Solo
+        // mis grupos" no queda ninguno), y dejarlo puesto vaciaba la lista sin que
+        // se viera por qué — se vuelve a "Todos los profesores".
+        filtroProfesorGrupo = 'todos';
+        repintar();
+      },
+    }, [
+      el('option', { value: 'todos', selected: filtroAmbitoGrupo === 'todos' }, 'Todos los grupos'),
+      el('option', { value: 'mios', selected: filtroAmbitoGrupo === 'mios' }, 'Solo mis grupos'),
+      el('option', { value: 'profesores', selected: filtroAmbitoGrupo === 'profesores' }, 'Grupos de profesores'),
+    ]));
+
     const profesores = [...new Set(grupos.map((g) => g.profesorNombre).filter(Boolean))].sort();
     barraFiltros.appendChild(el('select', {
       onchange: (e) => { filtroProfesorGrupo = e.target.value; repintar(); },
@@ -90,7 +143,7 @@ function renderizarResultadosGrupos(contenedor, contenedorResultados, sesion, { 
   contenedorResultados.appendChild(barraFiltros);
   restaurarFoco(contenedorResultados, foco);
 
-  if (soloConsulta && filtroProfesorGrupo !== 'todos') {
+  if (veTodosLosGrupos && filtroProfesorGrupo !== 'todos') {
     grupos = grupos.filter((g) => g.profesorNombre === filtroProfesorGrupo);
   }
   if (busquedaGrupo) {
@@ -98,27 +151,32 @@ function renderizarResultadosGrupos(contenedor, contenedorResultados, sesion, { 
   }
 
   if (grupos.length === 0) {
-    contenedorResultados.appendChild(el('p', { style: 'color:#666; margin-top:1.5rem;' }, soloConsulta ? 'No hay grupos que coincidan con esos filtros.' : 'Aún no tienes grupos. Crea uno para empezar a tomar asistencia y llevar tu rúbrica de calificaciones.'));
+    contenedorResultados.appendChild(el('p', { style: 'color:#666; margin-top:1.5rem;' }, veTodosLosGrupos ? 'No hay grupos que coincidan con esos filtros.' : 'Aún no tienes grupos. Crea uno para empezar a tomar asistencia y llevar tu rúbrica de calificaciones.'));
     return;
   }
 
-  contenedorResultados.appendChild(el('div', { class: 'lista-examenes' }, grupos.map((grupo) => el('div', { class: 'tarjeta-examen' }, [
-    el('h3', {}, grupo.nombre || 'Grupo sin nombre'),
-    el('div', { class: 'meta-chica' }, `${grupo.materia || 'sin materia'} · ${grupo.grado || ''}${grupo.grupo || ''} · ${(grupo.alumnos || []).length} alumnos · editado ${fechaCorta(grupo.updatedAt)}`),
-    soloConsulta ? el('div', { class: 'meta-chica' }, `Profesor(a): ${grupo.profesorNombre || 'sin nombre'}`) : null,
-    el('div', { class: 'acciones-tarjeta' }, [
-      el('button', { type: 'button', class: 'btn-primario', onclick: () => onAbrirGrupo(grupo.id) }, 'Abrir'),
-      soloConsulta ? null : el('button', {
-        type: 'button', class: 'btn-peligro',
-        onclick: async () => {
-          if (confirm(`¿Eliminar el grupo "${grupo.nombre || 'sin nombre'}"? Se perderá el pase de lista y las calificaciones. Esta acción no se puede deshacer.`)) {
-            await eliminarGrupo(grupo.id);
-            montarListaGrupos(contenedor, sesion, { onAbrirGrupo });
-          }
-        },
-      }, 'Eliminar'),
-    ]),
-  ]))));
+  contenedorResultados.appendChild(el('div', { class: 'lista-examenes' }, grupos.map((grupo) => {
+    // Eliminar el grupo (y con él su pase de lista y sus calificaciones) sigue
+    // siendo cosa del dueño, aunque un revisor pueda corregirle la asistencia.
+    const esMio = grupo.profesorId === sesion.uid;
+    return el('div', { class: 'tarjeta-examen' }, [
+      el('h3', {}, grupo.nombre || 'Grupo sin nombre'),
+      el('div', { class: 'meta-chica' }, `${grupo.materia || 'sin materia'} · ${grupo.grado || ''}${grupo.grupo || ''} · ${(grupo.alumnos || []).length} alumnos · editado ${fechaCorta(grupo.updatedAt)}`),
+      veTodosLosGrupos && !esMio ? el('div', { class: 'meta-chica' }, `Profesor(a): ${grupo.profesorNombre || 'sin nombre'}`) : null,
+      el('div', { class: 'acciones-tarjeta' }, [
+        el('button', { type: 'button', class: 'btn-primario', onclick: () => onAbrirGrupo(grupo.id) }, 'Abrir'),
+        esMio ? el('button', {
+          type: 'button', class: 'btn-peligro',
+          onclick: async () => {
+            if (confirm(`¿Eliminar el grupo "${grupo.nombre || 'sin nombre'}"? Se perderá el pase de lista y las calificaciones. Esta acción no se puede deshacer.`)) {
+              await eliminarGrupo(grupo.id);
+              montarListaGrupos(contenedor, sesion, { onAbrirGrupo });
+            }
+          },
+        }, 'Eliminar') : null,
+      ]),
+    ]);
+  })));
 }
 
 export async function montarGrupo(contenedor, grupoId, sesion, { onVolver }) {
@@ -132,9 +190,14 @@ export async function montarGrupo(contenedor, grupoId, sesion, { onVolver }) {
     return;
   }
 
-  // Solo el dueño del grupo puede editar; revisor/administrador pueden consultarlo
-  // pero no cambiar nada (a menos que el grupo sea suyo, ej. un admin con su propio grupo).
+  // Dos permisos distintos, no uno solo. Sobre el grupo de otro maestro, revisor y
+  // administrador siguen sin poder tocar datos generales, roster, rúbrica ni
+  // calificaciones (soloLectura) — pero sí corrigen el pase de lista: llega un
+  // justificante a Coordinación, el maestro marcó la fila equivocada, faltó pasar
+  // lista un día. Por eso la asistencia se pasa aparte: vive en asistencias/{id},
+  // no en el documento del grupo, y firestore.rules abre justo esa colección.
   const soloLectura = esRevisorOAdmin(sesion) && grupo.profesorId !== sesion.uid;
+  const puedeEditarAsistencia = !soloLectura || esRevisorOAdmin(sesion);
 
   clear(contenedor);
   let pestanaActiva = 'lista'; // 'lista' | 'rubrica' | 'evaluaciones'
@@ -263,7 +326,13 @@ export async function montarGrupo(contenedor, grupoId, sesion, { onVolver }) {
   function pintarPestana() {
     actualizarBotonesTab();
     if (pestanaActiva === 'lista') {
-      montarListaAsistencia(contenedorPestana, grupo, { soloLectura });
+      // puedeEditarGrupo apaga "Valores de asistencia" y "Calendario del curso":
+      // son los dos únicos botones del pase de lista que escriben el documento del
+      // grupo, y los valores de asistencia además son un parámetro de evaluación.
+      montarListaAsistencia(contenedorPestana, grupo, {
+        soloLectura: !puedeEditarAsistencia,
+        puedeEditarGrupo: !soloLectura,
+      });
     } else if (pestanaActiva === 'evaluaciones') {
       montarEvaluacionesRubro(contenedorPestana, grupo, rubroDetalleId, {
         soloLectura,
@@ -315,7 +384,7 @@ export async function montarGrupo(contenedor, grupoId, sesion, { onVolver }) {
 
   contenedor.appendChild(el('button', { type: 'button', class: 'btn-secundario', onclick: onVolver, style: 'margin-bottom:0.8rem;' }, soloLectura ? '← Volver a la lista de grupos' : '← Volver a mis grupos'));
   if (soloLectura) {
-    contenedor.appendChild(el('p', { class: 'aviso-solo-lectura', style: 'margin-top:-0.4rem;' }, `Consultando el grupo de ${grupo.profesorNombre || 'otro profesor'} — solo lectura, no se puede editar.`));
+    contenedor.appendChild(el('p', { class: 'aviso-solo-lectura', style: 'margin-top:-0.4rem;' }, `Grupo de ${grupo.profesorNombre || 'otro profesor'}: puedes corregir el pase de lista, pero los datos del grupo, los alumnos, la rúbrica y las calificaciones son solo lectura.`));
   }
   contenedor.appendChild(panelDatos);
   contenedor.appendChild(panelAlumnos);

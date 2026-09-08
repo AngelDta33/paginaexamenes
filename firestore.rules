@@ -57,9 +57,14 @@ service cloud.firestore {
         (request.resource.data.profesorId == request.auth.uid || esRevisorOAdmin());
     }
 
-    // grupos/{id} y asistencias/{id}: pase de lista y rúbricas — privado por maestro
-    // para escribir; revisor/administrador pueden leer cualquiera (solo consulta, para
-    // revisar rúbrica y calificaciones), igual que ven exámenes pero sin poder editarlos.
+    // grupos/{id}: el documento del grupo guarda lo que NO es pase de lista — datos
+    // generales, roster, rúbrica, calificaciones, valores de asistencia y calendario.
+    // Escribirlo sigue siendo exclusivo del maestro dueño: revisor/administrador
+    // pueden leer cualquier grupo, pero no tocar los parámetros de evaluación de
+    // nadie. Lo que sí pueden corregir es el pase de lista, que vive aparte en
+    // asistencias/{id} (ver más abajo) — por eso esa separación importa aquí.
+    // Crear sí lo puede hacer cualquiera con su propio profesorId: revisores y
+    // administradores también dan clase, así que llevan sus propios grupos.
     match /grupos/{grupoId} {
       allow read: if autenticado() && (resource.data.profesorId == request.auth.uid || esRevisorOAdmin());
       allow update, delete: if autenticado() && resource.data.profesorId == request.auth.uid;
@@ -92,10 +97,23 @@ service cloud.firestore {
         get(/databases/$(database)/documents/grupos/$(resource.data.grupoId)).data.profesorId == request.auth.uid ||
         esRevisorOAdmin()
       );
-      allow update, delete: if autenticado() &&
-        get(/databases/$(database)/documents/grupos/$(resource.data.grupoId)).data.profesorId == request.auth.uid;
-      allow create: if autenticado() &&
-        get(/databases/$(database)/documents/grupos/$(request.resource.data.grupoId)).data.profesorId == request.auth.uid;
+      // Escribir el pase de lista NO es exclusivo del maestro dueño: revisor y
+      // administrador también corrigen asistencias (llega el justificante a
+      // Coordinación, el maestro se equivocó de fila, faltó pasar lista un día).
+      // Esto es deliberadamente más amplio que grupos/{id}, que ellos siguen sin
+      // poder escribir: la asistencia vive en su propio documento justamente para
+      // que se pueda abrir sin abrir con ella la rúbrica ni las calificaciones.
+      // El dueño va primero (mismo orden que el allow read de arriba): así el caso
+      // normal, un maestro pasando lista en su grupo, resuelve con el get de
+      // grupos/ y sin consultar su propio rol, exactamente como antes.
+      allow update, delete: if autenticado() && (
+        get(/databases/$(database)/documents/grupos/$(resource.data.grupoId)).data.profesorId == request.auth.uid ||
+        esRevisorOAdmin()
+      );
+      allow create: if autenticado() && (
+        get(/databases/$(database)/documents/grupos/$(request.resource.data.grupoId)).data.profesorId == request.auth.uid ||
+        esRevisorOAdmin()
+      );
     }
   }
 }
