@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>mx.ccuma.paginaexamenes.respaldo</string>
+
+	<key>ProgramArguments</key>
+	<array>
+		<string>/opt/homebrew/bin/node</string>
+		<string>/Users/revertdata/Documents/paginaexamenes/respaldo/backup.mjs</string>
+	</array>
+
+	<!-- Corre todos los días a las 20:00. Si la Mac está apagada o dormida a
+	     esa hora, macOS lo corre en cuanto despierta/enciende (no se salta el
+	     día). Cambia Hour/Minute si prefieres otra hora. -->
+	<key>StartCalendarInterval</key>
+	<dict>
+		<key>Hour</key>
+		<integer>20</integer>
+		<key>Minute</key>
+		<integer>0</integer>
+	</dict>
+
+	<!-- Corre también una vez justo al cargar el LaunchAgent (ej. al iniciar
+	     sesión), para tener un respaldo de partida sin esperar a las 20:00. -->
+	<key>RunAtLoad</key>
+	<true/>
+
+	<key>StandardOutPath</key>
+	<string>/Users/revertdata/Library/Logs/paginaexamenes-respaldo.log</string>
+	<key>StandardErrorPath</key>
+	<string>/Users/revertdata/Library/Logs/paginaexamenes-respaldo.log</string>
+</dict>
+</plist>

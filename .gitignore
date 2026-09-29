@@ -1,1 +1,9 @@
 .DS_Store
+
+# Script de respaldo (respaldo/): dependencias y cualquier credencial que
+# alguien guarde ahí por accidente en vez de en ~/.secrets/ — nunca deben
+# subirse al repo (Netlify lo publica tal cual, sin build step).
+respaldo/node_modules/
+respaldo/*.json.key
+respaldo/*serviceAccount*
+respaldo/*.log

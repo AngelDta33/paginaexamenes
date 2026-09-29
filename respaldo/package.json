@@ -1,0 +1,12 @@
+{
+  "name": "respaldo-paginaexamenes",
+  "private": true,
+  "type": "module",
+  "description": "Script aparte de la app (no se sirve en Netlify) para respaldar Firestore y Auth a JSON local.",
+  "scripts": {
+    "respaldar": "node backup.mjs"
+  },
+  "dependencies": {
+    "firebase-admin": "^14.3.0"
+  }
+}
