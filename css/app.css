@@ -398,13 +398,14 @@ button {
 .btn-nota-dia { background: none; border: none; opacity: 0.25; font-size: 0.85rem; padding: 0.1rem; }
 .btn-nota-dia.tiene-nota { opacity: 1; }
 
-/* Enlace "motivo" que aparece bajo una celda en falta: el maestro lo usa solo si
-   tiene algo que aclarar (casi nunca se sabe al momento de marcar la falta). */
+/* Enlace "motivo" que aparece bajo una celda en falta o en retardo: el maestro lo
+   usa solo si tiene algo que aclarar (casi nunca se sabe al momento de marcarla). */
 .btn-motivo-falta {
   display: block; width: 100%; margin-top: 0.1rem; padding: 0.05rem;
   background: none; border: none; font-size: 0.68rem; line-height: 1.2;
   color: #9c2c22; opacity: 0.65; text-decoration: underline; cursor: pointer;
 }
+.estado-retardo .btn-motivo-falta { color: #8a6d00; }
 .btn-motivo-falta:hover:not(:disabled) { opacity: 1; }
 .btn-motivo-falta.tiene-motivo { opacity: 1; font-weight: bold; text-decoration: none; }
 .btn-motivo-falta:disabled { cursor: default; text-decoration: none; }

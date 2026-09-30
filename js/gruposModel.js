@@ -2,10 +2,14 @@
 
 import { uid } from './model.js';
 
-// Estados activos del pase de lista (sin "retardo": se quitó a pedido de la escuela).
-// Los mapas de abajo conservan "retardo" para que grupos viejos con ese estado
-// sigan mostrándose y calculando bien, aunque ya no se pueda asignar de nuevo.
-export const ESTADOS_ASISTENCIA = ['presente', 'falta', 'justificada'];
+// Estados del pase de lista, en el orden en que salen en la leyenda y en
+// "Valores de asistencia". "retardo" va al final porque se agregó después:
+// así el ciclo de clics de siempre (presente → falta → justificada) no cambia.
+export const ESTADOS_ASISTENCIA = ['presente', 'falta', 'justificada', 'retardo'];
+
+// Estados en los que la nota del día es el "motivo" (por qué faltó o llegó
+// tarde) y se ofrece con un enlace debajo de la celda, en vez del ícono 📝.
+export const ESTADOS_CON_MOTIVO = new Set(['falta', 'retardo']);
 
 export const ETIQUETAS_ESTADO_ASISTENCIA = {
   presente: 'Presente',
@@ -61,8 +65,7 @@ export function nuevoRubro(nombre = '', porcentaje = 0) {
 // lista) ya no se puede crear: lo reemplazó la columna informativa de pase de
 // lista de la rúbrica, que no califica y solo sirve para ver el 80% que da
 // derecho a examen (ver columnasPaseDeLista). Esta función se queda para que las
-// rúbricas que YA lo tenían lo sigan mostrando y contando en el promedio, igual
-// que el estado "retardo" del pase de lista.
+// rúbricas que YA lo tenían lo sigan mostrando y contando en el promedio.
 export function esRubroAsistencia(rubro) {
   return rubro.tipoEspecial === 'asistencia';
 }

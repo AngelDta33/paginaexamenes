@@ -8,14 +8,27 @@ import {
   ESTADOS_ASISTENCIA, ETIQUETAS_ESTADO_ASISTENCIA, INICIALES_ESTADO_ASISTENCIA, fechaHoyISO, fechaCortaMX,
   valoresAsistenciaDeGrupo, promedioAsistenciaAlumno,
   DIAS_SEMANA_NOMBRES, calendarioDeGrupo, nuevoTrimestre, crearTrimestresEstandar, fechasDeClase,
-  fechasEnTrimestre, usaPorcentaje, formatearNota, trimestresSuperpuestos,
+  fechasEnTrimestre, usaPorcentaje, formatearNota, trimestresSuperpuestos, ESTADOS_CON_MOTIVO,
 } from './gruposModel.js';
 
-// Ciclo al hacer clic: sin marcar → presente → falta → justificada → sin marcar.
-// "retardo" ya no forma parte del ciclo (se quitó); si una celda vieja lo tiene,
-// un clic la limpia (retardo → null).
-const SIGUIENTE_ESTADO = { null: 'presente', presente: 'falta', falta: 'justificada', justificada: null, retardo: null };
+// Ciclo al hacer clic: sin marcar → presente → falta → justificada → retardo → sin marcar.
+// El retardo va al final para no cambiarles a los maestros el orden de siempre.
+const SIGUIENTE_ESTADO = { null: 'presente', presente: 'falta', falta: 'justificada', justificada: 'retardo', retardo: null };
 const INICIALES_ESTADO = INICIALES_ESTADO_ASISTENCIA;
+
+// Textos del cuadro de "motivo", que se abre igual en una falta que en un retardo.
+const TEXTOS_MOTIVO = {
+  falta: {
+    titulo: 'Motivo de la falta',
+    ayudaEnlace: 'Anotar por qué faltó el alumno (opcional)',
+    ejemplo: 'Ej. se presentó con la orientadora, cita médica, permiso…',
+  },
+  retardo: {
+    titulo: 'Motivo del retardo',
+    ayudaEnlace: 'Anotar por qué llegó tarde el alumno (opcional)',
+    ejemplo: 'Ej. cita médica, problema con el transporte, venía de otra actividad…',
+  },
+};
 
 // La tabla solo muestra 10 fechas a la vez (más que eso, las columnas se ponen
 // demasiado angostas) — "Faltas" y "Asistencia" no cuentan para esto: se calculan
@@ -23,11 +36,11 @@ const INICIALES_ESTADO = INICIALES_ESTADO_ASISTENCIA;
 // ciclo por defecto), aunque no estén visibles en la ventana actual.
 const TAM_VENTANA_FECHAS = 10;
 
-const AYUDA_MARCAR = 'Haz clic en una celda para marcar Presente → Falta → Justificada. Debajo de cada falta aparece "motivo" por si quieres aclarar por qué faltó el alumno — es opcional y lo puedes anotar cuando lo sepas. El ícono 📝 agrega una nota en los demás días.';
+const AYUDA_MARCAR = 'Haz clic en una celda para marcar Presente → Falta → Justificada → Retardo. Debajo de cada falta o retardo aparece "motivo" por si quieres aclarar qué pasó — es opcional y lo puedes anotar cuando lo sepas. El ícono 📝 agrega una nota en los demás días.';
 
 function textoAyuda(soloLectura, puedeEditarGrupo) {
   if (soloLectura) {
-    return 'Solo lectura: no se puede editar la asistencia. Donde haya un motivo de falta anotado, aparece "ver motivo" debajo de la celda para consultarlo.';
+    return 'Solo lectura: no se puede editar la asistencia. Donde haya un motivo de falta o de retardo anotado, aparece "ver motivo" debajo de la celda para consultarlo.';
   }
   if (!puedeEditarGrupo) {
     return `${AYUDA_MARCAR} Este grupo es de otro maestro: puedes corregirle la asistencia y agregar fechas, pero los valores de asistencia y el calendario del curso solo los cambia él.`;
@@ -125,20 +138,20 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
     if (selectTrimestre) selectTrimestre.value = 'todos';
   }
 
-  // El motivo de una falta casi nunca se sabe en el momento de marcarla (el alumno
-  // aparece después, o avisa la orientadora), así que NO se pregunta al marcarla:
-  // las celdas en falta muestran un enlace "motivo" debajo y el modal solo se abre
-  // si el maestro lo pide. El texto se guarda en la misma nota del día que usa el
-  // ícono 📝 del resto de las celdas, para no tener dos textos por alumno y día.
-  // En solo lectura (revisor/administrador consultando el grupo de otro maestro)
-  // el mismo modal sirve para CONSULTAR el motivo: se ve el texto completo, pero
-  // el campo va bloqueado y no hay botón de guardar — pueden saber por qué faltó
-  // el alumno sin poder cambiar lo que anotó el maestro.
+  // El motivo de una falta o de un retardo casi nunca se sabe en el momento de
+  // marcarlo (el alumno aparece después, o avisa la orientadora), así que NO se
+  // pregunta al marcarlo: esas celdas muestran un enlace "motivo" debajo y el
+  // modal solo se abre si el maestro lo pide. El texto se guarda en la misma
+  // nota del día que usa el ícono 📝 del resto de las celdas, para no tener dos
+  // textos por alumno y día. En solo lectura (revisor/administrador consultando
+  // el grupo de otro maestro) el mismo modal sirve para CONSULTAR el motivo: se
+  // ve el texto completo, pero el campo va bloqueado y no hay botón de guardar.
   function abrirModalMotivo(alumno, fecha, dia, reg) {
+    const textos = TEXTOS_MOTIVO[reg.estado] || TEXTOS_MOTIVO.falta;
     const overlay = el('div', { class: 'overlay-modal tema-verde' });
     const campo = el('textarea', {
       rows: '3', disabled: soloLectura,
-      placeholder: soloLectura ? 'El maestro no anotó ningún motivo.' : 'Ej. se presentó con la orientadora, cita médica, permiso…',
+      placeholder: soloLectura ? 'El maestro no anotó ningún motivo.' : textos.ejemplo,
     });
     campo.value = reg.nota || '';
     const mensaje = el('p', { class: 'mensaje-login' });
@@ -169,7 +182,7 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
     };
 
     overlay.appendChild(el('div', { class: 'panel modal-motivo-falta' }, [
-      el('h2', {}, 'Motivo de la falta'),
+      el('h2', {}, textos.titulo),
       el('p', { class: 'etiqueta-chica' }, soloLectura
         ? `${alumno.nombre} — ${fechaCortaMX(fecha)}. Solo lectura: puedes consultar el motivo, pero no cambiarlo.`
         : `${alumno.nombre} — ${fechaCortaMX(fecha)}. Déjalo vacío y guarda si quieres borrar el motivo que ya tenía.`),
@@ -240,10 +253,10 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
       const celdas = fechasVisibles.map((f) => {
         const dia = porFecha.get(f);
         const reg = dia.registros[alumno.id] || { estado: null, nota: '' };
-        // En una falta, la nota del día ES el motivo: en vez del ícono 📝 genérico
-        // se ofrece un enlace "motivo" con todas sus letras debajo de la celda,
-        // que el maestro usa solo si tiene algo que aclarar.
-        const esFalta = reg.estado === 'falta';
+        // En una falta o un retardo, la nota del día ES el motivo: en vez del
+        // ícono 📝 genérico se ofrece un enlace "motivo" con todas sus letras
+        // debajo de la celda, que el maestro usa solo si tiene algo que aclarar.
+        const llevaMotivo = ESTADOS_CON_MOTIVO.has(reg.estado);
         const celda = el('td', { class: `celda-asistencia ${reg.estado ? `estado-${reg.estado}` : ''}` }, [
           el('div', { class: 'fila-celda-asistencia' }, [
           el('button', {
@@ -262,7 +275,7 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
               pintarTabla();
             },
           }, reg.estado ? INICIALES_ESTADO[reg.estado] : '·'),
-          esFalta ? null : el('button', {
+          llevaMotivo ? null : el('button', {
             type: 'button', class: `btn-nota-dia ${reg.nota ? 'tiene-nota' : ''}`, disabled: soloLectura,
             title: reg.nota ? `Nota: ${reg.nota}` : 'Agregar nota',
             onclick: soloLectura ? undefined : async () => {
@@ -283,9 +296,9 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
           // aparece cuando ya hay un motivo escrito — pero sí se puede abrir:
           // revisores y administradores necesitan leerlo completo (el title se
           // queda corto con textos largos), aunque no puedan modificarlo.
-          !esFalta || (soloLectura && !reg.nota) ? null : el('button', {
+          !llevaMotivo || (soloLectura && !reg.nota) ? null : el('button', {
             type: 'button', class: `btn-motivo-falta ${reg.nota ? 'tiene-motivo' : ''}`,
-            title: reg.nota ? reg.nota : 'Anotar por qué faltó el alumno (opcional)',
+            title: reg.nota ? reg.nota : TEXTOS_MOTIVO[reg.estado].ayudaEnlace,
             onclick: () => abrirModalMotivo(alumno, f, dia, reg),
           }, soloLectura ? 'ver motivo' : (reg.nota ? 'motivo ✓' : 'motivo')),
         ]);
