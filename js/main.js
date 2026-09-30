@@ -186,6 +186,22 @@ function abrirModalNuevaCarpeta(onListo) {
 
 // --- Login ---
 
+// El proyecto tiene activada la protección contra enumeración de correos de
+// Firebase, así que "esa cuenta no existe" y "contraseña incorrecta" llegan
+// igual (auth/invalid-credential) — a propósito, para que nadie pueda probar
+// qué correos tienen cuenta. Los códigos viejos se dejan por si se desactiva.
+// "Demasiados intentos" (auth/too-many-requests) se queda con el mensaje
+// general a pedido de la escuela.
+const CORREO_O_CONTRASENA_INCORRECTOS = 'Correo o contraseña incorrectos. Revisa que el correo tenga el dominio correcto (@ccuma.edu.mx o @ccuma.mx) y que sea tu contraseña actual.';
+const MENSAJES_ERROR_LOGIN = {
+  'auth/invalid-credential': CORREO_O_CONTRASENA_INCORRECTOS,
+  'auth/wrong-password': CORREO_O_CONTRASENA_INCORRECTOS,
+  'auth/user-not-found': CORREO_O_CONTRASENA_INCORRECTOS,
+  'auth/invalid-email': 'Ese correo no tiene un formato válido (debe ser algo como nombre@ccuma.edu.mx).',
+  'auth/user-disabled': 'Esta cuenta está inhabilitada. Pide a un administrador que la revise.',
+  'auth/network-request-failed': 'No hay conexión a internet. Revisa tu red e intenta de nuevo.',
+};
+
 function pintarLogin() {
   clear(vistaLogin);
   const campoEmail = el('input', { type: 'email', placeholder: 'correo@escuela.mx' });
@@ -203,7 +219,7 @@ function pintarLogin() {
       await iniciarSesion(campoEmail.value.trim(), campoPass.value);
       // observarSesion se encarga de redibujar la app cuando el login se confirme.
     } catch (err) {
-      mensaje.textContent = 'No se pudo iniciar sesión: revisa tu correo y contraseña.';
+      mensaje.textContent = MENSAJES_ERROR_LOGIN[err.code] || 'No se pudo iniciar sesión: revisa tu correo y contraseña.';
       btn.disabled = false; btn.textContent = 'Entrar';
     }
   }
