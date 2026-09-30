@@ -2,7 +2,9 @@
 
 import { el, clear } from './dom.js';
 import { atributosTamano } from './imagenes.js';
-import { nuevaSubpregunta, uid, moverElemento } from './model.js';
+import {
+  nuevaSubpregunta, uid, moverElemento, valoresFilasRelacion, claveFilaRelacion,
+} from './model.js';
 import { renderTextoFormulas, campoTextoConFormulas } from './formulas.js';
 
 const LETRAS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -389,7 +391,17 @@ function editorOpcionMultiple(pregunta, onChange) {
 }
 
 function editorRelacionColumnas(pregunta, onChange) {
+  // Relaciones guardadas antes de que cada fila tuviera su propio valor: se
+  // fijan aquí los valores repartidos que ya se estaban usando para imprimir
+  // (ver valoresFilasRelacion), para poder editarlos fila por fila.
+  if (!Array.isArray(pregunta.valoresA)) pregunta.valoresA = valoresFilasRelacion(pregunta);
+
   const cont = el('div', { class: 'editor-relacion' });
+  const totalRelacion = el('p', { class: 'etiqueta-chica total-relacion-editor' });
+  function actualizarTotal() {
+    const total = valoresFilasRelacion(pregunta).reduce((acc, v) => acc + v, 0);
+    totalRelacion.textContent = `Valor total de esta relación: ${Math.round(total * 100) / 100} pts. Cada fila de la columna A cuenta como un reactivo con su propio número y valor.`;
+  }
   function pintar() {
     clear(cont);
     const filas = el('div', { class: 'filas-relacion' });
@@ -409,13 +421,26 @@ function editorRelacionColumnas(pregunta, onChange) {
         }),
         el('span', {}, '↔'),
         selector,
+        el('input', {
+          type: 'number', step: '0.1', min: '0', class: 'input-valor', value: pregunta.valoresA[i],
+          title: 'Puntos de este reactivo',
+          oninput: (e) => { pregunta.valoresA[i] = parseFloat(e.target.value) || 0; actualizarTotal(); onChange(); },
+        }),
+        el('span', { class: 'etiqueta-chica' }, 'pts'),
         el('button', {
           type: 'button', class: 'btn-icono', title: 'Quitar fila',
-          onclick: () => { pregunta.columnaA.splice(i, 1); pregunta.relaciones.splice(i, 1); pintar(); onChange(); },
+          onclick: () => {
+            pregunta.columnaA.splice(i, 1);
+            pregunta.relaciones.splice(i, 1);
+            pregunta.valoresA.splice(i, 1);
+            pintar(); onChange();
+          },
         }, '✕'),
       ]));
     });
     cont.appendChild(filas);
+    cont.appendChild(totalRelacion);
+    actualizarTotal();
 
     // Tres botones juntos: agregar solo una fila de la columna A, solo una opción
     // de la columna B (distractores), o un par completo A+B ya relacionado.
@@ -425,6 +450,7 @@ function editorRelacionColumnas(pregunta, onChange) {
         onclick: () => {
           pregunta.columnaA.push('');
           pregunta.relaciones.push(0); // apunta a la primera opción de B por defecto
+          pregunta.valoresA.push(1);
           pintar(); onChange();
         },
       }, '+ Fila en columna A'),
@@ -438,6 +464,7 @@ function editorRelacionColumnas(pregunta, onChange) {
           pregunta.columnaA.push('');
           pregunta.columnaB.push('');
           pregunta.relaciones.push(pregunta.columnaB.length - 1);
+          pregunta.valoresA.push(1);
           pintar(); onChange();
         },
       }, '+ Par (A + B)'),
@@ -733,12 +760,16 @@ export function campoSaltoPagina(elemento, onChange, etiqueta = '📄 Empezar en
   ]);
 }
 
+// Sin campo "Puntos" propio: la lectura suma el de sus subpreguntas y la
+// relación de columnas el de cada fila de la columna A.
+const TIPOS_SIN_VALOR_PROPIO = new Set(['lectura_comprension', 'relacion_columnas']);
+
 export function crearEditorPregunta(pregunta, {
   onChange, onDelete, subEtiqueta, onMoveUp, onMoveDown,
 }) {
   const cabecera = el('div', { class: 'cabecera-pregunta' }, [
     el('span', { class: 'etiqueta-tipo' }, subEtiqueta ? `${subEtiqueta} — ${ETIQUETAS_TIPO[pregunta.tipo]}` : ETIQUETAS_TIPO[pregunta.tipo]),
-    pregunta.tipo !== 'lectura_comprension' ? campoValor(pregunta, onChange) : null,
+    TIPOS_SIN_VALOR_PROPIO.has(pregunta.tipo) ? null : campoValor(pregunta, onChange),
     el('button', {
       type: 'button', class: 'btn-icono', title: 'Mover arriba', disabled: !onMoveUp, onclick: onMoveUp || null,
     }, '▲'),
@@ -749,7 +780,9 @@ export function crearEditorPregunta(pregunta, {
   ]);
 
   const cuerpo = [cabecera];
-  if (pregunta.tipo !== 'lectura_comprension') {
+  if (pregunta.tipo === 'relacion_columnas') {
+    cuerpo.push(campoEnunciado(pregunta, onChange, 'Instrucción opcional, ej. "Relaciona las columnas" (no lleva número ni puntos)…'));
+  } else if (pregunta.tipo !== 'lectura_comprension') {
     cuerpo.push(campoEnunciado(pregunta, onChange));
   }
   const editorFn = EDITORES_TIPO[pregunta.tipo] || editorAbierta;
@@ -812,18 +845,31 @@ function renderOpcionMultipleBloques(pregunta, numero, modoClave) {
   return bloques;
 }
 
+// Evita que un valor repartido de una relación vieja (ver valoresFilasRelacion
+// en model.js) se imprima como "0.3333333333333333 pts".
+function redondearPuntos(valor) {
+  return Math.round(valor * 100) / 100;
+}
+
 // Mismo motivo que arriba: el encabezado y una mini-tabla de una sola fila por
 // cada par, en vez de una tabla gigante con todas las filas adentro.
-function renderRelacionColumnasBloques(pregunta, numero, modoClave) {
+//
+// Cada fila de la columna A es un reactivo aparte (ver reactivosDe en
+// model.js): lleva su número de la secuencia del examen y su valor al final.
+// La relación en sí no se numera ni muestra valor — su enunciado es solo una
+// instrucción opcional — y al final va el valor total de la relación.
+function renderRelacionColumnasBloques(pregunta, numeros, modoClave) {
   const permutado = shuffleDeterminista(pregunta.columnaB, pregunta.id);
   // indiceOriginal -> letra mostrada
   const letraPorIndiceOriginal = {};
   permutado.forEach(([, idxOriginal], posMostrada) => { letraPorIndiceOriginal[idxOriginal] = letraOpcion(posMostrada); });
+  const valores = valoresFilasRelacion(pregunta);
 
   const celdasA = pregunta.columnaA.map((valA, i) => el('td', { class: 'celda-relacion celda-a' }, [
     el('span', { class: modoClave ? 'resp-relacion resp-correcta' : 'resp-relacion' }, modoClave ? `(${letraPorIndiceOriginal[pregunta.relaciones[i]] || '?'}) ` : '(   ) '),
-    `${i + 1}. `,
+    el('span', { class: 'num-reactivo' }, `${numeros[claveFilaRelacion(pregunta.id, i)]}. `),
     ...renderTextoFormulas(valA),
+    el('span', { class: 'valor-reactivo' }, ` (${redondearPuntos(valores[i])} pts)`),
   ]));
   const celdasB = permutado.map(([valB], pos) => el('td', { class: 'celda-relacion celda-b' }, [
     `${letraOpcion(pos)}. `,
@@ -831,10 +877,18 @@ function renderRelacionColumnasBloques(pregunta, numero, modoClave) {
   ]));
 
   const maxFilas = Math.max(celdasA.length, celdasB.length);
-  const bloques = [{
-    tipo: 'pregunta-inicio',
-    el: el('div', { class: 'reactivo' }, [encabezadoReactivo(numero, pregunta, pregunta.valor), bloqueImagen(pregunta)]),
-  }];
+  const bloques = [];
+  if (pregunta.enunciado || pregunta.imagen) {
+    bloques.push({
+      tipo: 'pregunta-inicio',
+      el: el('div', { class: 'reactivo' }, [
+        pregunta.enunciado
+          ? el('div', { class: 'reactivo-encabezado' }, [el('span', { class: 'enunciado-texto' }, renderTextoFormulas(pregunta.enunciado))])
+          : null,
+        bloqueImagen(pregunta),
+      ]),
+    });
+  }
   for (let i = 0; i < maxFilas; i++) {
     bloques.push({
       tipo: 'pregunta-fila',
@@ -846,6 +900,11 @@ function renderRelacionColumnasBloques(pregunta, numero, modoClave) {
       ]),
     });
   }
+  const total = redondearPuntos(valores.reduce((acc, v) => acc + v, 0));
+  bloques.push({
+    tipo: 'pregunta-fila',
+    el: el('div', { class: 'subtotal-relacion' }, `Valor de la relación de columnas: ${total} ${total === 1 ? 'punto' : 'puntos'}`),
+  });
   return bloques;
 }
 
@@ -948,14 +1007,16 @@ export function renderPregunta(pregunta, numero, modoClave) {
 // relación, marcadores) y por eso se devuelven como varios bloques repartibles.
 const RENDER_TIPO_BLOQUES = {
   opcion_multiple: renderOpcionMultipleBloques,
-  relacion_columnas: renderRelacionColumnasBloques,
   identificar_imagen: renderIdentificarImagenBloques,
 };
 
 // Punto de entrada único para el paginador: siempre devuelve un arreglo de
 // bloques, sea uno solo (renderPregunta) o varios (tipos con listas que pueden
-// crecer sin límite).
-export function renderPreguntaBloques(pregunta, numero, modoClave) {
+// crecer sin límite). Recibe el mapa completo de numeración (numerarReactivos)
+// porque la relación de columnas no usa un número sino uno por cada fila.
+export function renderPreguntaBloques(pregunta, numeros, modoClave) {
+  if (pregunta.tipo === 'relacion_columnas') return renderRelacionColumnasBloques(pregunta, numeros, modoClave);
+  const numero = numeros[pregunta.id];
   const fn = RENDER_TIPO_BLOQUES[pregunta.tipo];
   if (fn) return fn(pregunta, numero, modoClave);
   return [{ tipo: 'pregunta', el: renderPregunta(pregunta, numero, modoClave) }];

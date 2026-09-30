@@ -4,7 +4,7 @@
 
 import { el, clear } from './dom.js';
 import {
-  numerarReactivos, subtotalSeccion, puntosDeclarados,
+  numerarReactivos, subtotalSeccion, puntosDeclarados, reactivosDe,
   ENCABEZADO_INGLES_DEFECTO, ENCABEZADO_OFICIAL_DEFECTO,
 } from './model.js';
 import { renderPreguntaBloques, renderLecturaBloques } from './questionTypes.js';
@@ -322,11 +322,11 @@ function construirBloques(examen, modoClave) {
         bloques.push(...renderLecturaBloques(p));
         for (const sp of p.subpreguntas || []) {
           const inicioSubpregunta = bloques.length;
-          bloques.push(...renderPreguntaBloques(sp, numeros[sp.id], modoClave));
+          bloques.push(...renderPreguntaBloques(sp, numeros, modoClave));
           marcarSalto(inicioSubpregunta, sp.saltoPagina);
         }
       } else {
-        bloques.push(...renderPreguntaBloques(p, numeros[p.id], modoClave));
+        bloques.push(...renderPreguntaBloques(p, numeros, modoClave));
       }
       marcarSalto(inicioPregunta, p.saltoPagina);
     }
@@ -356,11 +356,7 @@ function puntos(valor) {
 // total de cada sección". La línea del valor por reactivo solo tiene sentido
 // cuando todos valen lo mismo; si no, se muestra únicamente el total.
 function renderValorSeccion(seccion) {
-  const valores = (seccion.preguntas || []).map((p) => (
-    p.tipo === 'lectura_comprension'
-      ? (p.subpreguntas || []).map((sp) => Number(sp.valor) || 0)
-      : [Number(p.valor) || 0]
-  )).flat();
+  const valores = (seccion.preguntas || []).flatMap((p) => reactivosDe(p).map((r) => r.valor));
   const uniforme = valores.length > 0 && valores.every((v) => v === valores[0]);
   return el('div', { class: 'subtotal-seccion' }, [
     uniforme ? el('div', {}, `Valor de cada reactivo: ${puntos(valores[0])}`) : null,

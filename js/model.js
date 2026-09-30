@@ -128,13 +128,17 @@ const DEFAULTS_POR_TIPO = {
     opciones: ['', ''],
     respuestaCorrecta: 0,
   }),
+  // Cada fila de la columna A es un reactivo aparte, con su propio número en la
+  // secuencia del examen y su propio valor (valoresA[i]); la relación en sí no
+  // se numera ni tiene valor propio — el enunciado es solo una instrucción
+  // opcional ("Relaciona las columnas"), igual que en la lectura de comprensión.
   relacion_columnas: () => ({
     enunciado: '',
-    valor: 1,
     imagen: null,
     columnaA: [''],
     columnaB: [''],
     relaciones: [0], // relaciones[i] = índice en columnaB que corresponde a columnaA[i]
+    valoresA: [1], // valoresA[i] = puntos del reactivo de la fila columnaA[i]
   }),
   abierta: () => ({
     enunciado: '',
@@ -280,11 +284,38 @@ export function mezclarOrdenExamen(examen) {
 
 // --- Cálculo de puntos ---
 
-function valorPregunta(p) {
-  if (p.tipo === 'lectura_comprension') {
-    return (p.subpreguntas || []).reduce((acc, sp) => acc + (Number(sp.valor) || 0), 0);
+export function claveFilaRelacion(preguntaId, indice) {
+  return `${preguntaId}#fila${indice}`;
+}
+
+// Puntos de cada fila de la columna A. Las relaciones guardadas antes de que
+// cada fila tuviera valor propio (sin valoresA) tenían un solo valor para toda
+// la tabla: se reparte parejo entre sus filas, para que ningún examen ya
+// armado —o ya aprobado— cambie su total de puntos.
+export function valoresFilasRelacion(p) {
+  const filas = (p.columnaA || []).length;
+  if (Array.isArray(p.valoresA)) {
+    return Array.from({ length: filas }, (_, i) => Number(p.valoresA[i]) || 0);
   }
-  return Number(p.valor) || 0;
+  const porFila = filas ? (Number(p.valor) || 0) / filas : 0;
+  return Array.from({ length: filas }, () => porFila);
+}
+
+// Los reactivos numerados que aporta una pregunta, cada uno con su clave (para
+// numerarlo) y su valor. La lectura de comprensión no cuenta por sí misma
+// (aporta los de sus subpreguntas) y la relación de columnas aporta uno por
+// cada fila de la columna A. Es la única fuente para numerar, sumar puntos y
+// armar "Valor de cada reactivo": así no pueden quedar desalineados entre sí.
+export function reactivosDe(p) {
+  if (p.tipo === 'lectura_comprension') return (p.subpreguntas || []).flatMap(reactivosDe);
+  if (p.tipo === 'relacion_columnas') {
+    return valoresFilasRelacion(p).map((valor, i) => ({ clave: claveFilaRelacion(p.id, i), valor }));
+  }
+  return [{ clave: p.id, valor: Number(p.valor) || 0 }];
+}
+
+export function valorPregunta(p) {
+  return reactivosDe(p).reduce((acc, r) => acc + r.valor, 0);
 }
 
 export function subtotalSeccion(seccion) {
@@ -295,21 +326,15 @@ export function totalExamen(examen) {
   return (examen.secciones || []).reduce((acc, s) => acc + subtotalSeccion(s), 0);
 }
 
-// Numeración continua de reactivos: la lectura de comprensión es un contenedor de instrucciones
-// (no cuenta como reactivo); cada una de sus subpreguntas sí cuenta y recibe el siguiente número.
+// Numeración continua de reactivos (ver reactivosDe): clave -> número.
 export function numerarReactivos(examen) {
   let n = 0;
-  const numeros = {}; // id (pregunta o subpregunta) -> número
+  const numeros = {};
   for (const seccion of examen.secciones || []) {
     for (const p of seccion.preguntas || []) {
-      if (p.tipo === 'lectura_comprension') {
-        for (const sp of p.subpreguntas || []) {
-          n += 1;
-          numeros[sp.id] = n;
-        }
-      } else {
+      for (const r of reactivosDe(p)) {
         n += 1;
-        numeros[p.id] = n;
+        numeros[r.clave] = n;
       }
     }
   }
@@ -356,16 +381,25 @@ export function validarExamen(examen) {
     }
   });
 
+  const numeros = numerarReactivos(examen);
   for (const seccion of examen.secciones || []) {
     for (const p of seccion.preguntas || []) {
-      if (p.tipo === 'lectura_comprension') {
-        for (const sp of p.subpreguntas || []) {
-          if (esValorProhibido(Number(sp.valor) || 0)) {
-            avisos.push({ tipo: 'valor', mensaje: `Una subpregunta de lectura tiene un valor de ${sp.valor} pts (evita .25/.75).` });
-          }
+      const preguntas = p.tipo === 'lectura_comprension' ? (p.subpreguntas || []) : [p];
+      for (const q of preguntas) {
+        if (q.tipo === 'relacion_columnas') {
+          valoresFilasRelacion(q).forEach((valor, i) => {
+            if (esValorProhibido(valor)) {
+              avisos.push({ tipo: 'valor', mensaje: `El reactivo ${numeros[claveFilaRelacion(q.id, i)]} (relación de columnas) tiene un valor de ${valor} pts (evita .25/.75).` });
+            }
+          });
+        } else if (esValorProhibido(Number(q.valor) || 0)) {
+          avisos.push({
+            tipo: 'valor',
+            mensaje: q === p
+              ? `El reactivo "${(p.enunciado || 'sin enunciado').slice(0, 40)}" tiene un valor de ${p.valor} pts (evita .25/.75).`
+              : `Una subpregunta de lectura tiene un valor de ${q.valor} pts (evita .25/.75).`,
+          });
         }
-      } else if (esValorProhibido(Number(p.valor) || 0)) {
-        avisos.push({ tipo: 'valor', mensaje: `El reactivo "${(p.enunciado || 'sin enunciado').slice(0, 40)}" tiene un valor de ${p.valor} pts (evita .25/.75).` });
       }
     }
   }

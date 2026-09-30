@@ -164,6 +164,8 @@
 .celda-b { width: 45%; }
 .resp-relacion { font-family: monospace; }
 .resp-correcta { font-weight: bold; }
+/* Cierra la relación: su margen de abajo es el mismo que separa un .reactivo del siguiente. */
+.subtotal-relacion { text-align: right; margin: 0.1cm 0 0.45cm 0; }
 
 .linea-respuesta { border-bottom: 0.5pt solid #333; height: 0.7cm; margin-top: 0.1cm; }
 .respuesta-modelo { margin-top: 0.1cm; background: #f4f4f4; padding: 0.15cm; }
