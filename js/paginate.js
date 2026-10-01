@@ -297,8 +297,15 @@ function aplicarEstiloSeccion(elemento, estilo) {
   else if (estilo.ajuste === 'justificado') elemento.style.textAlign = 'justify';
 }
 
+// "Aprovechar el espacio al final de cada hoja" (solo administrador, ver
+// panelFormatoDocumento en editor.js).
+function aprovechaEspacio(examen) {
+  return !!(examen.estiloDocumento && examen.estiloDocumento.aprovecharEspacio);
+}
+
 function construirBloques(examen, modoClave) {
   const numeros = numerarReactivos(examen);
+  const opcionesRender = { dividirAbiertas: aprovechaEspacio(examen) };
   const bloques = [];
   // "Empezar en una página nueva" (seccion/pregunta/subpregunta.saltoPagina):
   // se marca el PRIMER bloque de ese elemento, y el empaquetado de abajo cierra
@@ -322,11 +329,11 @@ function construirBloques(examen, modoClave) {
         bloques.push(...renderLecturaBloques(p));
         for (const sp of p.subpreguntas || []) {
           const inicioSubpregunta = bloques.length;
-          bloques.push(...renderPreguntaBloques(sp, numeros, modoClave));
+          bloques.push(...renderPreguntaBloques(sp, numeros, modoClave, opcionesRender));
           marcarSalto(inicioSubpregunta, sp.saltoPagina);
         }
       } else {
-        bloques.push(...renderPreguntaBloques(p, numeros, modoClave));
+        bloques.push(...renderPreguntaBloques(p, numeros, modoClave, opcionesRender));
       }
       marcarSalto(inicioPregunta, p.saltoPagina);
     }
@@ -442,11 +449,20 @@ export async function renderPaginas(examen, config, modoClave = false) {
     altoAcumulado = 0;
   }
 
+  const aprovechar = aprovechaEspacio(examen);
   bloques.forEach((bloque, i) => {
     const altoBloque = alturas[i];
     const disponible = alturaDisponible(paginas.length);
     const cabeEnPaginaActual = altoAcumulado + altoBloque <= disponible;
-    const esTituloYQuedaPoco = bloque.tipo === 'titulo-seccion' && (disponible - (altoAcumulado + altoBloque)) < minRestanteTituloPx;
+    // Un título de sección no se queda solo al pie de una hoja. Normalmente eso
+    // se asegura pidiéndole 4 cm libres debajo; con "aprovechar el espacio" se le
+    // pide solo lo justo: que quepa junto con el primer bloque que le sigue (y
+    // que ese bloque no esté marcado para empezar hoja nueva).
+    const restanteTrasTitulo = disponible - (altoAcumulado + altoBloque);
+    const siguiente = bloques[i + 1];
+    const esTituloYQuedaPoco = bloque.tipo === 'titulo-seccion' && (aprovechar
+      ? !!siguiente && (siguiente.saltoAntes || restanteTrasTitulo < alturas[i + 1])
+      : restanteTrasTitulo < minRestanteTituloPx);
 
     // bloque.saltoAntes = el docente pidió que este reactivo/sección arranque
     // hoja nueva, para que no le quede partido a la mitad (ver construirBloques).

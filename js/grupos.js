@@ -3,7 +3,7 @@
 
 import { el, clear } from './dom.js';
 import {
-  listarGrupos, obtenerGrupo, guardarGrupo, eliminarGrupo,
+  listarGrupos, obtenerGrupo, guardarGrupo, eliminarGrupo, listarAsistencias, guardarAsistencia,
 } from './gruposStore.js';
 import { nuevoGrupo, nuevoAlumno, usaPorcentaje } from './gruposModel.js';
 import { montarListaAsistencia } from './listaAsistencia.js';
@@ -16,6 +16,34 @@ import { coincideTexto, guardarFoco, restaurarFoco, campoBusqueda } from './filt
 function fechaCorta(iso) {
   if (!iso) return '';
   return new Date(iso).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+// Ventana de confirmación con los textos de botón que se pidan (confirm() del
+// navegador solo ofrece "Aceptar"/"Cancelar"). Resuelve true solo si se elige
+// el botón de aceptar; Cancelar, Escape o clic fuera resuelven false.
+function confirmarPaso({ titulo, mensaje, textoAceptar }) {
+  return new Promise((resolve) => {
+    const overlay = el('div', { class: 'overlay-modal tema-verde' });
+    function terminar(valor) {
+      document.removeEventListener('keydown', alPresionarTecla);
+      overlay.remove();
+      resolve(valor);
+    }
+    function alPresionarTecla(e) { if (e.key === 'Escape') terminar(false); }
+    document.addEventListener('keydown', alPresionarTecla);
+    overlay.onclick = (e) => { if (e.target === overlay) terminar(false); };
+    const btnAceptar = el('button', { type: 'button', class: 'btn-peligro', onclick: () => terminar(true) }, textoAceptar);
+    overlay.appendChild(el('div', { class: 'panel modal-confirmacion' }, [
+      el('h2', {}, titulo),
+      mensaje ? el('p', {}, mensaje) : null,
+      el('div', { class: 'acciones-modal' }, [
+        btnAceptar,
+        el('button', { type: 'button', class: 'btn-secundario', onclick: () => terminar(false) }, 'Cancelar'),
+      ]),
+    ]));
+    document.body.appendChild(overlay);
+    btnAceptar.focus();
+  });
 }
 
 let busquedaGrupo = '';
@@ -263,10 +291,55 @@ export async function montarGrupo(contenedor, grupoId, sesion, { onVolver }) {
           type: 'button', class: 'btn-secundario',
           onclick: () => { alumno.activo = alumno.activo === false; pintarAlumnos(); pintarPestana(); guardarConDebounce(); },
         }, alumno.activo !== false ? 'Desactivar' : 'Activar'),
+        soloLectura ? null : el('button', {
+          type: 'button', class: 'btn-peligro', onclick: () => eliminarAlumno(alumno),
+        }, 'Eliminar'),
       ]));
     });
   }
   pintarAlumnos();
+
+  // Para corregir un alumno agregado por error. A diferencia de "Desactivar", se
+  // va con todo lo suyo: sus calificaciones (dentro del documento del grupo) y
+  // sus marcas del pase de lista (en cada documento de asistencias/), para que
+  // no queden datos sueltos de alguien que ya no existe en el grupo.
+  async function eliminarAlumno(alumno) {
+    const quiere = await confirmarPaso({
+      titulo: '¿Quieres borrar a este alumno?',
+      mensaje: alumno.nombre,
+      textoAceptar: 'Borrar',
+    });
+    if (!quiere) return;
+    const confirma = await confirmarPaso({
+      titulo: 'Recuerda que esta opción no puede deshacerse',
+      mensaje: `Se borrarán también las calificaciones y el pase de lista de ${alumno.nombre}.`,
+      textoAceptar: 'Continuar',
+    });
+    if (!confirma) return;
+
+    clearTimeout(guardarTimeout);
+    grupo.alumnos = grupo.alumnos.filter((a) => a.id !== alumno.id);
+    if (grupo.calificaciones) delete grupo.calificaciones[alumno.id];
+    estadoGuardado.textContent = 'Guardando…';
+    estadoGuardado.className = 'estado-guardado';
+    try {
+      await guardarGrupo(grupo);
+      const dias = await listarAsistencias(grupo.id);
+      for (const dia of dias) {
+        if (dia.registros && dia.registros[alumno.id]) {
+          delete dia.registros[alumno.id];
+          await guardarAsistencia(dia);
+        }
+      }
+      estadoGuardado.textContent = 'Guardado ✓';
+      estadoGuardado.className = 'estado-guardado ok';
+    } catch (err) {
+      estadoGuardado.textContent = `No se pudo borrar por completo: ${err.message}`;
+      estadoGuardado.className = 'estado-guardado error';
+    }
+    pintarAlumnos();
+    pintarPestana();
+  }
 
   const campoAlumno = el('input', { type: 'text', placeholder: 'Nombre del alumno' });
   const btnAgregarAlumno = el('button', {

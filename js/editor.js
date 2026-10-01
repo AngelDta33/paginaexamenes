@@ -10,6 +10,7 @@ import {
 import { crearEditorPregunta, campoSaltoPagina } from './questionTypes.js';
 import { guardarExamen, obtenerConfig, exportarExamenJSON } from './store.js';
 import { pintarVistaPrevia, imprimir } from './preview.js';
+import { exportarExamenWord } from './exportarWord.js';
 import { TAMANOS_PAPEL, PAPEL_POR_DEFECTO } from './paginate.js';
 import { ETIQUETAS_TRIMESTRE } from './programasModel.js';
 import { esRevisorOAdmin as calcularEsRevisorOAdmin } from './auth.js';
@@ -219,6 +220,15 @@ export function montarEditor(contenedor, examen, { sesion, onVolver }) {
         campoNumero('Sangría (cm)', examen.estiloDocumento.sangriaCm, (v) => { examen.estiloDocumento.sangriaCm = v; }),
         campoNumero('Interlineado', examen.estiloDocumento.interlineado, (v) => { examen.estiloDocumento.interlineado = v; }),
         el('span', { class: 'etiqueta-chica', style: 'flex-basis:100%;' }, 'Solo para este examen. Déjalos vacíos ("estándar") para que use el formato estándar de la escuela, que se captura en Panel Administrador → Parámetros.'),
+        // Ver construirBloques/renderPaginas en paginate.js y renderAbiertaBloques en questionTypes.js.
+        el('label', { class: 'campo-salto-pagina', style: 'flex-basis:100%;' }, [
+          el('input', {
+            type: 'checkbox', checked: !!examen.estiloDocumento.aprovecharEspacio,
+            onchange: (e) => { examen.estiloDocumento.aprovecharEspacio = e.target.checked; guardarYActualizar(); },
+          }),
+          'Aprovechar el espacio al final de cada hoja',
+        ]),
+        el('span', { class: 'etiqueta-chica', style: 'flex-basis:100%;' }, 'Llena los huecos que quedan al final de una hoja: el título de una sección se queda si cabe junto con su primera pregunta, y una pregunta abierta puede continuar sus líneas en la hoja siguiente (el enunciado y su primera línea siempre van juntos).'),
       ]);
     }
 
@@ -462,6 +472,24 @@ export function montarEditor(contenedor, examen, { sesion, onVolver }) {
     value: valor, selected: (examen.tamanoPapel || PAPEL_POR_DEFECTO) === valor,
   }, papel.etiqueta)));
 
+  // Exporta lo que se esté viendo (examen o clave), igual que el PDF. Las
+  // librerías de Word se descargan al primer clic, así que puede tardar un poco.
+  const btnWord = el('button', {
+    type: 'button', class: 'btn-secundario', title: 'Archivo .docx para Word 2021 y Word 365',
+    onclick: async () => {
+      if (!configCache) return;
+      const textoOriginal = btnWord.textContent;
+      btnWord.disabled = true; btnWord.textContent = 'Generando Word…';
+      try {
+        await exportarExamenWord(examen, configCache, modoVista === 'clave');
+      } catch (err) {
+        alert(`No se pudo generar el archivo de Word: ${err.message}`);
+      } finally {
+        btnWord.disabled = false; btnWord.textContent = textoOriginal;
+      }
+    },
+  }, '⬇ Descargar Word (.docx)');
+
   const panelPreview = el('div', { class: 'panel panel-preview' }, [
     el('h2', {}, ['Vista previa ', estadoGuardado]),
     el('div', { class: 'acciones-preview' }, [
@@ -469,6 +497,7 @@ export function montarEditor(contenedor, examen, { sesion, onVolver }) {
       btnVerClave,
       el('label', { class: 'campo-papel' }, ['Hoja: ', selectorPapel]),
       el('button', { type: 'button', class: 'btn-primario', onclick: () => imprimir(examen, modoVista === 'clave') }, '🖨 Imprimir / Descargar PDF'),
+      btnWord,
       el('button', { type: 'button', class: 'btn-secundario', onclick: () => exportarExamenJSON(examen) }, '⬇ Exportar respaldo (.json)'),
     ]),
     el('p', { class: 'etiqueta-chica nota-impresion' }, 'Al imprimir, elige el mismo tamaño de hoja de aquí arriba y pon Márgenes: Ninguno y Escala: 100% (sin "Ajustar al área de impresión"). Así el PDF sale idéntico a esta vista previa.'),

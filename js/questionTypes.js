@@ -12,7 +12,7 @@ const LETRAS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 // Letra de una opción/par a partir de su índice (0=A, 25=Z, 26=AA, 27=AB, …
 // como las columnas de una hoja de cálculo) para que las listas con más de
 // 26 elementos no muestren "undefined" en vez de una letra.
-function letraOpcion(indice) {
+export function letraOpcion(indice) {
   let i = indice;
   let letra = '';
   do {
@@ -45,7 +45,7 @@ export function redimensionarImagen(file, maxAncho = 800) {
 }
 
 // Shuffle determinístico a partir de un id (para que el orden de la columna B no cambie entre renders)
-function shuffleDeterminista(arr, semilla) {
+export function shuffleDeterminista(arr, semilla) {
   // Todas las multiplicaciones van con Math.imul a propósito. La versión anterior
   // usaba `s * 1103515245`, y en JS ese producto no cabe en un double sin perder
   // precisión: los bits bajos del resultado quedaban en cero. Como el índice se
@@ -111,11 +111,11 @@ async function leerImagenDelPortapapeles() {
 
 const ANCHO_MIN_IMAGEN = 10;
 
-function anchoDeImagen(pregunta) {
+export function anchoDeImagen(pregunta) {
   return Math.max(ANCHO_MIN_IMAGEN, Math.min(100, Number(pregunta.imagenAncho) || 100));
 }
 
-function offsetDeImagen(pregunta) {
+export function offsetDeImagen(pregunta) {
   const guardado = Number(pregunta.imagenOffset);
   if (Number.isFinite(guardado)) return Math.max(-100, Math.min(100, guardado));
   const alineacion = pregunta.imagenAlineacion || 'center';
@@ -127,7 +127,7 @@ function offsetDeImagen(pregunta) {
 // Margen izquierdo (% del ancho útil) que le toca a la imagen con ese ancho y ese
 // offset: la mitad del espacio sobrante es el centro, y el offset la corre de ahí
 // hacia cualquiera de los dos lados.
-function margenIzquierdoImagen(ancho, offset) {
+export function margenIzquierdoImagen(ancho, offset) {
   const libre = 100 - ancho;
   return (libre / 2) * (1 + offset / 100);
 }
@@ -497,18 +497,44 @@ function editorRelacionColumnas(pregunta, onChange) {
   return cont;
 }
 
+// "Formato de columna" solo aplica con una sola línea de respuesta (ver
+// renderAbierta): con más líneas la casilla se bloquea, pero lo marcado se
+// conserva para cuando se regrese a una línea.
 function editorAbierta(pregunta, onChange) {
   const { contenedor: campoRespuesta } = campoTextoConFormulas({
     valor: pregunta.respuestaModelo, filas: '2',
     oninput: (valor) => { pregunta.respuestaModelo = valor; onChange(); },
   });
+  const casillaColumna = el('input', {
+    type: 'checkbox', checked: !!pregunta.formatoColumna,
+    onchange: (e) => { pregunta.formatoColumna = e.target.checked; onChange(); },
+  });
+  const avisoColumna = el('span', { class: 'etiqueta-chica' }, '(solo con 1 línea para responder)');
+  function actualizarColumna() {
+    const unaLinea = Number(pregunta.lineasRespuesta) === 1;
+    casillaColumna.disabled = !unaLinea;
+    avisoColumna.hidden = unaLinea;
+  }
+  actualizarColumna();
   return el('div', { class: 'editor-tipo' }, [
     el('label', {}, [
       'Líneas para responder: ',
       el('input', {
         type: 'number', min: '1', max: '15', value: pregunta.lineasRespuesta,
-        oninput: (e) => { pregunta.lineasRespuesta = parseInt(e.target.value, 10) || 1; onChange(); },
+        oninput: (e) => { pregunta.lineasRespuesta = parseInt(e.target.value, 10) || 1; actualizarColumna(); onChange(); },
       }),
+    ]),
+    el('label', {
+      class: 'campo-salto-pagina', title: 'La pregunta queda a la izquierda y la línea de respuesta inmediatamente a su derecha, en el mismo renglón.',
+    }, [casillaColumna, 'Formato de columna (la línea va a la derecha de la pregunta)', avisoColumna]),
+    el('label', {
+      class: 'campo-salto-pagina', title: 'Deja el mismo espacio para contestar, pero sin dibujar las líneas: más cómodo para que el alumno haga operaciones.',
+    }, [
+      el('input', {
+        type: 'checkbox', checked: !!pregunta.lineasInvisibles,
+        onchange: (e) => { pregunta.lineasInvisibles = e.target.checked; onChange(); },
+      }),
+      'Líneas invisibles (deja el espacio, sin dibujar las líneas)',
     ]),
     el('div', { class: 'campo' }, [
       el('label', {}, 'Respuesta modelo (solo para la clave):'),
@@ -908,17 +934,68 @@ function renderRelacionColumnasBloques(pregunta, numeros, modoClave) {
   return bloques;
 }
 
+export function usaFormatoColumna(pregunta) {
+  return !!pregunta.formatoColumna && Number(pregunta.lineasRespuesta) === 1;
+}
+
+// "Líneas invisibles" conserva el alto de cada renglón (el espacio para
+// contestar) y solo quita el trazo, para que el alumno haga operaciones.
+function lineaRespuesta(pregunta) {
+  return el('div', { class: pregunta.lineasInvisibles ? 'linea-respuesta linea-invisible' : 'linea-respuesta' });
+}
+
+function respuestaModeloClave(pregunta, clase) {
+  return el('div', { class: clase }, [
+    'Respuesta modelo: ',
+    ...(pregunta.respuestaModelo ? renderTextoFormulas(pregunta.respuestaModelo) : ['(no se capturó respuesta modelo)']),
+  ]);
+}
+
+// Formato de columna: la pregunta a la izquierda y su única línea de respuesta
+// inmediatamente a la derecha, en el mismo renglón. En la clave, la respuesta
+// modelo ocupa ese mismo lugar.
+function renderAbiertaColumna(pregunta, numero, modoClave) {
+  const derecha = modoClave
+    ? respuestaModeloClave(pregunta, 'respuesta-modelo respuesta-columna')
+    : el('div', { class: pregunta.lineasInvisibles ? 'linea-columna linea-invisible' : 'linea-columna' });
+  return el('div', { class: 'reactivo' }, [
+    el('div', { class: 'reactivo-columna' }, [encabezadoReactivo(numero, pregunta, pregunta.valor), derecha]),
+    bloqueImagen(pregunta),
+  ]);
+}
+
 function renderAbierta(pregunta, numero, modoClave) {
+  if (usaFormatoColumna(pregunta)) return renderAbiertaColumna(pregunta, numero, modoClave);
   const cuerpo = [encabezadoReactivo(numero, pregunta, pregunta.valor), bloqueImagen(pregunta)];
   if (modoClave) {
-    cuerpo.push(el('div', { class: 'respuesta-modelo' }, [
-      'Respuesta modelo: ',
-      ...(pregunta.respuestaModelo ? renderTextoFormulas(pregunta.respuestaModelo) : ['(no se capturó respuesta modelo)']),
-    ]));
+    cuerpo.push(respuestaModeloClave(pregunta, 'respuesta-modelo'));
   } else {
-    for (let i = 0; i < pregunta.lineasRespuesta; i++) cuerpo.push(el('div', { class: 'linea-respuesta' }));
+    for (let i = 0; i < pregunta.lineasRespuesta; i++) cuerpo.push(lineaRespuesta(pregunta));
   }
   return el('div', { class: 'reactivo' }, cuerpo);
+}
+
+// Versión que el paginador puede partir entre dos hojas (solo con "Aprovechar
+// el espacio al final de cada hoja" del administrador): el enunciado y la
+// primera línea van siempre juntos y cada línea siguiente es un bloque aparte.
+// El margen que separa este reactivo del siguiente pasa a la última línea.
+function renderAbiertaBloques(pregunta, numero, modoClave) {
+  const lineas = Number(pregunta.lineasRespuesta) || 1;
+  if (modoClave || usaFormatoColumna(pregunta) || lineas <= 1) {
+    return [{ tipo: 'pregunta', el: renderAbierta(pregunta, numero, modoClave) }];
+  }
+  const bloques = [{
+    tipo: 'pregunta-inicio',
+    el: el('div', { class: 'reactivo reactivo-partido' }, [
+      encabezadoReactivo(numero, pregunta, pregunta.valor), bloqueImagen(pregunta), lineaRespuesta(pregunta),
+    ]),
+  }];
+  for (let i = 1; i < lineas; i++) {
+    const linea = lineaRespuesta(pregunta);
+    if (i === lineas - 1) linea.classList.add('linea-respuesta-ultima');
+    bloques.push({ tipo: 'pregunta-fila', el: linea });
+  }
+  return bloques;
 }
 
 function renderVerdaderoFalso(pregunta, numero, modoClave) {
@@ -1014,9 +1091,12 @@ const RENDER_TIPO_BLOQUES = {
 // bloques, sea uno solo (renderPregunta) o varios (tipos con listas que pueden
 // crecer sin límite). Recibe el mapa completo de numeración (numerarReactivos)
 // porque la relación de columnas no usa un número sino uno por cada fila.
-export function renderPreguntaBloques(pregunta, numeros, modoClave) {
+// opciones.dividirAbiertas: las preguntas abiertas salen línea por línea para
+// que puedan terminar en la hoja siguiente (ver renderAbiertaBloques).
+export function renderPreguntaBloques(pregunta, numeros, modoClave, opciones = {}) {
   if (pregunta.tipo === 'relacion_columnas') return renderRelacionColumnasBloques(pregunta, numeros, modoClave);
   const numero = numeros[pregunta.id];
+  if (pregunta.tipo === 'abierta' && opciones.dividirAbiertas) return renderAbiertaBloques(pregunta, numero, modoClave);
   const fn = RENDER_TIPO_BLOQUES[pregunta.tipo];
   if (fn) return fn(pregunta, numero, modoClave);
   return [{ tipo: 'pregunta', el: renderPregunta(pregunta, numero, modoClave) }];

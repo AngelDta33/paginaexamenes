@@ -146,6 +146,8 @@ const DEFAULTS_POR_TIPO = {
     imagen: null,
     lineasRespuesta: 3,
     respuestaModelo: '',
+    formatoColumna: false, // con 1 línea: la línea va a la derecha de la pregunta
+    lineasInvisibles: false, // deja el espacio para contestar sin dibujar las líneas
   }),
   verdadero_falso: () => ({
     enunciado: '',

@@ -291,6 +291,7 @@ button {
 .modal-motivo-falta .chip-escala { margin-bottom: 0.6rem; }
 
 .modal-duplicar { width: 100%; max-width: 420px; }
+.modal-confirmacion { width: 100%; max-width: 380px; }
 .opciones-duplicar { display: flex; flex-direction: column; gap: 0.6rem; margin: 0.6rem 0; }
 .opcion-duplicar {
   display: flex; align-items: flex-start; gap: 0.5rem; border: 1px solid var(--borde);

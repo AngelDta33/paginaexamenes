@@ -170,6 +170,19 @@
 .linea-respuesta { border-bottom: 0.5pt solid #333; height: 0.7cm; margin-top: 0.1cm; }
 .respuesta-modelo { margin-top: 0.1cm; background: #f4f4f4; padding: 0.15cm; }
 
+/* Pregunta abierta en "formato de columna": la pregunta a la izquierda y su
+   única línea de respuesta a la derecha, alineadas por abajo (ver renderAbiertaColumna). */
+.reactivo-columna { display: flex; align-items: flex-end; gap: 0.3cm; }
+.reactivo-columna > .reactivo-encabezado { flex: 0 1 auto; max-width: 65%; }
+.reactivo-columna > .linea-columna { flex: 1 1 auto; min-width: 30%; height: 0.5cm; border-bottom: 0.5pt solid #333; }
+.reactivo-columna > .respuesta-columna { flex: 1 1 auto; min-width: 30%; margin-top: 0; }
+/* "Líneas invisibles": mismo espacio para contestar, sin el trazo. */
+.linea-respuesta.linea-invisible, .linea-columna.linea-invisible { border-bottom-color: transparent; }
+/* Abierta partida entre hojas (ver renderAbiertaBloques): el margen que la separa
+   del siguiente reactivo pasa del bloque inicial a su última línea. */
+.reactivo.reactivo-partido { margin-bottom: 0; }
+.linea-respuesta-ultima { margin-bottom: 0.45cm; }
+
 .vf-opciones { display: flex; gap: 0.6cm; margin-top: 0.1cm; margin-left: 0.6cm; }
 .vf-correcta { font-weight: bold; }
 
