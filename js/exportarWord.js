@@ -14,7 +14,7 @@
 
 import {
   numerarReactivos, reactivosDe, subtotalSeccion, puntosDeclarados, valoresFilasRelacion,
-  claveFilaRelacion, ENCABEZADO_OFICIAL_DEFECTO, ENCABEZADO_INGLES_DEFECTO,
+  claveFilaRelacion, claveItemBanco, ENCABEZADO_OFICIAL_DEFECTO, ENCABEZADO_INGLES_DEFECTO,
 } from './model.js';
 import { papelDeExamen, estiloDocumentoDeExamen, cicloDeExamen } from './paginate.js';
 import { ETIQUETAS_TRIMESTRE } from './programasModel.js';
@@ -68,12 +68,80 @@ function anchoTextoCm(texto, pt, familiaCss, negrita = false) {
 
 // --- Texto con fórmulas --------------------------------------------------------
 
+const NS_M = 'http://schemas.openxmlformats.org/officeDocument/2006/math';
+const textoOmml = (nodo) => [...nodo.getElementsByTagNameNS(NS_M, 't')].map((t) => t.textContent).join('');
+const hijosM = (nodo, nombre) => [...nodo.children].filter((h) => h.namespaceURI === NS_M && h.localName === nombre);
+
+// Ajusta lo que mathml2omml deja raro para Word: la plantilla de fracción
+// diagonal ({}^{a}/{}_{b}) llega como superíndice y subíndice sin base (Word
+// pinta cuadritos vacíos) y se vuelve la fracción sesgada nativa de Word; la
+// raya de la galera llega como acento (no se estira) y se vuelve barra superior;
+// y se quita un atributo m:sty="undefined" que Word no acepta.
+function ajustarOmml(omml) {
+  const docXml = new DOMParser().parseFromString(omml, 'application/xml');
+  if (docXml.getElementsByTagName('parsererror').length) return omml;
+  const crear = (nombre) => docXml.createElementNS(NS_M, `m:${nombre}`);
+
+  [...docXml.getElementsByTagNameNS(NS_M, 'sty')].forEach((sty) => {
+    if (!['p', 'b', 'i', 'bi'].includes(sty.getAttributeNS(NS_M, 'val'))) sty.remove();
+  });
+
+  [...docXml.getElementsByTagNameNS(NS_M, 'acc')].forEach((acc) => {
+    const chr = acc.getElementsByTagNameNS(NS_M, 'chr')[0];
+    const e = hijosM(acc, 'e')[0];
+    if (!chr || !e || !['‾', '¯', '\u0305'].includes(chr.getAttributeNS(NS_M, 'val'))) return;
+    const bar = crear('bar');
+    const barPr = crear('barPr');
+    const pos = crear('pos');
+    pos.setAttributeNS(NS_M, 'm:val', 'top');
+    barPr.appendChild(pos);
+    bar.append(barPr, e);
+    acc.replaceWith(bar);
+  });
+
+  const sinBase = (nodo, tipo) => nodo.namespaceURI === NS_M && nodo.localName === tipo
+    && hijosM(nodo, 'e')[0] && !hijosM(nodo, 'e')[0].children.length;
+  [...docXml.getElementsByTagNameNS(NS_M, 'sSup')].forEach((sup) => {
+    if (!sup.parentNode || !sinBase(sup, 'sSup')) return;
+    // Entre el superíndice y el subíndice solo puede haber la "/" (y los
+    // separadores invisibles que agrega KaTeX).
+    const medio = [];
+    let sig = sup.nextElementSibling;
+    while (sig && sig.localName === 'r' && /^[\s\u2061-\u2064/]*$/.test(textoOmml(sig))) { medio.push(sig); sig = sig.nextElementSibling; }
+    if (!sig || !sinBase(sig, 'sSub') || medio.map(textoOmml).join('').replace(/[\s\u2061-\u2064]/g, '') !== '/') return;
+    const f = crear('f');
+    const fPr = crear('fPr');
+    const tipo = crear('type');
+    tipo.setAttributeNS(NS_M, 'm:val', 'skw');
+    fPr.appendChild(tipo);
+    const num = crear('num');
+    const den = crear('den');
+    num.append(...hijosM(sup, 'sup')[0].childNodes);
+    den.append(...hijosM(sig, 'sub')[0].childNodes);
+    f.append(fPr, num, den);
+    sup.replaceWith(f);
+    medio.forEach((n) => n.remove());
+    sig.remove();
+  });
+
+  // Cualquier otra base vacía: un espacio de ancho cero para que Word no pinte el cuadrito.
+  [...docXml.getElementsByTagNameNS(NS_M, 'e')].forEach((e) => {
+    if (e.children.length) return;
+    const r = crear('r');
+    const t = crear('t');
+    t.textContent = '\u200B';
+    r.appendChild(t);
+    e.appendChild(r);
+  });
+  return new XMLSerializer().serializeToString(docXml);
+}
+
 function ecuacion(latex) {
   try {
     const html = window.katex.renderToString(latex, { output: 'mathml', throwOnError: false });
     const mathml = html.match(/<math[\s\S]*<\/math>/)[0].replace(/<annotation[\s\S]*?<\/annotation>/g, '');
     // fromXmlString devuelve un envoltorio sin nombre: el <m:oMath> es su primer hijo.
-    return D.ImportedXmlComponent.fromXmlString(mml2omml(mathml)).root[0];
+    return D.ImportedXmlComponent.fromXmlString(ajustarOmml(mml2omml(mathml))).root[0];
   } catch (err) {
     return null;
   }
@@ -196,8 +264,8 @@ async function imagenConMarcadores(pregunta, ordenExamen, medidas) {
 
 // --- Piezas comunes -------------------------------------------------------------
 
-// Párrafo vacío de alto exacto: la separación entre reactivos (el margin-bottom
-// de .reactivo en la hoja).
+// Párrafo vacío de alto exacto: la separación entre reactivos (.espacio-tras-reactivo
+// en la hoja), que va al terminar cada pregunta y no entre la pregunta y sus respuestas.
 function separador(cm) {
   return new D.Paragraph({ spacing: { before: 0, after: 0, line: tw(cm), lineRule: D.LineRuleType.EXACT } });
 }
@@ -211,6 +279,10 @@ function alineacion(ctx) {
   return ctx.justificar ? D.AlignmentType.JUSTIFIED : D.AlignmentType.LEFT;
 }
 
+// La pregunta va en negritas salvo que el administrador/revisor se las quite
+// (igual que claseEnunciado en questionTypes.js).
+const fmtEnunciado = (pregunta, ctx) => ({ ...ctx.fmt, bold: pregunta.negritas !== false });
+
 // "N. enunciado (X pts)" — el renglón con que arranca casi todo reactivo.
 function encabezadoReactivo(numero, pregunta, valor, ctx, extra = {}) {
   return new D.Paragraph({
@@ -219,7 +291,7 @@ function encabezadoReactivo(numero, pregunta, valor, ctx, extra = {}) {
     ...(extra.tabStops ? { tabStops: extra.tabStops } : {}),
     children: [
       new D.TextRun({ ...ctx.fmt, text: `${numero}. `, bold: true }),
-      ...runsDeTexto(pregunta.enunciado || '', ctx.fmt),
+      ...runsDeTexto(pregunta.enunciado || '', fmtEnunciado(pregunta, ctx)),
       valor !== null ? new D.TextRun({ ...ctx.fmt, text: ` (${redondear(valor)} pts)`, color: '444444' }) : null,
       ...(extra.alFinal || []),
     ].filter(Boolean),
@@ -240,7 +312,7 @@ async function opcionMultiple(p, numeros, modoClave, ctx) {
     const correcta = modoClave && i === p.respuestaCorrecta;
     elementos.push(new D.Paragraph({
       indent: { left: tw(0.6) },
-      spacing: { before: i === 0 ? tw(0.1) : tw(0.02), after: tw(0.02) },
+      spacing: { before: tw(0.02), after: tw(0.02) },
       children: [new D.TextRun({ ...ctx.fmt, text: `${correcta ? '● ' : '○ '}${letraOpcion(i)}) `, bold: correcta }), ...runsDeTexto(op, { ...ctx.fmt, bold: correcta })],
     }));
   });
@@ -256,7 +328,7 @@ async function relacionColumnas(p, numeros, modoClave, ctx) {
   if (p.enunciado) {
     elementos.push(new D.Paragraph({
       alignment: alineacion(ctx), indent: ctx.sangriaCm ? { firstLine: tw(ctx.sangriaCm) } : undefined,
-      children: runsDeTexto(p.enunciado, ctx.fmt),
+      children: runsDeTexto(p.enunciado, fmtEnunciado(p, ctx)),
     }));
   }
   elementos.push(...(await bloqueImagen(p, ctx)));
@@ -342,7 +414,7 @@ async function verdaderoFalso(p, numeros, modoClave, ctx) {
     encabezadoReactivo(numeros[p.id], p, p.valor, ctx),
     ...(await bloqueImagen(p, ctx)),
     new D.Paragraph({
-      indent: { left: tw(0.6) }, spacing: { before: tw(0.1) },
+      indent: { left: tw(0.6) },
       children: [
         new D.TextRun({ ...ctx.fmt, text: `${inV} (${marca(p.respuestaCorrecta)})`, bold: modoClave && p.respuestaCorrecta }),
         new D.TextRun({ ...ctx.fmt, text: '        ' }),
@@ -380,7 +452,7 @@ async function identificarImagen(p, numeros, modoClave, ctx) {
   }
   ordenExamen.forEach((m, i) => {
     elementos.push(new D.Paragraph({
-      indent: { left: tw(0.4) }, spacing: { before: i === 0 ? tw(0.15) : 0, after: tw(0.12) },
+      indent: { left: tw(0.4) }, spacing: { before: 0, after: tw(0.12) },
       tabStops: [{ type: D.TabStopType.RIGHT, position: tw(ctx.anchoCm), leader: D.LeaderType.UNDERSCORE }],
       children: [
         new D.TextRun({ ...ctx.fmt, text: `${i + 1}. `, bold: true }),
@@ -393,12 +465,73 @@ async function identificarImagen(p, numeros, modoClave, ctx) {
   return elementos;
 }
 
+// Mismo criterio que renderBancoPalabrasBloques: instrucción sin número, el
+// recuadro con las palabras revueltas (misma semilla, así examen y clave
+// coinciden con el PDF) y una oración numerada por palabra con su línea — en
+// el lugar del ___ si lo hay, si no al final —; en la clave va la palabra.
+async function bancoPalabras(p, numeros, modoClave, ctx) {
+  const items = p.items || [];
+  const elementos = [];
+  if (p.enunciado) {
+    elementos.push(new D.Paragraph({
+      alignment: alineacion(ctx), indent: ctx.sangriaCm ? { firstLine: tw(ctx.sangriaCm) } : undefined,
+      children: runsDeTexto(p.enunciado, fmtEnunciado(p, ctx)),
+    }));
+  }
+  elementos.push(...(await bloqueImagen(p, ctx)));
+  const palabras = items.map((it) => it.palabra).filter((x) => x && x.trim());
+  if (palabras.length) {
+    const runs = [];
+    shuffleDeterminista(palabras, `${p.id}#banco`).forEach(([palabra], i) => {
+      if (i > 0) runs.push(new D.TextRun({ ...ctx.fmt, text: '    ' }));
+      runs.push(new D.TextRun({ ...ctx.fmt, text: ' ', border: borde(4, '666666') }));
+      runs.push(...runsDeTexto(palabra, { ...ctx.fmt, border: borde(4, '666666') }));
+      runs.push(new D.TextRun({ ...ctx.fmt, text: ' ', border: borde(4, '666666') }));
+    });
+    elementos.push(new D.Paragraph({
+      border: { top: borde(4, '999999'), bottom: borde(4, '999999'), left: borde(4, '999999'), right: borde(4, '999999') },
+      shading: { type: D.ShadingType.CLEAR, fill: 'FAFAFA', color: 'auto' },
+      spacing: { before: tw(0.15), after: tw(0.15) },
+      children: runs,
+    }));
+  }
+  const fmtOracion = fmtEnunciado(p, ctx);
+  items.forEach((it) => {
+    // La línea es un tramo de espacios duros subrayados (no se parten ni se
+    // juntan como los espacios normales); el texto de alrededor ya trae sus espacios.
+    const hueco = modoClave
+      ? runsDeTexto(it.palabra || '?', { ...ctx.fmt, bold: true, underline: {} })
+      : [new D.TextRun({ ...ctx.fmt, text: '\u00A0'.repeat(26), underline: {} })];
+    const texto = it.oracion || '';
+    const m = texto.match(/_{3,}/);
+    const oracion = m
+      ? [...runsDeTexto(texto.slice(0, m.index), fmtOracion), ...hueco, ...runsDeTexto(texto.slice(m.index + m[0].length), fmtOracion)]
+      : [...runsDeTexto(texto, fmtOracion), new D.TextRun({ ...ctx.fmt, text: ' ' }), ...hueco];
+    elementos.push(new D.Paragraph({
+      alignment: alineacion(ctx),
+      spacing: { before: p.espacioOraciones === false ? 0 : tw(0.12) },
+      children: [
+        new D.TextRun({ ...ctx.fmt, text: `${numeros[claveItemBanco(p.id, it.id)]}. `, bold: true }),
+        ...oracion,
+        new D.TextRun({ ...ctx.fmt, text: ` (${redondear(Number(it.valor) || 0)} pts)`, color: '444444' }),
+      ],
+    }));
+  });
+  const total = items.reduce((acc, it) => acc + (Number(it.valor) || 0), 0);
+  elementos.push(new D.Paragraph({
+    alignment: D.AlignmentType.RIGHT, spacing: { before: tw(0.1) },
+    children: [new D.TextRun({ ...ctx.fmt, text: `Valor del banco de palabras: ${puntos(total)}` })],
+  }));
+  return elementos;
+}
+
 const CONSTRUCTORES = {
   opcion_multiple: opcionMultiple,
   relacion_columnas: relacionColumnas,
   abierta,
   verdadero_falso: verdaderoFalso,
   identificar_imagen: identificarImagen,
+  banco_palabras: bancoPalabras,
 };
 
 // El recuadro del texto de lectura: un párrafo por línea, todos con el mismo
@@ -425,7 +558,7 @@ function lectura(p, ctx) {
 async function reactivo(p, numeros, modoClave, ctx) {
   const constructor = CONSTRUCTORES[p.tipo] || abierta;
   const elementos = await constructor(p, numeros, modoClave, ctx);
-  return [...(p.saltoPagina ? [parrafoSalto()] : []), ...elementos, separador(0.45)];
+  return [...(p.saltoPagina ? [parrafoSalto()] : []), ...elementos, ...(p.espacioDespues !== false ? [separador(0.45)] : [])];
 }
 
 // --- Encabezado -----------------------------------------------------------------

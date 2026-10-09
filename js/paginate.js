@@ -315,6 +315,16 @@ function construirBloques(examen, modoClave) {
   const marcarSalto = (indiceDelPrimerBloque, activo) => {
     if (activo && bloques[indiceDelPrimerBloque]) bloques[indiceDelPrimerBloque].saltoAntes = true;
   };
+  // El espacio entre reactivos va DESPUÉS del último bloque de cada uno (su
+  // última opción, línea o fila), no entre la pregunta y sus respuestas: así
+  // las respuestas quedan pegadas a su pregunta y el espacio marca dónde empieza
+  // la siguiente. Un administrador/revisor puede quitarlo por reactivo
+  // (espacioDespues === false, ver formatoReactivo en questionTypes.js).
+  const agregarReactivo = (pregunta) => {
+    const suyos = renderPreguntaBloques(pregunta, numeros, modoClave, opcionesRender);
+    if (pregunta.espacioDespues !== false && suyos.length) suyos[suyos.length - 1].el.classList.add('espacio-tras-reactivo');
+    bloques.push(...suyos);
+  };
   for (const seccion of examen.secciones || []) {
     const inicioSeccion = bloques.length;
     if (seccion.titulo || seccion.instrucciones) {
@@ -329,11 +339,11 @@ function construirBloques(examen, modoClave) {
         bloques.push(...renderLecturaBloques(p));
         for (const sp of p.subpreguntas || []) {
           const inicioSubpregunta = bloques.length;
-          bloques.push(...renderPreguntaBloques(sp, numeros, modoClave, opcionesRender));
+          agregarReactivo(sp);
           marcarSalto(inicioSubpregunta, sp.saltoPagina);
         }
       } else {
-        bloques.push(...renderPreguntaBloques(p, numeros, modoClave, opcionesRender));
+        agregarReactivo(p);
       }
       marcarSalto(inicioPregunta, p.saltoPagina);
     }

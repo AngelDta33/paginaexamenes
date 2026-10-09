@@ -138,7 +138,11 @@
 .titulo-seccion { font-weight: bold; margin: 0 0 0.1cm 0; text-transform: uppercase; }
 .instrucciones-seccion { font-weight: bold; margin: 0; }
 
-.reactivo { margin-bottom: 0.45cm; }
+/* El espacio que separa una pregunta de la siguiente va al final de cada pregunta
+   (en su último bloque, ver agregarReactivo en paginate.js), nunca entre la pregunta
+   y sus respuestas. El administrador/revisor puede quitarlo por pregunta. */
+.reactivo { margin-bottom: 0; }
+.enunciado-negritas { font-weight: bold; }
 .reactivo-encabezado { display: block; }
 .num-reactivo { font-weight: bold; }
 .valor-reactivo { color: #444; }
@@ -148,24 +152,20 @@
 
 /* Cada opción es su propio bloque (ver renderOpcionMultipleBloques), no un hijo de
    un contenedor común, para que el paginador pueda cortar la lista entre opciones
-   si no caben todas en la página; por eso el margen que antes tenía el contenedor
-   ahora vive en cada opción, con un poco más arriba solo en la primera. */
+   si no caben todas en la página. Las respuestas van pegadas a la pregunta. */
 .opcion-examen { display: block; margin: 0.02cm 0 0.02cm 0.6cm; }
-.opcion-examen-primera { margin-top: 0.1cm; }
 .opcion-correcta { font-weight: bold; }
 
 /* Cada fila es su propia mini-tabla de una sola fila (ver renderRelacionColumnasBloques)
    para que el paginador pueda cortar entre filas; como no llevan borde entre celdas,
    varias tablas apiladas se ven exactamente igual que una sola tabla continua. */
 .tabla-relacion { border-collapse: collapse; width: 100%; margin: 0; }
-.tabla-relacion-primera { margin-top: 0.15cm; }
 .tabla-relacion td { border: none; padding: 0.08cm 0.3cm; vertical-align: top; }
 .celda-a { width: 55%; }
 .celda-b { width: 45%; }
 .resp-relacion { font-family: monospace; }
 .resp-correcta { font-weight: bold; }
-/* Cierra la relación: su margen de abajo es el mismo que separa un .reactivo del siguiente. */
-.subtotal-relacion { text-align: right; margin: 0.1cm 0 0.45cm 0; }
+.subtotal-relacion { text-align: right; margin: 0.1cm 0 0 0; }
 
 .linea-respuesta { border-bottom: 0.5pt solid #333; height: 0.7cm; margin-top: 0.1cm; }
 .respuesta-modelo { margin-top: 0.1cm; background: #f4f4f4; padding: 0.15cm; }
@@ -178,12 +178,8 @@
 .reactivo-columna > .respuesta-columna { flex: 1 1 auto; min-width: 30%; margin-top: 0; }
 /* "Líneas invisibles": mismo espacio para contestar, sin el trazo. */
 .linea-respuesta.linea-invisible, .linea-columna.linea-invisible { border-bottom-color: transparent; }
-/* Abierta partida entre hojas (ver renderAbiertaBloques): el margen que la separa
-   del siguiente reactivo pasa del bloque inicial a su última línea. */
-.reactivo.reactivo-partido { margin-bottom: 0; }
-.linea-respuesta-ultima { margin-bottom: 0.45cm; }
 
-.vf-opciones { display: flex; gap: 0.6cm; margin-top: 0.1cm; margin-left: 0.6cm; }
+.vf-opciones { display: flex; gap: 0.6cm; margin-top: 0; margin-left: 0.6cm; }
 .vf-correcta { font-weight: bold; }
 
 /* --- Identificar en imagen: imagen con marcadores numerados + banco de palabras --- */
@@ -206,7 +202,6 @@
    que las opciones y la relación de columnas: que el paginador pueda cortar la
    lista de respuestas entre renglones si no caben todos en la página. */
 .fila-resp-identificar { display: flex; align-items: baseline; gap: 0.2cm; margin: 0 0 0.12cm 0.4cm; }
-.fila-resp-identificar-primera { margin-top: 0.15cm; }
 .num-resp { font-weight: bold; }
 .linea-resp-inline { flex: 1 1 auto; border-bottom: 0.5pt solid #333; min-width: 5cm; height: 0.5cm; }
 
@@ -223,7 +218,18 @@
 .texto-lectura-linea-primera { border-top: 0.5pt solid #999; padding-top: 0.25cm; }
 .texto-lectura-linea-ultima { border-bottom: 0.5pt solid #999; padding-bottom: 0.25cm; margin-bottom: 0.3cm; }
 
+/* --- Banco de palabras (tipo de pregunta): una oración por bloque con su hueco --- */
+.fila-banco { margin: 0.12cm 0 0 0; }
+.fila-banco.fila-banco-junta { margin-top: 0; }
+.linea-banco {
+  display: inline-block; min-width: 3.5cm; height: 1em; vertical-align: text-bottom;
+  border-bottom: 0.5pt solid #333; margin: 0 0.1cm;
+}
+.resp-banco { font-weight: bold; text-decoration: underline; margin: 0 0.1cm; }
+
 .subtotal-seccion { text-align: right; font-weight: bold; margin: 0.15cm 0 0.35cm 0; }
+
+.espacio-tras-reactivo { margin-bottom: 0.45cm !important; }
 
 .bloque-firma { margin-top: 1cm; }
 .linea-firma { border-bottom: 0.5pt solid #333; width: 8cm; margin: 0 auto; }

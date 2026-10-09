@@ -3,7 +3,7 @@
 import { el, clear } from './dom.js';
 import { atributosTamano } from './imagenes.js';
 import {
-  nuevaSubpregunta, uid, moverElemento, valoresFilasRelacion, claveFilaRelacion,
+  nuevaSubpregunta, uid, moverElemento, valoresFilasRelacion, claveFilaRelacion, nuevoItemBanco, claveItemBanco,
 } from './model.js';
 import { renderTextoFormulas, campoTextoConFormulas } from './formulas.js';
 
@@ -686,6 +686,86 @@ function editorIdentificarImagen(pregunta, onChange) {
   return cont;
 }
 
+// Banco de palabras: arriba la lista de palabras ("+ Agregar palabra") y abajo
+// un recuadro por cada palabra para escribir su oración. Palabra y oración
+// viven en el mismo item, así que al quitar una palabra se va con su oración y
+// nunca quedan cruzadas. El alumno escribe la palabra en la línea; solo la
+// clave la muestra escrita.
+function editorBancoPalabras(pregunta, onChange) {
+  pregunta.items = pregunta.items || [];
+  const listaPalabras = el('div', { class: 'lista-opciones' });
+  const listaOraciones = el('div', { class: 'oraciones-banco' });
+  const totalBanco = el('p', { class: 'etiqueta-chica' });
+  // Etiqueta de cada oración ("Oración para «árbol»"): se actualiza al teclear
+  // la palabra sin repintar las oraciones, que perderían el foco o lo escrito.
+  const etiquetas = new Map();
+  const nombre = (it, i) => (it.palabra.trim() ? `«${it.palabra.trim()}»` : `la palabra ${i + 1}`);
+
+  function actualizarTotal() {
+    const total = pregunta.items.reduce((acc, it) => acc + (Number(it.valor) || 0), 0);
+    totalBanco.textContent = `Valor total del banco: ${Math.round(total * 100) / 100} pts. Cada oración cuenta como un reactivo con su propio número y valor.`;
+  }
+
+  function pintar() {
+    clear(listaPalabras);
+    clear(listaOraciones);
+    etiquetas.clear();
+    pregunta.items.forEach((it, i) => {
+      listaPalabras.appendChild(el('div', { class: 'fila-opcion' }, [
+        el('input', {
+          type: 'text', value: it.palabra, placeholder: `Palabra ${i + 1}`,
+          oninput: (e) => {
+            it.palabra = e.target.value;
+            etiquetas.get(it.id).textContent = `Oración para ${nombre(it, i)}`;
+            onChange();
+          },
+        }),
+        el('button', {
+          type: 'button', class: 'btn-icono', title: 'Quitar esta palabra (y su oración)',
+          onclick: () => { pregunta.items.splice(i, 1); pintar(); onChange(); },
+        }, '✕'),
+      ]));
+
+      const etiqueta = el('span', {}, `Oración para ${nombre(it, i)}`);
+      etiquetas.set(it.id, etiqueta);
+      const { contenedor: campoOracion } = campoTextoConFormulas({
+        placeholder: 'Escribe la oración o pregunta. La línea para la respuesta va al final; si la quieres en medio, escribe ___ donde va la palabra.',
+        valor: it.oracion, filas: '2',
+        oninput: (valor) => { it.oracion = valor; onChange(); },
+      });
+      listaOraciones.appendChild(el('div', { class: 'oracion-banco' }, [
+        el('div', { class: 'cabecera-oracion-banco' }, [
+          etiqueta,
+          el('label', { class: 'campo-valor' }, [
+            'Puntos ',
+            el('input', {
+              type: 'number', step: '0.1', min: '0', class: 'input-valor', value: it.valor,
+              oninput: (e) => { it.valor = parseFloat(e.target.value) || 0; actualizarTotal(); onChange(); },
+            }),
+          ]),
+        ]),
+        campoOracion,
+      ]));
+    });
+    actualizarTotal();
+  }
+  pintar();
+
+  return el('div', { class: 'editor-tipo editor-banco' }, [
+    el('span', { class: 'etiqueta-chica' }, 'Palabras del banco (en el examen aparecen revueltas, en un recuadro debajo de las instrucciones):'),
+    listaPalabras,
+    el('button', {
+      type: 'button', class: 'btn-secundario',
+      onclick: () => { pregunta.items.push(nuevoItemBanco()); pintar(); onChange(); },
+    }, '+ Agregar palabra'),
+    el('div', { class: 'columna-b-editor' }, [
+      el('span', { class: 'etiqueta-chica' }, 'Oraciones — una por cada palabra. En el examen el alumno escribe la palabra en la línea; en la clave aparece ya escrita.'),
+      listaOraciones,
+      totalBanco,
+    ]),
+  ]);
+}
+
 const TIPOS_SUBPREGUNTA = [
   { valor: 'opcion_multiple', etiqueta: 'Opción múltiple' },
   { valor: 'verdadero_falso', etiqueta: 'Verdadero / Falso' },
@@ -693,7 +773,7 @@ const TIPOS_SUBPREGUNTA = [
   { valor: 'relacion_columnas', etiqueta: 'Relación de columnas' },
 ];
 
-function editorLecturaComprension(pregunta, onChange) {
+function editorLecturaComprension(pregunta, onChange, opciones = {}) {
   const cont = el('div', { class: 'editor-lectura' });
   const subCont = el('div', { class: 'subpreguntas' });
 
@@ -704,6 +784,7 @@ function editorLecturaComprension(pregunta, onChange) {
         onChange,
         onDelete: () => { pregunta.subpreguntas.splice(i, 1); pintarSub(); onChange(); },
         subEtiqueta: `Subpregunta ${i + 1}`,
+        puedeDarFormato: opciones.puedeDarFormato,
         // Mover una subpregunta de lugar es la forma de "insertarla entre otras
         // dos": se agrega al final con "+ Agregar subpregunta" y luego se sube
         // hasta la posición donde debe quedar.
@@ -752,6 +833,7 @@ const EDITORES_TIPO = {
   abierta: editorAbierta,
   verdadero_falso: editorVerdaderoFalso,
   identificar_imagen: editorIdentificarImagen,
+  banco_palabras: editorBancoPalabras,
   lectura_comprension: editorLecturaComprension,
 };
 
@@ -761,6 +843,7 @@ const ETIQUETAS_TIPO = {
   abierta: 'Respuesta abierta',
   verdadero_falso: 'Verdadero / Falso',
   identificar_imagen: 'Identificar en imagen',
+  banco_palabras: 'Banco de palabras',
   lectura_comprension: 'Lectura de comprensión',
 };
 
@@ -786,12 +869,41 @@ export function campoSaltoPagina(elemento, onChange, etiqueta = '📄 Empezar en
   ]);
 }
 
-// Sin campo "Puntos" propio: la lectura suma el de sus subpreguntas y la
-// relación de columnas el de cada fila de la columna A.
-const TIPOS_SIN_VALOR_PROPIO = new Set(['lectura_comprension', 'relacion_columnas']);
+// Sin campo "Puntos" propio: la lectura suma el de sus subpreguntas, la
+// relación de columnas el de cada fila de la columna A y el banco de palabras
+// el de cada oración.
+const TIPOS_SIN_VALOR_PROPIO = new Set(['lectura_comprension', 'relacion_columnas', 'banco_palabras']);
+
+// Tipos cuyo enunciado es solo una instrucción, sin número ni puntos.
+const PLACEHOLDER_INSTRUCCION = {
+  relacion_columnas: 'Instrucción opcional, ej. "Relaciona las columnas" (no lleva número ni puntos)…',
+  banco_palabras: 'Instrucciones, ej. "Completa cada oración con una palabra del banco" (no lleva número ni puntos)…',
+};
+
+function casillaFormato(etiqueta, marcada, alCambiar) {
+  return el('label', { class: 'campo-salto-pagina' }, [
+    el('input', { type: 'checkbox', checked: marcada, onchange: (e) => alCambiar(e.target.checked) }),
+    etiqueta,
+  ]);
+}
+
+// Formato de un reactivo que solo ajustan administrador y revisor: por defecto
+// la pregunta va en negritas y con espacio antes del siguiente reactivo (ver
+// claseEnunciado y construirBloques en paginate.js). Se guarda solo cuando se
+// quita, así los exámenes que no traen el campo siguen con el formato normal.
+function formatoReactivo(pregunta, onChange) {
+  return el('div', { class: 'formato-seccion-admin formato-reactivo-admin' }, [
+    el('span', { class: 'etiqueta-formato-admin' }, '🛠 Formato de este reactivo (administrador / revisor):'),
+    casillaFormato('Pregunta en negritas', pregunta.negritas !== false, (v) => { pregunta.negritas = v; onChange(); }),
+    casillaFormato('Espacio después de esta pregunta', pregunta.espacioDespues !== false, (v) => { pregunta.espacioDespues = v; onChange(); }),
+    pregunta.tipo === 'banco_palabras'
+      ? casillaFormato('Espacio entre las oraciones del banco', pregunta.espacioOraciones !== false, (v) => { pregunta.espacioOraciones = v; onChange(); })
+      : null,
+  ]);
+}
 
 export function crearEditorPregunta(pregunta, {
-  onChange, onDelete, subEtiqueta, onMoveUp, onMoveDown,
+  onChange, onDelete, subEtiqueta, onMoveUp, onMoveDown, puedeDarFormato = false,
 }) {
   const cabecera = el('div', { class: 'cabecera-pregunta' }, [
     el('span', { class: 'etiqueta-tipo' }, subEtiqueta ? `${subEtiqueta} — ${ETIQUETAS_TIPO[pregunta.tipo]}` : ETIQUETAS_TIPO[pregunta.tipo]),
@@ -806,13 +918,13 @@ export function crearEditorPregunta(pregunta, {
   ]);
 
   const cuerpo = [cabecera];
-  if (pregunta.tipo === 'relacion_columnas') {
-    cuerpo.push(campoEnunciado(pregunta, onChange, 'Instrucción opcional, ej. "Relaciona las columnas" (no lleva número ni puntos)…'));
+  if (PLACEHOLDER_INSTRUCCION[pregunta.tipo]) {
+    cuerpo.push(campoEnunciado(pregunta, onChange, PLACEHOLDER_INSTRUCCION[pregunta.tipo]));
   } else if (pregunta.tipo !== 'lectura_comprension') {
     cuerpo.push(campoEnunciado(pregunta, onChange));
   }
   const editorFn = EDITORES_TIPO[pregunta.tipo] || editorAbierta;
-  cuerpo.push(editorFn(pregunta, onChange));
+  cuerpo.push(editorFn(pregunta, onChange, { puedeDarFormato }));
   if (pregunta.tipo !== 'lectura_comprension' && !TIPOS_IMAGEN_PROPIA.has(pregunta.tipo)) {
     cuerpo.push(campoImagen(pregunta, onChange));
   }
@@ -820,6 +932,9 @@ export function crearEditorPregunta(pregunta, {
     pregunta, onChange,
     subEtiqueta ? '📄 Empezar esta subpregunta en una página nueva' : '📄 Empezar este reactivo en una página nueva',
   ));
+  // La lectura no lleva este bloque: su enunciado es una instrucción en
+  // itálicas y el espacio lo controla cada subpregunta.
+  if (puedeDarFormato && pregunta.tipo !== 'lectura_comprension') cuerpo.push(formatoReactivo(pregunta, onChange));
 
   return el('div', { class: 'tarjeta-pregunta' }, cuerpo);
 }
@@ -828,10 +943,17 @@ export function crearEditorPregunta(pregunta, {
 // RENDER PARA EXAMEN / CLAVE
 // ---------------------------------------------------------------------------
 
+// La pregunta va en negritas salvo que un administrador/revisor lo quite
+// (pregunta.negritas === false): así los exámenes viejos, que no traen el
+// campo, también salen en negritas.
+function claseEnunciado(pregunta) {
+  return pregunta.negritas === false ? 'enunciado-texto' : 'enunciado-texto enunciado-negritas';
+}
+
 function encabezadoReactivo(numero, pregunta, valor) {
   return el('div', { class: 'reactivo-encabezado' }, [
     el('span', { class: 'num-reactivo' }, `${numero}. `),
-    el('span', { class: 'enunciado-texto' }, renderTextoFormulas(pregunta.enunciado || '')),
+    el('span', { class: claseEnunciado(pregunta) }, renderTextoFormulas(pregunta.enunciado || '')),
     valor !== null ? el('span', { class: 'valor-reactivo' }, ` (${valor} pts)`) : null,
   ]);
 }
@@ -858,7 +980,6 @@ function renderOpcionMultipleBloques(pregunta, numero, modoClave) {
   }];
   pregunta.opciones.forEach((op, i) => {
     const clases = ['opcion-examen'];
-    if (i === 0) clases.push('opcion-examen-primera');
     if (modoClave && i === pregunta.respuestaCorrecta) clases.push('opcion-correcta');
     bloques.push({
       tipo: 'pregunta-opcion',
@@ -909,7 +1030,7 @@ function renderRelacionColumnasBloques(pregunta, numeros, modoClave) {
       tipo: 'pregunta-inicio',
       el: el('div', { class: 'reactivo' }, [
         pregunta.enunciado
-          ? el('div', { class: 'reactivo-encabezado' }, [el('span', { class: 'enunciado-texto' }, renderTextoFormulas(pregunta.enunciado))])
+          ? el('div', { class: 'reactivo-encabezado' }, [el('span', { class: claseEnunciado(pregunta) }, renderTextoFormulas(pregunta.enunciado))])
           : null,
         bloqueImagen(pregunta),
       ]),
@@ -918,7 +1039,7 @@ function renderRelacionColumnasBloques(pregunta, numeros, modoClave) {
   for (let i = 0; i < maxFilas; i++) {
     bloques.push({
       tipo: 'pregunta-fila',
-      el: el('table', { class: `tabla-relacion${i === 0 ? ' tabla-relacion-primera' : ''}` }, [
+      el: el('table', { class: 'tabla-relacion' }, [
         el('tbody', {}, [el('tr', {}, [
           celdasA[i] || el('td', { class: 'celda-relacion celda-a' }, ''),
           celdasB[i] || el('td', { class: 'celda-relacion celda-b' }, ''),
@@ -978,7 +1099,6 @@ function renderAbierta(pregunta, numero, modoClave) {
 // Versión que el paginador puede partir entre dos hojas (solo con "Aprovechar
 // el espacio al final de cada hoja" del administrador): el enunciado y la
 // primera línea van siempre juntos y cada línea siguiente es un bloque aparte.
-// El margen que separa este reactivo del siguiente pasa a la última línea.
 function renderAbiertaBloques(pregunta, numero, modoClave) {
   const lineas = Number(pregunta.lineasRespuesta) || 1;
   if (modoClave || usaFormatoColumna(pregunta) || lineas <= 1) {
@@ -986,15 +1106,11 @@ function renderAbiertaBloques(pregunta, numero, modoClave) {
   }
   const bloques = [{
     tipo: 'pregunta-inicio',
-    el: el('div', { class: 'reactivo reactivo-partido' }, [
+    el: el('div', { class: 'reactivo' }, [
       encabezadoReactivo(numero, pregunta, pregunta.valor), bloqueImagen(pregunta), lineaRespuesta(pregunta),
     ]),
   }];
-  for (let i = 1; i < lineas; i++) {
-    const linea = lineaRespuesta(pregunta);
-    if (i === lineas - 1) linea.classList.add('linea-respuesta-ultima');
-    bloques.push({ tipo: 'pregunta-fila', el: linea });
-  }
+  for (let i = 1; i < lineas; i++) bloques.push({ tipo: 'pregunta-fila', el: lineaRespuesta(pregunta) });
   return bloques;
 }
 
@@ -1055,7 +1171,7 @@ function renderIdentificarImagenBloques(pregunta, numero, modoClave) {
   ordenExamen.forEach((m, i) => {
     bloques.push({
       tipo: 'pregunta-fila',
-      el: el('div', { class: `fila-resp-identificar${i === 0 ? ' fila-resp-identificar-primera' : ''}` }, [
+      el: el('div', { class: 'fila-resp-identificar' }, [
         el('span', { class: 'num-resp' }, `${i + 1}. `),
         modoClave
           ? el('span', { class: 'resp-relacion resp-correcta' }, m.etiqueta || '(sin nombre)')
@@ -1080,6 +1196,57 @@ export function renderPregunta(pregunta, numero, modoClave) {
   return el('div', { class: 'reactivo' }, [encabezadoReactivo(numero, pregunta, pregunta.valor)]);
 }
 
+// Si el maestro escribió ___ (tres guiones bajos o más) en la oración, la
+// línea va ahí; si no, va al final de la oración.
+const REGEX_HUECO_BANCO = /_{3,}/;
+
+// Banco de palabras: un bloque inicial con la instrucción (sin número ni
+// puntos), la imagen y el recuadro con las palabras revueltas — con la misma
+// semilla siempre, para que el examen y la clave coincidan y el alumno no
+// pueda deducir las respuestas por el orden — y luego un bloque por oración,
+// cada una con su número y su valor. En el examen la línea va vacía; en la
+// clave, en su lugar va la palabra que corresponde.
+function renderBancoPalabrasBloques(pregunta, numeros, modoClave) {
+  const items = pregunta.items || [];
+  const negritas = pregunta.negritas !== false;
+  const inicio = [];
+  if (pregunta.enunciado) {
+    inicio.push(el('div', { class: 'reactivo-encabezado' }, [el('span', { class: claseEnunciado(pregunta) }, renderTextoFormulas(pregunta.enunciado))]));
+  }
+  inicio.push(bloqueImagen(pregunta));
+  const palabras = items.map((it) => it.palabra).filter((p) => p && p.trim());
+  if (palabras.length) {
+    const revueltas = shuffleDeterminista(palabras, `${pregunta.id}#banco`);
+    inicio.push(el('div', { class: 'banco-palabras' }, revueltas.map(([p]) => el('span', { class: 'palabra-banco' }, renderTextoFormulas(p)))));
+  }
+  const bloques = [{ tipo: 'pregunta-inicio', el: el('div', { class: 'reactivo' }, inicio) }];
+
+  items.forEach((it) => {
+    const hueco = modoClave
+      ? el('span', { class: 'resp-banco' }, renderTextoFormulas(it.palabra || '?'))
+      : el('span', { class: 'linea-banco' });
+    const texto = it.oracion || '';
+    const m = texto.match(REGEX_HUECO_BANCO);
+    const oracion = m
+      ? [...renderTextoFormulas(texto.slice(0, m.index)), hueco, ...renderTextoFormulas(texto.slice(m.index + m[0].length))]
+      : [...renderTextoFormulas(texto), ' ', hueco];
+    bloques.push({
+      tipo: 'pregunta-fila',
+      el: el('div', { class: pregunta.espacioOraciones === false ? 'fila-banco fila-banco-junta' : 'fila-banco' }, [
+        el('span', { class: 'num-reactivo' }, `${numeros[claveItemBanco(pregunta.id, it.id)]}. `),
+        el('span', { class: negritas ? 'enunciado-negritas' : '' }, oracion),
+        el('span', { class: 'valor-reactivo' }, ` (${redondearPuntos(Number(it.valor) || 0)} pts)`),
+      ]),
+    });
+  });
+  const total = redondearPuntos(items.reduce((acc, it) => acc + (Number(it.valor) || 0), 0));
+  bloques.push({
+    tipo: 'pregunta-fila',
+    el: el('div', { class: 'subtotal-relacion' }, `Valor del banco de palabras: ${total} ${total === 1 ? 'punto' : 'puntos'}`),
+  });
+  return bloques;
+}
+
 // Tipos cuyo contenido crece con lo que capture el maestro (opciones, filas de
 // relación, marcadores) y por eso se devuelven como varios bloques repartibles.
 const RENDER_TIPO_BLOQUES = {
@@ -1095,6 +1262,7 @@ const RENDER_TIPO_BLOQUES = {
 // que puedan terminar en la hoja siguiente (ver renderAbiertaBloques).
 export function renderPreguntaBloques(pregunta, numeros, modoClave, opciones = {}) {
   if (pregunta.tipo === 'relacion_columnas') return renderRelacionColumnasBloques(pregunta, numeros, modoClave);
+  if (pregunta.tipo === 'banco_palabras') return renderBancoPalabrasBloques(pregunta, numeros, modoClave);
   const numero = numeros[pregunta.id];
   if (pregunta.tipo === 'abierta' && opciones.dividirAbiertas) return renderAbiertaBloques(pregunta, numero, modoClave);
   const fn = RENDER_TIPO_BLOQUES[pregunta.tipo];

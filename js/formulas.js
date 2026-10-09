@@ -67,8 +67,15 @@ function pintarKatexEnSpan(span, latex) {
 // Plantillas rápidas: insertan la estructura (fracción, potencia, raíz…) con
 // casillas punteadas ya listas para llenar, en vez de esperar a que el maestro
 // sepa que "/" o "^" arman una fracción o un exponente en el teclado normal.
+// Fracción diagonal: numerador arriba y denominador abajo, separados por una
+// barra inclinada (³⁄₄) en vez de la raya horizontal. Galera: la "casita" de la
+// división larga — KaTeX no tiene \enclose{longdiv}, así que se arma con una
+// raya sobre el dividendo y un paréntesis alto (\smash para que no empuje el
+// renglón). Las dos se probaron en KaTeX, en MathLive y al exportar a Word.
 const PLANTILLAS_RAPIDAS = [
-  { etiqueta: 'Fracción', simbolo: '½', texto: '\\frac{#0}{#0}' },
+  { etiqueta: 'Fracción horizontal (números arriba y abajo)', simbolo: '½', texto: '\\frac{#0}{#0}' },
+  { etiqueta: 'Fracción diagonal (con la barra /)', simbolo: 'a⁄b', texto: '{}^{#0}\\!/\\!{}_{#0}' },
+  { etiqueta: 'Galera (división de casita)', simbolo: 'galera', texto: '#0\\overline{\\smash{\\big)}\\,#0}' },
   { etiqueta: 'Potencia (exponente)', simbolo: 'xⁿ', texto: '{#0}^{#0}' },
   { etiqueta: 'Subíndice', simbolo: 'x₂', texto: '{#0}_{#0}' },
   { etiqueta: 'Raíz cuadrada', simbolo: '√', texto: '\\sqrt{#0}' },

@@ -27,10 +27,11 @@ export function montarEditor(contenedor, examen, { sesion, onVolver }) {
   let configCache = null;
 
   const esRevisorOAdmin = calcularEsRevisorOAdmin(sesion);
-  // El formato (márgenes, sangría, interlineado, tipografía de cada sección) es
-  // cosa del administrador nada más: un revisor puede corregir el contenido del
-  // examen, pero no cambiar el formato estándar de la escuela.
-  const esAdministrador = !!sesion && sesion.rol === 'administrador';
+  // El formato del examen (márgenes, sangría, interlineado, tipografía de cada
+  // sección, negritas y espacio de cada reactivo) lo ajustan administrador y
+  // revisor. El formato estándar de TODA la escuela sigue siendo solo del
+  // administrador: vive en Panel Administrador → Parámetros, no aquí.
+  const puedeDarFormato = esRevisorOAdmin;
   const puedeEditar = esRevisorOAdmin || examen.estado === 'borrador';
 
   const estadoGuardado = el('span', { class: 'estado-guardado' });
@@ -215,7 +216,7 @@ export function montarEditor(contenedor, examen, { sesion, onVolver }) {
         }),
       ]);
       return el('div', { class: 'formato-documento-admin' }, [
-        el('span', { class: 'etiqueta-formato-admin' }, '🛠 Formato de todo el documento (solo administrador):'),
+        el('span', { class: 'etiqueta-formato-admin' }, '🛠 Formato de todo el documento (administrador / revisor):'),
         campoNumero('Márgenes (cm)', examen.estiloDocumento.margenCm, (v) => { examen.estiloDocumento.margenCm = v; }),
         campoNumero('Sangría (cm)', examen.estiloDocumento.sangriaCm, (v) => { examen.estiloDocumento.sangriaCm = v; }),
         campoNumero('Interlineado', examen.estiloDocumento.interlineado, (v) => { examen.estiloDocumento.interlineado = v; }),
@@ -262,7 +263,7 @@ export function montarEditor(contenedor, examen, { sesion, onVolver }) {
           oninput: (e) => { examen.instruccionesGenerales = e.target.value; guardarYActualizar(); },
         }, examen.instruccionesGenerales),
       ]),
-      esAdministrador ? panelFormatoDocumento() : null,
+      puedeDarFormato ? panelFormatoDocumento() : null,
     ]);
 
     const contenedorSecciones = el('div', { class: 'contenedor-secciones' });
@@ -342,10 +343,10 @@ export function montarEditor(contenedor, examen, { sesion, onVolver }) {
       bloque.appendChild(contenedorComentario);
 
       // Formato de la sección (tipo de letra, tamaño, ajuste de texto): solo
-      // lo puede tocar un administrador, y solo afecta esta sección (no el
+      // lo tocan administrador y revisor, y solo afecta esta sección (no el
       // resto del examen). Se aplica en la vista previa/impresión, nunca en
       // el editor mismo.
-      if (esAdministrador) {
+      if (puedeDarFormato) {
         seccion.estilo = seccion.estilo || {};
         const selectorFamilia = el('select', {
           onchange: (e) => { seccion.estilo.familia = e.target.value; guardarYActualizar(); },
@@ -363,7 +364,7 @@ export function montarEditor(contenedor, examen, { sesion, onVolver }) {
           value: a.valor, selected: (seccion.estilo.ajuste || '') === a.valor,
         }, a.etiqueta)));
         bloque.appendChild(el('div', { class: 'formato-seccion-admin' }, [
-          el('span', { class: 'etiqueta-formato-admin' }, '🛠 Formato de esta sección (solo administrador):'),
+          el('span', { class: 'etiqueta-formato-admin' }, '🛠 Formato de esta sección (administrador / revisor):'),
           el('label', {}, ['Fuente ', selectorFamilia]),
           el('label', {}, ['Tamaño ', selectorTamano]),
           el('label', {}, ['Ajuste ', selectorAjuste]),
@@ -375,6 +376,7 @@ export function montarEditor(contenedor, examen, { sesion, onVolver }) {
         clear(contenedorPreguntas);
         seccion.preguntas.forEach((p, pi) => {
           contenedorPreguntas.appendChild(crearEditorPregunta(p, {
+            puedeDarFormato,
             onChange: () => { subtotalSpan.textContent = `Subtotal: ${subtotalSeccion(seccion)} pts`; guardarYActualizar(); },
             onDelete: () => { seccion.preguntas.splice(pi, 1); pintarPreguntas(); guardarYActualizar(); },
             onMoveUp: pi > 0 ? () => {

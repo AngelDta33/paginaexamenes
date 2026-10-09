@@ -172,7 +172,22 @@ const DEFAULTS_POR_TIPO = {
     imagen: null,
     marcadores: [], // { id, x, y, etiqueta }
   }),
+  // Banco de palabras: el enunciado es solo la instrucción (sin número ni
+  // puntos, como en la relación de columnas); debajo va el banco con todas las
+  // palabras, y luego una oración por palabra, cada una un reactivo con su
+  // número y su valor, donde el alumno escribe la palabra que corresponde.
+  banco_palabras: () => ({
+    enunciado: '',
+    imagen: null,
+    items: [nuevoItemBanco()],
+  }),
 };
+
+// Una palabra del banco y su oración: van juntas, así la relación oración ↔
+// palabra no depende de índices que se recorren al borrar.
+export function nuevoItemBanco() {
+  return { id: uid('bp'), palabra: '', oracion: '', valor: 1 };
+}
 
 // Opciones de formato de texto que ofrece la app (formato estándar de la
 // escuela en Panel Administrador → Parámetros, y formato por sección en el
@@ -218,6 +233,7 @@ export const TIPOS_PREGUNTA = [
   { valor: 'abierta', etiqueta: 'Respuesta abierta/restringida' },
   { valor: 'verdadero_falso', etiqueta: 'Verdadero / Falso' },
   { valor: 'identificar_imagen', etiqueta: 'Identificar en imagen' },
+  { valor: 'banco_palabras', etiqueta: 'Banco de palabras' },
   { valor: 'lectura_comprension', etiqueta: 'Lectura de comprensión' },
 ];
 
@@ -308,10 +324,17 @@ export function valoresFilasRelacion(p) {
 // (aporta los de sus subpreguntas) y la relación de columnas aporta uno por
 // cada fila de la columna A. Es la única fuente para numerar, sumar puntos y
 // armar "Valor de cada reactivo": así no pueden quedar desalineados entre sí.
+export function claveItemBanco(preguntaId, itemId) {
+  return `${preguntaId}#${itemId}`;
+}
+
 export function reactivosDe(p) {
   if (p.tipo === 'lectura_comprension') return (p.subpreguntas || []).flatMap(reactivosDe);
   if (p.tipo === 'relacion_columnas') {
     return valoresFilasRelacion(p).map((valor, i) => ({ clave: claveFilaRelacion(p.id, i), valor }));
+  }
+  if (p.tipo === 'banco_palabras') {
+    return (p.items || []).map((it) => ({ clave: claveItemBanco(p.id, it.id), valor: Number(it.valor) || 0 }));
   }
   return [{ clave: p.id, valor: Number(p.valor) || 0 }];
 }
@@ -392,6 +415,13 @@ export function validarExamen(examen) {
           valoresFilasRelacion(q).forEach((valor, i) => {
             if (esValorProhibido(valor)) {
               avisos.push({ tipo: 'valor', mensaje: `El reactivo ${numeros[claveFilaRelacion(q.id, i)]} (relación de columnas) tiene un valor de ${valor} pts (evita .25/.75).` });
+            }
+          });
+        } else if (q.tipo === 'banco_palabras') {
+          (q.items || []).forEach((it) => {
+            const valor = Number(it.valor) || 0;
+            if (esValorProhibido(valor)) {
+              avisos.push({ tipo: 'valor', mensaje: `El reactivo ${numeros[claveItemBanco(q.id, it.id)]} (banco de palabras) tiene un valor de ${valor} pts (evita .25/.75).` });
             }
           });
         } else if (esValorProhibido(Number(q.valor) || 0)) {
