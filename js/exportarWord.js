@@ -14,7 +14,7 @@
 
 import {
   numerarReactivos, reactivosDe, subtotalSeccion, puntosDeclarados, valoresFilasRelacion,
-  claveFilaRelacion, claveItemBanco, ENCABEZADO_OFICIAL_DEFECTO, ENCABEZADO_INGLES_DEFECTO,
+  claveFilaRelacion, claveItemBanco, datosBanco, palabraDeOracion, ENCABEZADO_OFICIAL_DEFECTO, ENCABEZADO_INGLES_DEFECTO,
 } from './model.js';
 import { papelDeExamen, estiloDocumentoDeExamen, cicloDeExamen } from './paginate.js';
 import { ETIQUETAS_TRIMESTRE } from './programasModel.js';
@@ -470,7 +470,7 @@ async function identificarImagen(p, numeros, modoClave, ctx) {
 // coinciden con el PDF) y una oración numerada por palabra con su línea — en
 // el lugar del ___ si lo hay, si no al final —; en la clave va la palabra.
 async function bancoPalabras(p, numeros, modoClave, ctx) {
-  const items = p.items || [];
+  const { palabras, oraciones } = datosBanco(p);
   const elementos = [];
   if (p.enunciado) {
     elementos.push(new D.Paragraph({
@@ -479,10 +479,10 @@ async function bancoPalabras(p, numeros, modoClave, ctx) {
     }));
   }
   elementos.push(...(await bloqueImagen(p, ctx)));
-  const palabras = items.map((it) => it.palabra).filter((x) => x && x.trim());
-  if (palabras.length) {
+  const textos = palabras.map((pal) => pal.texto).filter((t) => t && t.trim());
+  if (textos.length) {
     const runs = [];
-    shuffleDeterminista(palabras, `${p.id}#banco`).forEach(([palabra], i) => {
+    shuffleDeterminista(textos, `${p.id}#banco`).forEach(([palabra], i) => {
       if (i > 0) runs.push(new D.TextRun({ ...ctx.fmt, text: '    ' }));
       runs.push(new D.TextRun({ ...ctx.fmt, text: ' ', border: borde(4, '666666') }));
       runs.push(...runsDeTexto(palabra, { ...ctx.fmt, border: borde(4, '666666') }));
@@ -496,13 +496,15 @@ async function bancoPalabras(p, numeros, modoClave, ctx) {
     }));
   }
   const fmtOracion = fmtEnunciado(p, ctx);
-  items.forEach((it) => {
+  oraciones.forEach((o) => {
+    const palabra = palabraDeOracion(palabras, o);
     // La línea es un tramo de espacios duros subrayados (no se parten ni se
-    // juntan como los espacios normales); el texto de alrededor ya trae sus espacios.
+    // juntan como los espacios normales); el texto de alrededor ya trae sus
+    // espacios. "Versión corta": la mitad del largo.
     const hueco = modoClave
-      ? runsDeTexto(it.palabra || '?', { ...ctx.fmt, bold: true, underline: {} })
-      : [new D.TextRun({ ...ctx.fmt, text: '\u00A0'.repeat(26), underline: {} })];
-    const texto = it.oracion || '';
+      ? runsDeTexto((palabra && palabra.texto) || '?', { ...ctx.fmt, bold: true, underline: {} })
+      : [new D.TextRun({ ...ctx.fmt, text: ' '.repeat(o.corta ? 13 : 26), underline: {} })];
+    const texto = o.texto || '';
     const m = texto.match(/_{3,}/);
     const oracion = m
       ? [...runsDeTexto(texto.slice(0, m.index), fmtOracion), ...hueco, ...runsDeTexto(texto.slice(m.index + m[0].length), fmtOracion)]
@@ -511,13 +513,13 @@ async function bancoPalabras(p, numeros, modoClave, ctx) {
       alignment: alineacion(ctx),
       spacing: { before: p.espacioOraciones === false ? 0 : tw(0.12) },
       children: [
-        new D.TextRun({ ...ctx.fmt, text: `${numeros[claveItemBanco(p.id, it.id)]}. `, bold: true }),
+        new D.TextRun({ ...ctx.fmt, text: `${numeros[claveItemBanco(p.id, o.id)]}. `, bold: true }),
         ...oracion,
-        new D.TextRun({ ...ctx.fmt, text: ` (${redondear(Number(it.valor) || 0)} pts)`, color: '444444' }),
+        new D.TextRun({ ...ctx.fmt, text: ` (${redondear(Number(o.valor) || 0)} pts)`, color: '444444' }),
       ],
     }));
   });
-  const total = items.reduce((acc, it) => acc + (Number(it.valor) || 0), 0);
+  const total = oraciones.reduce((acc, o) => acc + (Number(o.valor) || 0), 0);
   elementos.push(new D.Paragraph({
     alignment: D.AlignmentType.RIGHT, spacing: { before: tw(0.1) },
     children: [new D.TextRun({ ...ctx.fmt, text: `Valor del banco de palabras: ${puntos(total)}` })],

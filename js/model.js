@@ -174,19 +174,56 @@ const DEFAULTS_POR_TIPO = {
   }),
   // Banco de palabras: el enunciado es solo la instrucción (sin número ni
   // puntos, como en la relación de columnas); debajo va el banco con todas las
-  // palabras, y luego una oración por palabra, cada una un reactivo con su
-  // número y su valor, donde el alumno escribe la palabra que corresponde.
+  // palabras, y luego las oraciones, cada una un reactivo con su número y su
+  // valor, donde el alumno escribe la palabra que corresponde. Palabras y
+  // oraciones son listas aparte: el maestro elige qué palabra va en cada
+  // oración, así el orden de las oraciones no delata las respuestas (y puede
+  // haber palabras de más, que no van en ninguna oración).
   banco_palabras: () => ({
     enunciado: '',
     imagen: null,
-    items: [nuevoItemBanco()],
+    palabras: [nuevaPalabraBanco()],
+    oraciones: [nuevaOracionBanco()],
   }),
 };
 
-// Una palabra del banco y su oración: van juntas, así la relación oración ↔
-// palabra no depende de índices que se recorren al borrar.
-export function nuevoItemBanco() {
-  return { id: uid('bp'), palabra: '', oracion: '', valor: 1 };
+export function nuevaPalabraBanco() {
+  return { id: uid('bpp'), texto: '' };
+}
+
+// palabraId apunta a la palabra por su id (no por posición), para que borrar
+// o reordenar palabras no cruce las respuestas. "corta": la línea para
+// contestar mide la mitad, para respuestas pequeñas en medio de la oración.
+export function nuevaOracionBanco(palabraId = null) {
+  return { id: uid('bpo'), texto: '', palabraId, valor: 1, corta: false };
+}
+
+// Palabras y oraciones de un banco. La primera versión guardaba "items"
+// (palabra y oración juntas, una por renglón): se leen como oraciones ligadas
+// a su palabra, con los mismos ids, así su numeración no cambia.
+export function datosBanco(p) {
+  if (Array.isArray(p.palabras) || Array.isArray(p.oraciones)) {
+    return { palabras: p.palabras || [], oraciones: p.oraciones || [] };
+  }
+  const items = p.items || [];
+  return {
+    palabras: items.map((it) => ({ id: it.id, texto: it.palabra || '' })),
+    oraciones: items.map((it) => ({ id: it.id, texto: it.oracion || '', palabraId: it.id, valor: it.valor ?? 1, corta: false })),
+  };
+}
+
+// Pasa un banco de la primera versión al formato actual (al abrirlo en el editor).
+export function migrarBanco(p) {
+  if (Array.isArray(p.palabras) && Array.isArray(p.oraciones)) return;
+  const { palabras, oraciones } = datosBanco(p);
+  p.palabras = palabras;
+  p.oraciones = oraciones;
+  delete p.items;
+}
+
+// La palabra que va en la línea de una oración (null si no se ha elegido o se borró).
+export function palabraDeOracion(palabras, oracion) {
+  return palabras.find((pal) => pal.id === oracion.palabraId) || null;
 }
 
 // Opciones de formato de texto que ofrece la app (formato estándar de la
@@ -334,7 +371,7 @@ export function reactivosDe(p) {
     return valoresFilasRelacion(p).map((valor, i) => ({ clave: claveFilaRelacion(p.id, i), valor }));
   }
   if (p.tipo === 'banco_palabras') {
-    return (p.items || []).map((it) => ({ clave: claveItemBanco(p.id, it.id), valor: Number(it.valor) || 0 }));
+    return datosBanco(p).oraciones.map((o) => ({ clave: claveItemBanco(p.id, o.id), valor: Number(o.valor) || 0 }));
   }
   return [{ clave: p.id, valor: Number(p.valor) || 0 }];
 }
@@ -418,10 +455,16 @@ export function validarExamen(examen) {
             }
           });
         } else if (q.tipo === 'banco_palabras') {
-          (q.items || []).forEach((it) => {
-            const valor = Number(it.valor) || 0;
+          const { palabras, oraciones } = datosBanco(q);
+          oraciones.forEach((o) => {
+            const numero = numeros[claveItemBanco(q.id, o.id)];
+            const valor = Number(o.valor) || 0;
             if (esValorProhibido(valor)) {
-              avisos.push({ tipo: 'valor', mensaje: `El reactivo ${numeros[claveItemBanco(q.id, it.id)]} (banco de palabras) tiene un valor de ${valor} pts (evita .25/.75).` });
+              avisos.push({ tipo: 'valor', mensaje: `El reactivo ${numero} (banco de palabras) tiene un valor de ${valor} pts (evita .25/.75).` });
+            }
+            const palabra = palabraDeOracion(palabras, o);
+            if (!palabra || !palabra.texto.trim()) {
+              avisos.push({ tipo: 'banco', mensaje: `El reactivo ${numero} (banco de palabras) no tiene elegida la palabra que va en su línea.` });
             }
           });
         } else if (esValorProhibido(Number(q.valor) || 0)) {

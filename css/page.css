@@ -225,6 +225,8 @@
   display: inline-block; min-width: 3.5cm; height: 1em; vertical-align: text-bottom;
   border-bottom: 0.5pt solid #333; margin: 0 0.1cm;
 }
+/* "Versión corta": la mitad del largo, para respuestas pequeñas en medio de la oración. */
+.linea-banco.linea-banco-corta { min-width: 1.75cm; }
 .resp-banco { font-weight: bold; text-decoration: underline; margin: 0 0.1cm; }
 
 .subtotal-seccion { text-align: right; font-weight: bold; margin: 0.15cm 0 0.35cm 0; }

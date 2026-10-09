@@ -3,7 +3,8 @@
 import { el, clear } from './dom.js';
 import { atributosTamano } from './imagenes.js';
 import {
-  nuevaSubpregunta, uid, moverElemento, valoresFilasRelacion, claveFilaRelacion, nuevoItemBanco, claveItemBanco,
+  nuevaSubpregunta, uid, moverElemento, valoresFilasRelacion, claveFilaRelacion, claveItemBanco,
+  nuevaPalabraBanco, nuevaOracionBanco, migrarBanco, datosBanco, palabraDeOracion,
 } from './model.js';
 import { renderTextoFormulas, campoTextoConFormulas } from './formulas.js';
 
@@ -687,83 +688,180 @@ function editorIdentificarImagen(pregunta, onChange) {
 }
 
 // Banco de palabras: arriba la lista de palabras ("+ Agregar palabra") y abajo
-// un recuadro por cada palabra para escribir su oración. Palabra y oración
-// viven en el mismo item, así que al quitar una palabra se va con su oración y
-// nunca quedan cruzadas. El alumno escribe la palabra en la línea; solo la
-// clave la muestra escrita.
+// las oraciones. Cada oración elige de una lista qué palabra va en su línea:
+// así el orden de las oraciones no tiene que seguir el de las palabras (y
+// puede haber palabras de más). El alumno escribe la palabra en la línea; solo
+// la clave la muestra escrita.
 function editorBancoPalabras(pregunta, onChange) {
-  pregunta.items = pregunta.items || [];
+  migrarBanco(pregunta);
   const listaPalabras = el('div', { class: 'lista-opciones' });
   const listaOraciones = el('div', { class: 'oraciones-banco' });
   const totalBanco = el('p', { class: 'etiqueta-chica' });
-  // Etiqueta de cada oración ("Oración para «árbol»"): se actualiza al teclear
-  // la palabra sin repintar las oraciones, que perderían el foco o lo escrito.
-  const etiquetas = new Map();
-  const nombre = (it, i) => (it.palabra.trim() ? `«${it.palabra.trim()}»` : `la palabra ${i + 1}`);
+  // Selector de palabra de cada oración: se rehacen sus opciones al teclear
+  // una palabra, sin repintar las oraciones (perderían el foco o lo escrito).
+  let selectores = [];
+  const nombrePalabra = (pal, i) => pal.texto.trim() || `Palabra ${i + 1} (sin escribir)`;
 
   function actualizarTotal() {
-    const total = pregunta.items.reduce((acc, it) => acc + (Number(it.valor) || 0), 0);
+    const total = pregunta.oraciones.reduce((acc, o) => acc + (Number(o.valor) || 0), 0);
     totalBanco.textContent = `Valor total del banco: ${Math.round(total * 100) / 100} pts. Cada oración cuenta como un reactivo con su propio número y valor.`;
   }
 
-  function pintar() {
+  function llenarSelector(select, oracion) {
+    clear(select);
+    select.appendChild(el('option', { value: '' }, '— Elige la palabra —'));
+    pregunta.palabras.forEach((pal, i) => select.appendChild(el('option', { value: pal.id }, nombrePalabra(pal, i))));
+    select.value = palabraDeOracion(pregunta.palabras, oracion) ? oracion.palabraId : '';
+    select.classList.toggle('select-sin-elegir', !select.value);
+  }
+  const actualizarSelectores = () => selectores.forEach(({ select, oracion }) => llenarSelector(select, oracion));
+
+  function pintarPalabras() {
     clear(listaPalabras);
-    clear(listaOraciones);
-    etiquetas.clear();
-    pregunta.items.forEach((it, i) => {
+    pregunta.palabras.forEach((pal, i) => {
       listaPalabras.appendChild(el('div', { class: 'fila-opcion' }, [
         el('input', {
-          type: 'text', value: it.palabra, placeholder: `Palabra ${i + 1}`,
-          oninput: (e) => {
-            it.palabra = e.target.value;
-            etiquetas.get(it.id).textContent = `Oración para ${nombre(it, i)}`;
-            onChange();
-          },
+          type: 'text', value: pal.texto, placeholder: `Palabra ${i + 1}`,
+          oninput: (e) => { pal.texto = e.target.value; actualizarSelectores(); onChange(); },
         }),
         el('button', {
-          type: 'button', class: 'btn-icono', title: 'Quitar esta palabra (y su oración)',
-          onclick: () => { pregunta.items.splice(i, 1); pintar(); onChange(); },
+          type: 'button', class: 'btn-icono', title: 'Quitar esta palabra',
+          onclick: () => {
+            pregunta.palabras.splice(i, 1);
+            // Las oraciones que la usaban se quedan sin palabra (y la
+            // validación lo avisa) en vez de pasar a otra por posición.
+            pregunta.oraciones.forEach((o) => { if (o.palabraId === pal.id) o.palabraId = null; });
+            pintarPalabras();
+            actualizarSelectores();
+            onChange();
+          },
         }, '✕'),
       ]));
+    });
+  }
 
-      const etiqueta = el('span', {}, `Oración para ${nombre(it, i)}`);
-      etiquetas.set(it.id, etiqueta);
-      const { contenedor: campoOracion } = campoTextoConFormulas({
-        placeholder: 'Escribe la oración o pregunta. La línea para la respuesta va al final; si la quieres en medio, escribe ___ donde va la palabra.',
-        valor: it.oracion, filas: '2',
-        oninput: (valor) => { it.oracion = valor; onChange(); },
+  function pintarOraciones() {
+    clear(listaOraciones);
+    selectores = [];
+    pregunta.oraciones.forEach((o, i) => {
+      const select = el('select', {
+        class: 'select-palabra-banco',
+        onchange: (e) => {
+          o.palabraId = e.target.value || null;
+          select.classList.toggle('select-sin-elegir', !e.target.value);
+          onChange();
+        },
       });
+      llenarSelector(select, o);
+      selectores.push({ select, oracion: o });
+
+      const { contenedor: campoOracion, textarea: editable } = campoTextoConFormulas({
+        placeholder: 'Escribe la oración o pregunta. La línea para la respuesta va al final; para ponerla en medio usa el botón "Poner la línea aquí".',
+        valor: o.texto, filas: '2',
+        oninput: (valor) => { o.texto = valor; onChange(); },
+      });
+
+      const btnCorta = el('button', {
+        type: 'button', class: `btn-secundario btn-chico btn-alternar${o.corta ? ' activo' : ''}`,
+        'aria-pressed': o.corta ? 'true' : 'false',
+        title: 'La línea para contestar mide la mitad: útil si la respuesta es corta y va en medio de la oración.',
+        onclick: () => {
+          o.corta = !o.corta;
+          btnCorta.classList.toggle('activo', o.corta);
+          btnCorta.setAttribute('aria-pressed', o.corta ? 'true' : 'false');
+          onChange();
+        },
+      }, 'Versión corta');
+
       listaOraciones.appendChild(el('div', { class: 'oracion-banco' }, [
         el('div', { class: 'cabecera-oracion-banco' }, [
-          etiqueta,
+          el('span', {}, `Oración ${i + 1}`),
+          el('label', { class: 'campo-palabra-banco' }, ['Palabra que va en la línea: ', select]),
           el('label', { class: 'campo-valor' }, [
             'Puntos ',
             el('input', {
-              type: 'number', step: '0.1', min: '0', class: 'input-valor', value: it.valor,
-              oninput: (e) => { it.valor = parseFloat(e.target.value) || 0; actualizarTotal(); onChange(); },
+              type: 'number', step: '0.1', min: '0', class: 'input-valor', value: o.valor,
+              oninput: (e) => { o.valor = parseFloat(e.target.value) || 0; actualizarTotal(); onChange(); },
             }),
+          ]),
+          el('span', { class: 'botones-oracion-banco' }, [
+            el('button', {
+              type: 'button', class: 'btn-icono', title: 'Mover arriba', disabled: i === 0,
+              onclick: () => { moverElemento(pregunta.oraciones, i, -1); pintarOraciones(); onChange(); },
+            }, '▲'),
+            el('button', {
+              type: 'button', class: 'btn-icono', title: 'Mover abajo', disabled: i === pregunta.oraciones.length - 1,
+              onclick: () => { moverElemento(pregunta.oraciones, i, 1); pintarOraciones(); onChange(); },
+            }, '▼'),
+            el('button', {
+              type: 'button', class: 'btn-icono btn-eliminar', title: 'Quitar esta oración',
+              onclick: () => { pregunta.oraciones.splice(i, 1); pintarOraciones(); onChange(); },
+            }, '✕'),
           ]),
         ]),
         campoOracion,
+        el('div', { class: 'acciones-oracion-banco' }, [
+          el('button', {
+            type: 'button', class: 'btn-secundario btn-chico',
+            title: 'Pone la línea donde está el cursor (se ve como ___ en el texto).',
+            // Sin esto el clic le quita el foco al texto y se pierde la posición del cursor.
+            onmousedown: (e) => e.preventDefault(),
+            onclick: () => insertarHueco(editable),
+          }, '＿ Poner la línea aquí'),
+          btnCorta,
+        ]),
       ]));
     });
     actualizarTotal();
   }
-  pintar();
+
+  pintarPalabras();
+  pintarOraciones();
 
   return el('div', { class: 'editor-tipo editor-banco' }, [
     el('span', { class: 'etiqueta-chica' }, 'Palabras del banco (en el examen aparecen revueltas, en un recuadro debajo de las instrucciones):'),
     listaPalabras,
     el('button', {
       type: 'button', class: 'btn-secundario',
-      onclick: () => { pregunta.items.push(nuevoItemBanco()); pintar(); onChange(); },
+      onclick: () => {
+        pregunta.palabras.push(nuevaPalabraBanco());
+        // Una oración por palabra, como al principio — sin palabra elegida:
+        // el maestro decide cuál va en cada una (si sobra, se puede quitar).
+        if (pregunta.oraciones.length < pregunta.palabras.length) pregunta.oraciones.push(nuevaOracionBanco());
+        pintarPalabras();
+        pintarOraciones();
+        onChange();
+      },
     }, '+ Agregar palabra'),
     el('div', { class: 'columna-b-editor' }, [
-      el('span', { class: 'etiqueta-chica' }, 'Oraciones — una por cada palabra. En el examen el alumno escribe la palabra en la línea; en la clave aparece ya escrita.'),
+      el('span', { class: 'etiqueta-chica' }, 'Oraciones — en cada una elige qué palabra va en la línea; el orden de las oraciones es el del examen. En el examen el alumno escribe la palabra en la línea; en la clave aparece ya escrita.'),
       listaOraciones,
+      el('button', {
+        type: 'button', class: 'btn-secundario',
+        onclick: () => { pregunta.oraciones.push(nuevaOracionBanco()); pintarOraciones(); onChange(); },
+      }, '+ Agregar oración'),
       totalBanco,
     ]),
   ]);
+}
+
+// Pone el hueco del banco (___) donde está el cursor del campo; si el cursor no
+// está en ese campo, al final. Con execCommand el navegador dispara el "input"
+// del campo, así que se guarda como si el maestro lo hubiera tecleado.
+function insertarHueco(editable) {
+  const seleccion = window.getSelection();
+  if (!seleccion.rangeCount || !editable.contains(seleccion.anchorNode)) {
+    editable.focus();
+    const rango = document.createRange();
+    rango.selectNodeContents(editable);
+    rango.collapse(false);
+    seleccion.removeAllRanges();
+    seleccion.addRange(rango);
+  }
+  const rango = seleccion.getRangeAt(0);
+  const previo = rango.startContainer.nodeType === Node.TEXT_NODE ? rango.startContainer.textContent.slice(0, rango.startOffset) : '';
+  const conEspacio = previo && !/\s$/.test(previo) ? ' ___' : '___';
+  document.execCommand('insertText', false, conEspacio);
 }
 
 const TIPOS_SUBPREGUNTA = [
@@ -1207,25 +1305,26 @@ const REGEX_HUECO_BANCO = /_{3,}/;
 // cada una con su número y su valor. En el examen la línea va vacía; en la
 // clave, en su lugar va la palabra que corresponde.
 function renderBancoPalabrasBloques(pregunta, numeros, modoClave) {
-  const items = pregunta.items || [];
+  const { palabras, oraciones } = datosBanco(pregunta);
   const negritas = pregunta.negritas !== false;
   const inicio = [];
   if (pregunta.enunciado) {
     inicio.push(el('div', { class: 'reactivo-encabezado' }, [el('span', { class: claseEnunciado(pregunta) }, renderTextoFormulas(pregunta.enunciado))]));
   }
   inicio.push(bloqueImagen(pregunta));
-  const palabras = items.map((it) => it.palabra).filter((p) => p && p.trim());
-  if (palabras.length) {
-    const revueltas = shuffleDeterminista(palabras, `${pregunta.id}#banco`);
-    inicio.push(el('div', { class: 'banco-palabras' }, revueltas.map(([p]) => el('span', { class: 'palabra-banco' }, renderTextoFormulas(p)))));
+  const textos = palabras.map((pal) => pal.texto).filter((t) => t && t.trim());
+  if (textos.length) {
+    const revueltas = shuffleDeterminista(textos, `${pregunta.id}#banco`);
+    inicio.push(el('div', { class: 'banco-palabras' }, revueltas.map(([t]) => el('span', { class: 'palabra-banco' }, renderTextoFormulas(t)))));
   }
   const bloques = [{ tipo: 'pregunta-inicio', el: el('div', { class: 'reactivo' }, inicio) }];
 
-  items.forEach((it) => {
+  oraciones.forEach((o) => {
+    const palabra = palabraDeOracion(palabras, o);
     const hueco = modoClave
-      ? el('span', { class: 'resp-banco' }, renderTextoFormulas(it.palabra || '?'))
-      : el('span', { class: 'linea-banco' });
-    const texto = it.oracion || '';
+      ? el('span', { class: 'resp-banco' }, renderTextoFormulas((palabra && palabra.texto) || '?'))
+      : el('span', { class: o.corta ? 'linea-banco linea-banco-corta' : 'linea-banco' });
+    const texto = o.texto || '';
     const m = texto.match(REGEX_HUECO_BANCO);
     const oracion = m
       ? [...renderTextoFormulas(texto.slice(0, m.index)), hueco, ...renderTextoFormulas(texto.slice(m.index + m[0].length))]
@@ -1233,13 +1332,13 @@ function renderBancoPalabrasBloques(pregunta, numeros, modoClave) {
     bloques.push({
       tipo: 'pregunta-fila',
       el: el('div', { class: pregunta.espacioOraciones === false ? 'fila-banco fila-banco-junta' : 'fila-banco' }, [
-        el('span', { class: 'num-reactivo' }, `${numeros[claveItemBanco(pregunta.id, it.id)]}. `),
+        el('span', { class: 'num-reactivo' }, `${numeros[claveItemBanco(pregunta.id, o.id)]}. `),
         el('span', { class: negritas ? 'enunciado-negritas' : '' }, oracion),
-        el('span', { class: 'valor-reactivo' }, ` (${redondearPuntos(Number(it.valor) || 0)} pts)`),
+        el('span', { class: 'valor-reactivo' }, ` (${redondearPuntos(Number(o.valor) || 0)} pts)`),
       ]),
     });
   });
-  const total = redondearPuntos(items.reduce((acc, it) => acc + (Number(it.valor) || 0), 0));
+  const total = redondearPuntos(oraciones.reduce((acc, o) => acc + (Number(o.valor) || 0), 0));
   bloques.push({
     tipo: 'pregunta-fila',
     el: el('div', { class: 'subtotal-relacion' }, `Valor del banco de palabras: ${total} ${total === 1 ? 'punto' : 'puntos'}`),
