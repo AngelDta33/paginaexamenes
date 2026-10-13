@@ -76,6 +76,7 @@ const PLANTILLAS_RAPIDAS = [
   { etiqueta: 'Fracción horizontal (números arriba y abajo)', simbolo: '½', texto: '\\frac{#0}{#0}' },
   { etiqueta: 'Fracción diagonal (con la barra /)', simbolo: 'a⁄b', texto: '{}^{#0}\\!/\\!{}_{#0}' },
   { etiqueta: 'Galera (división de casita)', simbolo: 'galera', texto: '#0\\overline{\\smash{\\big)}\\,#0}' },
+  { etiqueta: 'Corchetes', simbolo: '[ ]', texto: '\\left[#0\\right]' },
   { etiqueta: 'Potencia (exponente)', simbolo: 'xⁿ', texto: '{#0}^{#0}' },
   { etiqueta: 'Subíndice', simbolo: 'x₂', texto: '{#0}_{#0}' },
   { etiqueta: 'Raíz cuadrada', simbolo: '√', texto: '\\sqrt{#0}' },
