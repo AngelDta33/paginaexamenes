@@ -370,6 +370,13 @@ button {
   min-width: 9rem; font-weight: 600;
 }
 .tabla-excel thead .celda-nombre-alumno { z-index: 3; background: var(--azul-suave); }
+/* Recuadro con su propio desplazamiento (pase de lista): así el encabezado
+   sticky se queda fijo al bajar por la lista de alumnos. Con border-collapse
+   el borde de las celdas fijas se va con el desplazamiento; la sombra lo repone. */
+.desplazamiento-tabla-excel { max-height: max(calc(100vh - 9rem), 16rem); overflow: auto; }
+.desplazamiento-tabla-excel .tabla-excel thead th { box-shadow: inset 0 -1px 0 var(--borde); }
+.desplazamiento-tabla-excel .tabla-excel .celda-nombre-alumno { box-shadow: inset -1px 0 0 var(--borde); }
+.desplazamiento-tabla-excel .tabla-excel thead .celda-nombre-alumno { box-shadow: inset -1px -1px 0 var(--borde); }
 .col-fecha { min-width: 4.2rem; }
 .col-rubro { min-width: 8rem; }
 .dia-semana-corto { font-size: 0.75rem; font-weight: normal; opacity: 0.75; }

@@ -317,9 +317,15 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
 
     const barraArriba = crearBarraNavegacion();
     if (barraArriba) contenedorTabla.appendChild(barraArriba);
-    contenedorTabla.appendChild(el('table', { class: 'tabla-excel' }, [
-      el('thead', {}, [encabezado]),
-      el('tbody', {}, filas),
+    // La tabla se desplaza dentro de su propio recuadro (con alto máximo) para
+    // que el renglón de fechas se quede fijo arriba al recorrer la lista: si
+    // se desplazara con la página, el overflow-x de .envoltura-tabla-excel
+    // anula el position: sticky del encabezado y las fechas se pierden de vista.
+    contenedorTabla.appendChild(el('div', { class: 'desplazamiento-tabla-excel' }, [
+      el('table', { class: 'tabla-excel' }, [
+        el('thead', {}, [encabezado]),
+        el('tbody', {}, filas),
+      ]),
     ]));
     const barraAbajo = crearBarraNavegacion();
     if (barraAbajo) contenedorTabla.appendChild(barraAbajo);
