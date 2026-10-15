@@ -2,10 +2,10 @@
 
 import { el, clear } from './dom.js';
 import {
-  listarAsistencias, obtenerOCrearAsistencia, guardarAsistencia, guardarGrupo,
+  listarAsistencias, obtenerOCrearAsistencia, guardarAsistencia, guardarGrupo, eliminarAsistencia,
 } from './gruposStore.js';
 import {
-  ESTADOS_ASISTENCIA, ETIQUETAS_ESTADO_ASISTENCIA, INICIALES_ESTADO_ASISTENCIA, fechaHoyISO, fechaCortaMX,
+  ESTADOS_ASISTENCIA, ETIQUETAS_ESTADO_ASISTENCIA, INICIALES_ESTADO_ASISTENCIA, fechaISO, fechaHoyISO, fechaCortaMX,
   valoresAsistenciaDeGrupo, promedioAsistenciaAlumno,
   DIAS_SEMANA_NOMBRES, calendarioDeGrupo, nuevoTrimestre, crearTrimestresEstandar, fechasDeClase,
   fechasEnTrimestre, usaPorcentaje, formatearNota, trimestresSuperpuestos, ESTADOS_CON_MOTIVO,
@@ -60,6 +60,21 @@ function diaSemanaCorto(fechaISO) {
 // asistencia" y "Calendario del curso" — los dos únicos botones de aquí que
 // escriben el documento del grupo. Un revisor o administrador corrigiendo el pase
 // de lista de otro maestro entra con soloLectura:false y puedeEditarGrupo:false.
+// Semana de lunes a domingo, con fechas locales (ver fechaISO en gruposModel.js).
+function sumarDias(fechaIso, dias) {
+  const [anio, mes, dia] = fechaIso.split('-').map(Number);
+  return fechaISO(new Date(anio, mes - 1, dia + dias));
+}
+function lunesDeSemana(fechaIso) {
+  const [anio, mes, dia] = fechaIso.split('-').map(Number);
+  return sumarDias(fechaIso, -((new Date(anio, mes - 1, dia).getDay() + 6) % 7));
+}
+
+// Un día "con lista" es uno donde se marcó al menos a un alumno.
+function tieneMarcas(dia) {
+  return Object.values((dia && dia.registros) || {}).some((reg) => reg && reg.estado);
+}
+
 export async function montarListaAsistencia(contenedor, grupo, { soloLectura = false, puedeEditarGrupo = !soloLectura } = {}) {
   clear(contenedor);
   contenedor.appendChild(el('p', {}, 'Cargando pase de lista…'));
@@ -99,6 +114,36 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
   let ventanaInicio = 0;
   let ventanaInicializada = false;
 
+  // Fecha donde arranca la vista: el último día en que se pasó lista; si
+  // todavía no se marca nada, el último día capturado hasta hoy. (Antes era la
+  // fecha más reciente, que con los días de clase del ciclo dados de alta de
+  // un jalón mandaba al maestro al final del ciclo, lejos de donde va.)
+  function fechaDeInicio(fechas) {
+    const conMarcas = fechas.filter((f) => tieneMarcas(porFecha.get(f)));
+    if (conMarcas.length) return conMarcas[conMarcas.length - 1];
+    const hoy = fechaHoyISO();
+    const pasadas = fechas.filter((f) => f <= hoy);
+    return pasadas.length ? pasadas[pasadas.length - 1] : (fechas[fechas.length - 1] || null);
+  }
+
+  // Vista por semana: con un día elegido se ven solo las fechas de su semana
+  // (lunes a domingo), sin tener que desplazarse. Es solo una vista: "Faltas" y
+  // "Asistencia" siguen contando todo el periodo (ciclo o trimestre), igual que
+  // con la ventana de 10 fechas. Al abrir el grupo arranca en la semana del
+  // último día en que se pasó lista.
+  const fechaArranque = fechaDeInicio(Array.from(porFecha.keys()).sort());
+  let semanaDe = fechaArranque ? lunesDeSemana(fechaArranque) : null;
+  const campoSemana = el('input', {
+    type: 'date', value: fechaArranque || fechaHoyISO(),
+    title: 'Elige cualquier día: se muestra su semana completa (lunes a domingo).',
+    onchange: (e) => { if (e.target.value) verSemana(e.target.value); },
+  });
+  const btnVerTodas = el('button', {
+    type: 'button', class: 'btn-secundario',
+    title: 'Volver a ver todas las fechas, de 10 en 10.',
+    onclick: () => verTodasLasFechas(),
+  }, 'Ver todas las fechas');
+
   // Filtro por trimestre: con los trimestres capturados en "Calendario del curso",
   // acota la tabla (y sus totales) a las fechas de uno solo, para no tener que
   // navegar todo el ciclo de 10 en 10. Se muestra también en solo lectura, porque
@@ -108,16 +153,21 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
   let filtroTrimestre = 'todos';
   const barraFiltroTrimestre = el('div', { class: 'barra-filtros' });
   let selectTrimestre = null;
+  barraFiltroTrimestre.appendChild(el('span', { class: 'etiqueta-chica' }, 'Ver la semana del día:'));
+  barraFiltroTrimestre.appendChild(campoSemana);
+  barraFiltroTrimestre.appendChild(btnVerTodas);
   if (trimestres.length > 0) {
-    barraFiltroTrimestre.appendChild(el('span', { class: 'etiqueta-chica' }, 'Ver:'));
+    barraFiltroTrimestre.appendChild(el('span', { class: 'etiqueta-chica' }, 'Periodo:'));
     selectTrimestre = el('select', {
       title: 'Muestra solo las fechas de un trimestre; "Faltas" y "Asistencia" se recalculan sobre él.',
       onchange: (e) => {
         filtroTrimestre = e.target.value;
-        // Se recalcula la ventana igual que al entrar: las 10 fechas MÁS
-        // RECIENTES del periodo elegido. Arrancar al principio del trimestre
+        // Se recalcula la ventana igual que al entrar: alrededor del último día
+        // con lista del periodo elegido. Arrancar al principio del trimestre
         // dejaba al maestro en agosto teniendo que avanzar de 10 en 10 hasta hoy,
-        // que es justo donde necesita pasar lista.
+        // que es justo donde necesita pasar lista. Elegir un periodo es querer
+        // verlo completo, así que se sale de la vista por semana.
+        semanaDe = null;
         ventanaInicializada = false;
         pintarTabla();
       },
@@ -136,6 +186,57 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
     if (fechasEnTrimestre([fecha], trimestreActivo).length > 0) return;
     filtroTrimestre = 'todos';
     if (selectTrimestre) selectTrimestre.value = 'todos';
+  }
+
+  function verSemana(diaElegido) {
+    semanaDe = lunesDeSemana(diaElegido);
+    campoSemana.value = diaElegido;
+    // Mismo motivo que asegurarFechaVisible: una semana fuera del trimestre
+    // filtrado se vería vacía aunque sí tenga fechas.
+    const trimestreActivo = trimestres.find((t) => t.id === filtroTrimestre);
+    if (trimestreActivo && (sumarDias(semanaDe, 6) < trimestreActivo.inicio || semanaDe > trimestreActivo.fin)) {
+      filtroTrimestre = 'todos';
+      if (selectTrimestre) selectTrimestre.value = 'todos';
+    }
+    pintarTabla();
+  }
+
+  // Al salir de la vista por semana, la ventana de 10 arranca en esa semana
+  // para no perder el lugar donde estaba el maestro.
+  function verTodasLasFechas() {
+    if (semanaDe) {
+      const trimestreActivo = trimestres.find((t) => t.id === filtroTrimestre) || null;
+      const todas = Array.from(porFecha.keys()).sort();
+      const fechas = trimestreActivo ? fechasEnTrimestre(todas, trimestreActivo) : todas;
+      const indice = fechas.findIndex((f) => f >= semanaDe);
+      ventanaInicio = indice === -1 ? Number.MAX_SAFE_INTEGER : indice;
+      ventanaInicializada = true;
+    }
+    semanaDe = null;
+    pintarTabla();
+  }
+
+  // Quita una fecha completa del pase de lista (la columna de ese día, con todo
+  // lo marcado en ella). Solo borra ese día de este grupo; antes de hacerlo
+  // dice exactamente qué se perdería.
+  async function quitarFecha(fecha) {
+    const dia = porFecha.get(fecha);
+    const registros = Object.values((dia && dia.registros) || {});
+    const marcas = registros.filter((reg) => reg && reg.estado).length;
+    const notas = registros.filter((reg) => reg && reg.nota && reg.nota.trim()).length;
+    const nombreDia = `${diaSemanaCorto(fecha)} ${fechaCortaMX(fecha)}`;
+    const detalle = marcas || notas
+      ? `\n\nOJO: ese día ya tiene ${marcas} alumno(s) marcado(s)${notas ? ` y ${notas} nota(s) o motivo(s)` : ''}. Se borrarán y no se puede deshacer; las faltas y la asistencia de los alumnos se recalcularán sin ese día.`
+      : '\n\nEse día no tiene nada marcado.';
+    if (!confirm(`¿Quitar el ${nombreDia} del pase de lista de este grupo?${detalle}`)) return;
+    try {
+      await eliminarAsistencia(grupo.id, fecha);
+    } catch (err) {
+      alert(`No se pudo quitar la fecha: ${err.message}`);
+      return;
+    }
+    porFecha.delete(fecha);
+    pintarTabla();
   }
 
   // El motivo de una falta o de un retardo casi nunca se sabe en el momento de
@@ -214,13 +315,48 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
 
     const maxVentanaInicio = Math.max(0, fechas.length - TAM_VENTANA_FECHAS);
     if (!ventanaInicializada) {
-      ventanaInicio = maxVentanaInicio; // por defecto, mostrar las 10 fechas más recientes
+      // Por defecto, la ventana termina un día después del último día con lista
+      // (ver fechaDeInicio): se ve lo último que se pasó y la clase que sigue.
+      const indice = fechas.indexOf(fechaDeInicio(fechas));
+      ventanaInicio = indice === -1 ? maxVentanaInicio : indice - (TAM_VENTANA_FECHAS - 2);
       ventanaInicializada = true;
     }
     ventanaInicio = Math.min(Math.max(0, ventanaInicio), maxVentanaInicio);
-    const fechasVisibles = fechas.slice(ventanaInicio, ventanaInicio + TAM_VENTANA_FECHAS);
+
+    const finSemana = semanaDe ? sumarDias(semanaDe, 6) : null;
+    const fechasVisibles = semanaDe
+      ? fechas.filter((f) => f >= semanaDe && f <= finSemana)
+      : fechas.slice(ventanaInicio, ventanaInicio + TAM_VENTANA_FECHAS);
+
+    function crearBarraSemana() {
+      const moverSemana = (dias) => {
+        semanaDe = sumarDias(semanaDe, dias);
+        campoSemana.value = semanaDe;
+        pintarTabla();
+      };
+      return el('div', { class: 'barra-navegacion-fechas' }, [
+        el('button', {
+          type: 'button', class: 'btn-nav-fechas', title: 'Ver la semana anterior',
+          onclick: () => moverSemana(-7),
+        }, '◀ Semana anterior'),
+        el('span', { class: 'etiqueta-nav-fechas' }, `Semana del ${diaSemanaCorto(semanaDe)} ${fechaCortaMX(semanaDe)} al ${diaSemanaCorto(finSemana)} ${fechaCortaMX(finSemana)}`),
+        el('button', {
+          type: 'button', class: 'btn-nav-fechas', title: 'Ver la semana siguiente',
+          onclick: () => moverSemana(7),
+        }, 'Semana siguiente ▶'),
+      ]);
+    }
+
+    if (semanaDe && fechasVisibles.length === 0) {
+      contenedorTabla.appendChild(crearBarraSemana());
+      contenedorTabla.appendChild(el('p', { class: 'aviso-vacio aviso-semana-vacia' }, soloLectura
+        ? 'No hay fechas en el pase de lista en esta semana.'
+        : 'No hay fechas en el pase de lista en esta semana. Si hubo clase, agrégala con "+ Agregar fecha".'));
+      return;
+    }
 
     function crearBarraNavegacion() {
+      if (semanaDe) return null;
       if (fechas.length <= TAM_VENTANA_FECHAS) return null;
       const inicioMostrado = ventanaInicio + 1;
       const finMostrado = Math.min(ventanaInicio + TAM_VENTANA_FECHAS, fechas.length);
@@ -244,6 +380,10 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
       ...fechasVisibles.map((f) => el('th', { class: 'col-fecha' }, [
         el('div', { class: 'dia-semana-corto' }, diaSemanaCorto(f)),
         el('div', {}, fechaCortaMX(f)),
+        soloLectura ? null : el('button', {
+          type: 'button', class: 'btn-quitar-fecha', title: `Quitar el ${fechaCortaMX(f)} del pase de lista`,
+          onclick: () => quitarFecha(f),
+        }, '✕ quitar'),
       ])),
       el('th', {}, 'Faltas'),
       el('th', {}, 'Asistencia'),
@@ -315,7 +455,7 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
       ]);
     });
 
-    const barraArriba = crearBarraNavegacion();
+    const barraArriba = semanaDe ? crearBarraSemana() : crearBarraNavegacion();
     if (barraArriba) contenedorTabla.appendChild(barraArriba);
     // La tabla se desplaza dentro de su propio recuadro (con alto máximo) para
     // que el renglón de fechas se quede fijo arriba al recorrer la lista: si
@@ -341,11 +481,20 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
         return;
       }
     }
-    // Salta la ventana visible hasta el final, para que la fecha recién
-    // agregada (siempre la más reciente) quede a la vista de inmediato.
+    // Lleva la vista hasta la fecha recién agregada para que quede a la vista
+    // de inmediato: en la vista por semana, a su semana; si no, la ventana de
+    // 10 fechas se mueve hasta ella.
     asegurarFechaVisible(fecha);
-    ventanaInicio = Number.MAX_SAFE_INTEGER;
-    ventanaInicializada = true;
+    if (semanaDe) {
+      semanaDe = lunesDeSemana(fecha);
+      campoSemana.value = fecha;
+    } else {
+      const trimestreActivo = trimestres.find((t) => t.id === filtroTrimestre) || null;
+      const todas = Array.from(porFecha.keys()).sort();
+      const fechas = trimestreActivo ? fechasEnTrimestre(todas, trimestreActivo) : todas;
+      ventanaInicio = fechas.indexOf(fecha) - (TAM_VENTANA_FECHAS - 1);
+      ventanaInicializada = true;
+    }
     pintarTabla();
   }
 

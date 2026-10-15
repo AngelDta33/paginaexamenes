@@ -392,6 +392,14 @@ button {
 .btn-nav-fechas:hover:not(:disabled) { background: var(--azul-oscuro); }
 .btn-nav-fechas:disabled { opacity: 0.4; cursor: default; }
 .etiqueta-nav-fechas { white-space: nowrap; }
+/* "✕ quitar" bajo cada fecha del pase de lista: discreto para no quitar un día por accidente. */
+.btn-quitar-fecha {
+  display: block; margin: 0.15rem auto 0; padding: 0 0.3rem; border: none; background: none;
+  font-size: 0.7rem; font-weight: normal; color: var(--gris); cursor: pointer; text-decoration: underline;
+}
+.btn-quitar-fecha:hover { color: #b3261e; }
+.aviso-semana-vacia { padding: 0.8rem; text-align: center; }
+.barra-filtros input[type=date] { width: auto; }
 
 .celda-asistencia { padding: 0.2rem !important; }
 .btn-celda-estado {

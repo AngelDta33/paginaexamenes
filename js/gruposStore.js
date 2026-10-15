@@ -51,3 +51,13 @@ export async function guardarAsistencia(asistencia) {
   asistencia.updatedAt = new Date().toISOString();
   await setDoc(doc(db, COL_ASISTENCIAS, idAsistencia(asistencia.grupoId, asistencia.fecha)), asistencia);
 }
+
+// Quita un día del pase de lista (solo ese día de ese grupo). Una fecha recién
+// agregada con "+ Agregar fecha" no existe en Firestore hasta que se marca algo,
+// y las reglas no dejan borrar un documento inexistente (leen su grupoId): por
+// eso se revisa primero si está guardado.
+export async function eliminarAsistencia(grupoId, fechaISO) {
+  const ref = doc(db, COL_ASISTENCIAS, idAsistencia(grupoId, fechaISO));
+  const snap = await getDoc(ref);
+  if (snap.exists()) await deleteDoc(ref);
+}
