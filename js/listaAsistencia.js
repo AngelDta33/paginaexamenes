@@ -296,6 +296,12 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
   }
 
   function pintarTabla() {
+    // Cada clic en una celda repinta la tabla completa (para recalcular los
+    // totales) y el recuadro de desplazamiento se crea de nuevo, que arranca
+    // arriba: sin esto, al marcar a un alumno de abajo en una lista larga la
+    // tabla regresaba al primero. Se guarda dónde estaba y se restaura abajo.
+    const cajaAnterior = contenedorTabla.querySelector('.desplazamiento-tabla-excel');
+    const desplazamientoPrevio = cajaAnterior ? { arriba: cajaAnterior.scrollTop, izquierda: cajaAnterior.scrollLeft } : null;
     clear(contenedorTabla);
 
     if (alumnosActivos.length === 0) {
@@ -461,12 +467,17 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
     // que el renglón de fechas se quede fijo arriba al recorrer la lista: si
     // se desplazara con la página, el overflow-x de .envoltura-tabla-excel
     // anula el position: sticky del encabezado y las fechas se pierden de vista.
-    contenedorTabla.appendChild(el('div', { class: 'desplazamiento-tabla-excel' }, [
+    const caja = el('div', { class: 'desplazamiento-tabla-excel' }, [
       el('table', { class: 'tabla-excel' }, [
         el('thead', {}, [encabezado]),
         el('tbody', {}, filas),
       ]),
-    ]));
+    ]);
+    contenedorTabla.appendChild(caja);
+    if (desplazamientoPrevio) {
+      caja.scrollTop = desplazamientoPrevio.arriba;
+      caja.scrollLeft = desplazamientoPrevio.izquierda;
+    }
     const barraAbajo = crearBarraNavegacion();
     if (barraAbajo) contenedorTabla.appendChild(barraAbajo);
   }
