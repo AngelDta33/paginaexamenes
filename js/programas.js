@@ -141,7 +141,9 @@ function renderizarResultadosProgramas(contenedor, contenedorResultados, sesion,
     soloConsulta ? el('div', { class: 'meta-chica' }, `Profesor(a): ${programa.profesorNombre || 'sin nombre'}`) : null,
     el('div', { class: 'acciones-tarjeta' }, [
       el('button', { type: 'button', class: 'btn-primario', onclick: () => onAbrirPrograma(programa.id) }, 'Abrir'),
-      soloConsulta ? null : el('button', {
+      // Disponible para cualquier rol: la copia queda a nombre de quien duplica
+      // (editable por esa persona), sin tocar el programa original.
+      el('button', {
         type: 'button', class: 'btn-secundario', title: 'Crea una copia para armar el programa de otra materia',
         onclick: async () => {
           const copia = duplicarPrograma(programa, sesion);
