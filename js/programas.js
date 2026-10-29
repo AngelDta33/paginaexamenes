@@ -8,6 +8,7 @@ import {
 } from './programasStore.js';
 import {
   nuevoPrograma, nuevoCriterioPrograma, totalPorcentajeCriterios, ETIQUETAS_TRIMESTRE,
+  duplicarPrograma, nombreElaboro,
 } from './programasModel.js';
 import { obtenerConfig } from './store.js';
 import { esRevisorOAdmin } from './auth.js';
@@ -141,6 +142,14 @@ function renderizarResultadosProgramas(contenedor, contenedorResultados, sesion,
     el('div', { class: 'acciones-tarjeta' }, [
       el('button', { type: 'button', class: 'btn-primario', onclick: () => onAbrirPrograma(programa.id) }, 'Abrir'),
       soloConsulta ? null : el('button', {
+        type: 'button', class: 'btn-secundario', title: 'Crea una copia para armar el programa de otra materia',
+        onclick: async () => {
+          const copia = duplicarPrograma(programa, sesion);
+          await guardarPrograma(copia);
+          onAbrirPrograma(copia.id);
+        },
+      }, 'Duplicar'),
+      soloConsulta ? null : el('button', {
         type: 'button', class: 'btn-peligro',
         onclick: async () => {
           if (confirm(`¿Eliminar el programa de "${programa.disciplina || 'sin disciplina'}"? Esta acción no se puede deshacer.`)) {
@@ -222,7 +231,7 @@ function renderPaginaPrograma(programa, config) {
       el('div', { class: 'barra-temario' }, 'TEMARIO'),
       el('div', { class: 'fila-temario' }, [
         columnaTemario('FECHAS DEL TRIMESTRE', programa.fechasTrimestre),
-        columnaTemario('PROCESOS DE DESARROLLO DE APRENDIZAJE', programa.procesosDesarrollo),
+        columnaTemario('CONTENIDOS', programa.procesosDesarrollo),
         columnaTemario('ORIENTACIONES DIDÁCTICAS', programa.orientacionesDidacticas),
         colCriterios,
       ]),
@@ -234,11 +243,11 @@ function renderPaginaPrograma(programa, config) {
     el('div', { class: 'pie-programa' }, [
       el('div', { class: 'firma-pie-programa' }, [
         el('div', { class: 'etiqueta-elaboro' }, 'ELABORÓ'),
-        el('div', {}, 'PROFR. (A)'),
+        el('div', {}, `PROFR. (A) ${nombreElaboro(programa)}`.trim()),
       ]),
       el('div', { class: 'firma-pie-programa' }, [
         el('div', { class: 'etiqueta-elaboro' }, 'VO. BO. DE COORDINACIÓN'),
-        el('div', {}, 'LIC.'),
+        el('div', {}, `LIC. ${programa.coordinadora || ''}`.trim()),
       ]),
     ]),
   ]);
@@ -375,6 +384,12 @@ export async function montarEditorPrograma(contenedor, programaId, sesion, { onV
   }
   pintarCriterios();
 
+  // Se llena solo con el nombre del profesor, hasta que se escriba otro aquí.
+  const campoElaboro = el('input', {
+    type: 'text', value: nombreElaboro(programa), disabled: !puedeEditar,
+    oninput: (e) => { programa.elaboro = e.target.value; guardarConDebounce(); },
+  });
+
   const panelDatos = el('div', { class: 'panel' }, [
     el('h2', {}, 'Datos generales'),
     el('div', { class: 'rejilla-campos' }, [
@@ -382,7 +397,10 @@ export async function montarEditorPrograma(contenedor, programaId, sesion, { onV
       campoTexto('Campo formativo', programa.campoFormativo, (v) => { programa.campoFormativo = v; }),
       el('div', { class: 'campo' }, [el('label', {}, 'Trimestre'), selectorTrimestre]),
       campoTexto('Ciclo escolar', programa.cicloEscolar, (v) => { programa.cicloEscolar = v; }),
-      campoTexto('Nombre del (de la) profesor(a)', programa.profesor, (v) => { programa.profesor = v; }),
+      campoTexto('Nombre del (de la) profesor(a)', programa.profesor, (v) => {
+        programa.profesor = v;
+        if (typeof programa.elaboro !== 'string') campoElaboro.value = v;
+      }),
       campoTexto('Grupos', programa.grupos, (v) => { programa.grupos = v; }),
     ]),
   ]);
@@ -390,7 +408,7 @@ export async function montarEditorPrograma(contenedor, programaId, sesion, { onV
   const panelTemario = el('div', { class: 'panel' }, [
     el('h2', {}, 'Temario'),
     campoArea('Fechas del trimestre', programa.fechasTrimestre, (v) => { programa.fechasTrimestre = v; }),
-    campoArea('Procesos de desarrollo de aprendizaje', programa.procesosDesarrollo, (v) => { programa.procesosDesarrollo = v; }),
+    campoArea('Contenidos', programa.procesosDesarrollo, (v) => { programa.procesosDesarrollo = v; }),
     campoArea('Orientaciones didácticas', programa.orientacionesDidacticas, (v) => { programa.orientacionesDidacticas = v; }),
   ]);
 
@@ -407,6 +425,14 @@ export async function montarEditorPrograma(contenedor, programaId, sesion, { onV
   const panelObservaciones = el('div', { class: 'panel' }, [
     el('h2', {}, 'Observaciones'),
     campoArea('', programa.observaciones, (v) => { programa.observaciones = v; }, '3'),
+  ]);
+
+  const panelFirmas = el('div', { class: 'panel' }, [
+    el('h2', {}, 'Nombres al pie de la hoja'),
+    el('div', { class: 'rejilla-campos' }, [
+      el('div', { class: 'campo' }, [el('label', {}, 'Elaboró (profesor/a)'), campoElaboro]),
+      campoTexto('Vo. Bo. de coordinación (coordinadora)', programa.coordinadora, (v) => { programa.coordinadora = v; }),
+    ]),
   ]);
 
   // Igual que en los exámenes: el tamaño de hoja tiene que ser el mismo aquí y
@@ -430,7 +456,7 @@ export async function montarEditorPrograma(contenedor, programaId, sesion, { onV
   ]);
 
   const layout = el('div', { class: 'editor-layout' }, [
-    el('div', {}, [panelDatos, panelTemario, panelCriterios, panelObservaciones]),
+    el('div', {}, [panelDatos, panelTemario, panelCriterios, panelObservaciones, panelFirmas]),
     panelPreview,
   ]);
 

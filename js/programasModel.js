@@ -39,6 +39,31 @@ export function nuevoPrograma(sesion) {
     criterios: Array.from({ length: FILAS_CRITERIOS_INICIALES }, nuevoCriterio),
     evaluacionObtenida: '',
     observaciones: '',
+    // Nombres al pie de la hoja. elaboro en null significa "usar el nombre del
+    // profesor": se llena solo y sigue ese campo hasta que el maestro escribe
+    // algo distinto (ver nombreElaboro). Los programas guardados antes de que
+    // existieran estos campos tampoco lo traen y caen igual en null.
+    elaboro: null,
+    coordinadora: '',
+  };
+}
+
+export function nombreElaboro(programa) {
+  return typeof programa.elaboro === 'string' ? programa.elaboro : (programa.profesor || '');
+}
+
+// Copia completa de un programa (para armar el de otra materia a partir de uno
+// ya llenado): mismo contenido, id nuevo y a nombre de quien lo duplica.
+export function duplicarPrograma(programa, sesion) {
+  const ahora = new Date().toISOString();
+  return {
+    ...JSON.parse(JSON.stringify(programa)),
+    id: uid('prog'),
+    createdAt: ahora,
+    updatedAt: ahora,
+    profesorId: sesion ? sesion.uid : null,
+    profesorNombre: sesion ? sesion.nombre : '',
+    criterios: (programa.criterios || []).map((c) => ({ ...c, id: uid('crit') })),
   };
 }
 
