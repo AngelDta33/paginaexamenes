@@ -32,6 +32,8 @@
 .tabla-criterios { width: 100%; border-collapse: collapse; font-size: 9pt; }
 .tabla-criterios th, .tabla-criterios td { border: 0.5pt solid #111; padding: 0.08cm 0.2cm; text-align: center; }
 .tabla-criterios th { font-weight: bold; }
+.tabla-criterios th:nth-child(1) { width: 46%; }
+.tabla-criterios th:nth-child(2), .tabla-criterios th:nth-child(3) { width: 27%; }
 .tabla-criterios td.celda-criterio-nombre { text-align: left; }
 .tabla-criterios tr.fila-total td { font-weight: bold; }
 .tabla-criterios tr.fila-evaluacion td.celda-criterio-nombre { font-weight: bold; }

@@ -14,6 +14,7 @@ import { obtenerConfig } from './store.js';
 import { esRevisorOAdmin } from './auth.js';
 import { coincideTexto, guardarFoco, restaurarFoco, campoBusqueda } from './filtros.js';
 import { TAMANOS_PAPEL } from './paginate.js';
+import { exportarProgramaWord } from './exportarProgramaWord.js';
 
 // El formato de programa siempre va HORIZONTAL, así que cada papel se usa
 // acostado: el ancho de la hoja es el lado largo. Mismo mecanismo que en los
@@ -184,15 +185,18 @@ function renderPaginaPrograma(programa, config) {
   const criterios = programa.criterios || [];
   const total = totalPorcentajeCriterios(programa);
 
+  // "Porcentaje" lleva lo que vale cada criterio; "Porcentaje obtenido" queda en
+  // blanco para escribir a mano lo que sacó el alumno.
   const tablaCriterios = el('table', { class: 'tabla-criterios' }, [
-    el('thead', {}, [el('tr', {}, [el('th', {}, 'Criterios'), el('th', {}, 'Porcentaje obtenido')])]),
+    el('thead', {}, [el('tr', {}, [el('th', {}, 'Criterios'), el('th', {}, 'Porcentaje'), el('th', {}, 'Porcentaje obtenido')])]),
     el('tbody', {}, [
       ...criterios.map((c) => el('tr', {}, [
         el('td', { class: 'celda-criterio-nombre' }, c.nombre || ''),
         el('td', {}, c.porcentaje === '' || c.porcentaje === null || c.porcentaje === undefined ? '' : `${c.porcentaje}%`),
+        el('td', {}, ''),
       ])),
-      el('tr', { class: 'fila-total' }, [el('td', { class: 'celda-criterio-nombre' }, 'Total'), el('td', {}, `${total}%`)]),
-      el('tr', { class: 'fila-evaluacion' }, [el('td', { class: 'celda-criterio-nombre' }, 'Evaluación obtenida'), el('td', {}, programa.evaluacionObtenida || '')]),
+      el('tr', { class: 'fila-total' }, [el('td', { class: 'celda-criterio-nombre' }, 'Total'), el('td', {}, `${total}%`), el('td', {}, '')]),
+      el('tr', { class: 'fila-evaluacion' }, [el('td', { class: 'celda-criterio-nombre' }, 'Evaluación obtenida'), el('td', {}, ''), el('td', {}, programa.evaluacionObtenida || '')]),
     ]),
   ]);
 
@@ -447,11 +451,28 @@ export async function montarEditorPrograma(contenedor, programaId, sesion, { onV
     value: valor, selected: (programa.tamanoPapel || PAPEL_PROGRAMA_POR_DEFECTO) === valor,
   }, etiqueta)));
 
+  // La librería de Word se descarga al primer clic, así que puede tardar un poco.
+  const btnWord = el('button', {
+    type: 'button', class: 'btn-secundario', title: 'Archivo .docx para Word 2021 y Word 365',
+    onclick: async () => {
+      const textoOriginal = btnWord.textContent;
+      btnWord.disabled = true; btnWord.textContent = 'Generando Word…';
+      try {
+        await exportarProgramaWord(programa, config, papelDePrograma(programa));
+      } catch (err) {
+        alert(`No se pudo generar el archivo de Word: ${err.message}`);
+      } finally {
+        btnWord.disabled = false; btnWord.textContent = textoOriginal;
+      }
+    },
+  }, '⬇ Descargar Word (.docx)');
+
   const panelPreview = el('div', { class: 'panel panel-preview' }, [
     el('h2', {}, ['Vista previa ', estadoGuardado]),
     el('div', { class: 'acciones-preview' }, [
       el('label', { class: 'campo-papel' }, ['Hoja: ', selectorPapel]),
       el('button', { type: 'button', class: 'btn-primario', onclick: () => imprimirPrograma(programa) }, '🖨 Imprimir / Descargar PDF'),
+      btnWord,
     ]),
     el('p', { class: 'etiqueta-chica nota-impresion' }, 'Al imprimir, elige el mismo tamaño de hoja de aquí arriba (en orientación horizontal) y pon Márgenes: Ninguno y Escala: 100% (sin "Ajustar al área de impresión"). Así el PDF sale idéntico a esta vista previa.'),
     contenedorPreview,
