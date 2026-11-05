@@ -27,7 +27,13 @@
 .fila-temario { flex: 1 1 auto; display: grid; grid-template-columns: 17% 27% 27% 29%; min-height: 0; }
 .col-temario { border-right: 1pt solid #111; display: flex; flex-direction: column; min-height: 0; }
 .col-temario:last-child { border-right: none; }
-.titulo-col-temario { font-weight: bold; text-align: center; font-size: 9.5pt; padding: 0.12cm 0.2cm; border-bottom: 1pt solid #111; }
+/* Todos los títulos de columna miden lo mismo (aunque uno quepa en un renglón y
+   otro en dos), así la raya de abajo queda corrida de lado a lado y la tabla de
+   criterios empieza a la misma altura que el texto — igual que en el Word. */
+.titulo-col-temario {
+  font-weight: bold; text-align: center; font-size: 9.5pt; padding: 0.12cm 0.2cm; border-bottom: 1pt solid #111;
+  box-sizing: border-box; min-height: 1.15cm; display: flex; align-items: center; justify-content: center;
+}
 .contenido-col-temario { flex: 1 1 auto; min-height: 0; overflow: hidden; margin-top: 0.2cm; }
 /* El alto de renglón es fijo (ver altoLineaTemarioPx) para que, si el texto no
    cabe en una hoja, siga en la siguiente cortando entre renglones. */
