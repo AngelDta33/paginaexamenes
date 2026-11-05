@@ -70,12 +70,13 @@ service cloud.firestore {
       allow update, delete: if autenticado() && resource.data.profesorId == request.auth.uid;
       allow create: if autenticado() && request.resource.data.profesorId == request.auth.uid;
     }
-    // programas/{id}: formato de "Programa de actividades académicas" — mismo
-    // criterio de privacidad que grupos: el maestro dueño escribe lo suyo,
-    // revisor/administrador pueden leer cualquiera (para el Vo.Bo. de Coordinación).
+    // programas/{id}: formato de "Programa de actividades académicas". El maestro
+    // dueño escribe y borra lo suyo; revisor/administrador pueden leer y también
+    // editar cualquiera (para el Vo.Bo. de Coordinación), pero no borrarlo.
     match /programas/{programaId} {
       allow read: if autenticado() && (resource.data.profesorId == request.auth.uid || esRevisorOAdmin());
-      allow update, delete: if autenticado() && resource.data.profesorId == request.auth.uid;
+      allow update: if autenticado() && (resource.data.profesorId == request.auth.uid || esRevisorOAdmin());
+      allow delete: if autenticado() && resource.data.profesorId == request.auth.uid;
       allow create: if autenticado() && request.resource.data.profesorId == request.auth.uid;
     }
 

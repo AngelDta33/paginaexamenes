@@ -8,7 +8,7 @@
 // la hoja puede pasar a una segunda página.
 // La librería docx se carga solo al exportar (la misma que usa el examen).
 
-import { ETIQUETAS_TRIMESTRE, totalPorcentajeCriterios, nombreElaboro } from './programasModel.js';
+import { ETIQUETAS_TRIMESTRE, totalPorcentajeCriterios, nombreElaboro, interlineadoTemario } from './programasModel.js';
 
 const URL_DOCX = 'https://cdn.jsdelivr.net/npm/docx@9.8.1/+esm';
 
@@ -21,6 +21,8 @@ const pxDeCm = (cm) => Math.round(cm * PX_POR_CM);
 const FUENTE = 'Arial';
 const TAM_TEXTO = 19; // 9.5 pt, en medios puntos
 const COLOR_LINEA = '111111';
+// La hoja usa interlineado 1.3 en todo menos en el temario; en Word 1 = ~1.15.
+const LINEA_HOJA = Math.round(240 * 1.3 / 1.15);
 
 const borde = (grosorPt) => ({ style: D.BorderStyle.SINGLE, size: Math.round(grosorPt * 8), color: COLOR_LINEA });
 const SIN_BORDE = () => ({ style: D.BorderStyle.NONE, size: 0, color: 'FFFFFF' });
@@ -62,14 +64,15 @@ function parrafosDeTexto(texto, opciones = {}) {
 function parrafo(texto, { negrita = false, centrado = false, tamano = TAM_TEXTO, antes = 0, despues = 0 } = {}) {
   return new D.Paragraph({
     alignment: centrado ? D.AlignmentType.CENTER : D.AlignmentType.LEFT,
-    spacing: { before: tw(antes), after: tw(despues) },
+    spacing: { before: tw(antes), after: tw(despues), line: LINEA_HOJA },
     children: [new D.TextRun({ font: FUENTE, size: tamano, bold: negrita, text: texto })],
   });
 }
 
 // "ETIQUETA: valor" con la etiqueta en negritas, como en la hoja.
-function parrafoConEtiqueta(etiqueta, valor) {
+function parrafoConEtiqueta(etiqueta, valor, { antes = 0, despues = 0 } = {}) {
   return new D.Paragraph({
+    spacing: { before: tw(antes), after: tw(despues), line: LINEA_HOJA },
     children: [
       new D.TextRun({ font: FUENTE, size: TAM_TEXTO, bold: true, text: `${etiqueta}: ` }),
       new D.TextRun({ font: FUENTE, size: TAM_TEXTO, text: valor || '' }),
@@ -81,7 +84,7 @@ function parrafoConEtiqueta(etiqueta, valor) {
 function celda(cm, children, extra = {}) {
   return new D.TableCell({
     width: { size: tw(cm), type: D.WidthType.DXA },
-    margins: { top: tw(0.12), bottom: tw(0.12), left: tw(0.25), right: tw(0.25) },
+    margins: { top: tw(0.12), bottom: tw(0.12), left: tw(0.3), right: tw(0.3) },
     borders: bordesTodos(1),
     children,
     ...extra,
@@ -90,11 +93,12 @@ function celda(cm, children, extra = {}) {
 
 async function encabezado(config, anchoCm) {
   const hijosLogo = [];
-  const anchoLogoCelda = 3;
+  let anchoLogoCelda = 0.5;
   if (config.logoDataUrl) {
     const img = await cargarImagen(config.logoDataUrl);
     const altoCm = 1.7;
     const anchoCm2 = altoCm * img.naturalWidth / img.naturalHeight;
+    anchoLogoCelda = anchoCm2 + 0.5;
     hijosLogo.push(new D.Paragraph({
       children: [new D.ImageRun({
         type: tipoDeDataUrl(config.logoDataUrl), data: bytesDeDataUrl(config.logoDataUrl),
@@ -125,7 +129,10 @@ async function encabezado(config, anchoCm) {
           width: { size: tw(anchoCm - anchoLogoCelda), type: D.WidthType.DXA }, borders: sinBordes(),
           verticalAlign: D.VerticalAlign.CENTER,
           // El logo ocupa la izquierda, así que el título queda centrado en el resto de la hoja.
-          children: lineas.map((l, i) => parrafo(l, { negrita: true, centrado: true, tamano: i === 3 ? 21 : 22 })),
+          children: lineas.map((l, i) => new D.Paragraph({
+            alignment: D.AlignmentType.CENTER, spacing: { line: Math.round(240 * 1.35 / 1.15) },
+            children: [new D.TextRun({ font: FUENTE, size: i === 3 ? 21 : 22, bold: true, text: l })],
+          })),
         }),
       ],
     })],
@@ -135,13 +142,15 @@ async function encabezado(config, anchoCm) {
 // "Criterios de evaluación": la tabla de criterios (con total y evaluación
 // obtenida) y, debajo, las dos líneas de firma de enterado.
 function contenidoCriterios(programa, anchoCm) {
-  const anchoUtil = anchoCm; // el ancho ya descuenta los márgenes de la celda
+  const anchoUtil = anchoCm; // la tabla ocupa toda la columna, sin márgenes, como en la hoja
+  // Mismo reparto que la hoja: ahí la columna "Porcentaje" se ensancha sola lo
+  // que necesite para que su título no se parta en dos.
   const ancho1 = anchoUtil * 0.4;
   const ancho2 = anchoUtil * 0.3;
   const ancho3 = anchoUtil - ancho1 - ancho2;
   const celdaCriterio = (texto, { negrita = false, centrado = false, ancho }) => new D.TableCell({
     width: { size: tw(ancho), type: D.WidthType.DXA },
-    margins: { top: tw(0.06), bottom: tw(0.06), left: tw(0.08), right: tw(0.08) },
+    margins: { top: tw(0.08), bottom: tw(0.08), left: tw(0.12), right: tw(0.12) },
     borders: bordesTodos(0.5),
     children: [parrafo(texto, { negrita, centrado, tamano: 18 })],
   });
@@ -209,7 +218,7 @@ function pie(programa, anchoCm) {
     width: { size: tw(anchoCm / 2), type: D.WidthType.DXA },
     borders: sinBordes(),
     children: [
-      parrafo(titulo, { negrita: true, centrado: true, despues: 0.9 }),
+      parrafo(titulo, { negrita: true, centrado: true, despues: 0.6 }),
       parrafo(cargo, { centrado: true }),
     ],
   });
@@ -237,23 +246,31 @@ export async function exportarProgramaWord(programa, config, papel) {
   const anchoCm = papel.ancho - 2 * margenLateralCm;
   const anchos = [0.17, 0.27, 0.27, 0.29].map((p) => anchoCm * p);
   // Alto mínimo del temario para que la hoja se vea llena como en el PDF; lo
-  // demás (encabezado, datos, observaciones, nombres) ocupa unos 11.5 cm.
-  const altoTemarioCm = Math.max(5, papel.alto - 2 * margenVerticalCm - 11.5);
+  // demás (encabezado, datos, observaciones, nombres) ocupa unos 11 cm.
+  const altoTemarioCm = Math.max(5, papel.alto - 2 * margenVerticalCm - 11);
 
   const encabezadoTabla = await encabezado(config, anchoCm);
+  // Mismo interlineado del temario que en la vista previa ("Múltiple" en Word).
+  const interlineado = { spacing: { line: Math.round(240 * interlineadoTemario(programa)) } };
 
-  const tituloColumna = (cm, texto) => celda(cm, [parrafo(texto, { negrita: true, centrado: true })]);
+  const margenesTitulo = { top: tw(0.12), bottom: tw(0.12), left: tw(0.2), right: tw(0.2) };
+  const tituloColumna = (cm, texto) => celda(cm, [parrafo(texto, { negrita: true, centrado: true })], { margins: margenesTitulo });
+  // Texto del temario: 0.2 cm de aire arriba y 0.3 a los lados, como en la hoja.
+  const margenesTexto = { top: tw(0.2), bottom: 0, left: tw(0.3), right: tw(0.3) };
+  const celdaTexto = (cm, texto) => celda(cm, parrafosDeTexto(texto, interlineado), { margins: margenesTexto });
   const tablaPrincipal = new D.Table({
     width: { size: tw(anchoCm), type: D.WidthType.DXA },
     columnWidths: anchos.map(tw),
     layout: D.TableLayoutType.FIXED,
     rows: [
       new D.TableRow({
+        // En la hoja cada una de estas tres líneas es su propia celda con 0.12 cm
+        // de aire arriba y abajo.
         children: [celda(anchoCm, [
-          parrafoConEtiqueta('DISCIPLINA', programa.disciplina),
-          parrafoConEtiqueta('CAMPO FORMATIVO', programa.campoFormativo),
-          parrafo(`${ETIQUETAS_TRIMESTRE[programa.trimestre] || ''}   CICLO ESCOLAR: ${programa.cicloEscolar || '____'}`, { negrita: true }),
-        ], { columnSpan: 4 })],
+          parrafoConEtiqueta('DISCIPLINA', programa.disciplina, { antes: 0.12, despues: 0.12 }),
+          parrafoConEtiqueta('CAMPO FORMATIVO', programa.campoFormativo, { antes: 0.12, despues: 0.12 }),
+          parrafo(`${ETIQUETAS_TRIMESTRE[programa.trimestre] || ''}   CICLO ESCOLAR: ${programa.cicloEscolar || '____'}`, { negrita: true, antes: 0.12, despues: 0.12 }),
+        ], { columnSpan: 4, margins: { top: 0, bottom: 0, left: tw(0.3), right: tw(0.3) } })],
       }),
       new D.TableRow({
         children: [
@@ -276,22 +293,23 @@ export async function exportarProgramaWord(programa, config, papel) {
       new D.TableRow({
         height: { value: tw(altoTemarioCm), rule: D.HeightRule.ATLEAST },
         children: [
-          celda(anchos[0], parrafosDeTexto(programa.fechasTrimestre)),
-          celda(anchos[1], parrafosDeTexto(programa.procesosDesarrollo)),
-          celda(anchos[2], parrafosDeTexto(programa.orientacionesDidacticas)),
-          celda(anchos[3], contenidoCriterios(programa, anchos[3] - 0.5)),
+          celdaTexto(anchos[0], programa.fechasTrimestre),
+          celdaTexto(anchos[1], programa.procesosDesarrollo),
+          celdaTexto(anchos[2], programa.orientacionesDidacticas),
+          celda(anchos[3], contenidoCriterios(programa, anchos[3] - 0.05), { margins: { top: tw(0.1), bottom: 0, left: 0, right: 0 } }),
         ],
       }),
       new D.TableRow({
+        height: { value: tw(1.4), rule: D.HeightRule.ATLEAST },
         children: [celda(anchoCm, [
           new D.Paragraph({
+            spacing: { line: LINEA_HOJA },
             children: [
               new D.TextRun({ font: FUENTE, size: TAM_TEXTO, bold: true, text: 'OBSERVACIONES: ' }),
               new D.TextRun({ font: FUENTE, size: TAM_TEXTO, text: programa.observaciones || '' }),
             ],
           }),
-          new D.Paragraph({ spacing: { before: tw(0.9) } }),
-        ], { columnSpan: 4 })],
+        ], { columnSpan: 4, margins: { top: tw(0.15), bottom: tw(0.15), left: tw(0.3), right: tw(0.3) } })],
       }),
     ],
   });

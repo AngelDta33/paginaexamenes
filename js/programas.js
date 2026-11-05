@@ -8,7 +8,7 @@ import {
 } from './programasStore.js';
 import {
   nuevoPrograma, nuevoCriterioPrograma, totalPorcentajeCriterios, ETIQUETAS_TRIMESTRE,
-  duplicarPrograma, nombreElaboro,
+  duplicarPrograma, nombreElaboro, interlineadoTemario, altoLineaTemarioPx,
 } from './programasModel.js';
 import { obtenerConfig } from './store.js';
 import { esRevisorOAdmin } from './auth.js';
@@ -173,15 +173,30 @@ function celdaDatos(clase, etiqueta, valor) {
   return el('div', { class: `celda-datos-programa ${clase}` }, etiqueta ? [el('strong', {}, `${etiqueta}: `), valor || ''] : [valor || '']);
 }
 
-function columnaTemario(titulo, texto) {
+// Una columna de texto del temario: se ve como una ventana sobre el texto
+// completo. `desde` y `lineas` (en renglones) dicen qué parte se muestra en esta
+// hoja; con `lineas` en null la ventana ocupa todo el espacio que le quede.
+function columnaTemario(titulo, texto, ventana) {
+  const interior = el('div', {
+    class: 'texto-col-temario', style: `margin-top:-${ventana.desde * ventana.lineaPx}px;`,
+  }, texto || '');
   return el('div', { class: 'col-temario' }, [
     el('div', { class: 'titulo-col-temario' }, titulo),
-    el('div', { class: 'contenido-col-temario' }, texto || ''),
+    el('div', {
+      class: 'contenido-col-temario',
+      style: ventana.lineas === null ? '' : `flex:none; height:${ventana.lineas * ventana.lineaPx}px;`,
+    }, [interior]),
   ]);
 }
 
-function renderPaginaPrograma(programa, config) {
+// Una hoja del programa. La primera lleva los datos y los criterios; las demás
+// solo continúan el temario. Las observaciones y los nombres van en la última.
+function renderPaginaPrograma(programa, config, {
+  primera = true, conPie = true, desde = 0, lineas = null, hoja = 1, totalHojas = 1,
+} = {}) {
   const papel = papelDePrograma(programa);
+  const lineaPx = altoLineaTemarioPx(programa);
+  const ventana = { desde, lineas, lineaPx };
   const criterios = programa.criterios || [];
   const total = totalPorcentajeCriterios(programa);
 
@@ -205,15 +220,37 @@ function renderPaginaPrograma(programa, config) {
     el('div', { class: 'firma-programa' }, [el('div', { class: 'linea-firma-programa' }), el('div', { class: 'etiqueta-firma-programa' }, 'Firma de enterado (a) al término')]),
   ]);
 
-  const colCriterios = el('div', { class: 'col-temario col-criterios' }, [
-    el('div', { class: 'titulo-col-temario' }, 'CRITERIOS DE EVALUACIÓN'),
-    tablaCriterios,
-    firmas,
-  ]);
+  const colCriterios = primera
+    ? el('div', { class: 'col-temario col-criterios' }, [
+      el('div', { class: 'titulo-col-temario' }, 'CRITERIOS DE EVALUACIÓN'),
+      tablaCriterios,
+      firmas,
+    ])
+    : el('div', { class: 'col-temario' }, [el('div', { class: 'titulo-col-temario' }, ' ')]);
+
+  const filasDatos = primera
+    ? [
+      el('div', { class: 'fila-datos-programa fila-disciplina' }, [
+        celdaDatos('', 'DISCIPLINA', programa.disciplina),
+        celdaDatos('', 'CAMPO FORMATIVO', programa.campoFormativo),
+        el('div', { class: 'celda-datos-programa' }, [el('strong', {}, `${ETIQUETAS_TRIMESTRE[programa.trimestre] || ''}   CICLO ESCOLAR: ${programa.cicloEscolar || '____'}`)]),
+      ]),
+      el('div', { class: 'fila-datos-programa fila-profesor' }, [
+        celdaDatos('', 'NOMBRE DEL (DE LA) PROFESOR (A)', programa.profesor),
+        celdaDatos('', 'GRUPOS', programa.grupos),
+      ]),
+    ]
+    : [
+      el('div', { class: 'fila-datos-programa fila-disciplina' }, [
+        el('div', { class: 'celda-datos-programa' }, [
+          el('strong', {}, `DISCIPLINA: ${programa.disciplina || ''}  ·  ${ETIQUETAS_TRIMESTRE[programa.trimestre] || ''}  ·  ${programa.profesor || ''}  (continuación)`),
+        ]),
+      ]),
+    ];
 
   return el('div', {
     class: 'page pagina-programa',
-    style: `--pagina-ancho:${papel.ancho}cm; --pagina-alto:${papel.alto}cm;`,
+    style: `--pagina-ancho:${papel.ancho}cm; --pagina-alto:${papel.alto}cm; --lh-temario:${lineaPx}px;`,
   }, [
     el('div', { class: 'encabezado-programa' }, [
       config.logoDataUrl ? el('img', { class: 'logo-programa', src: config.logoDataUrl }) : null,
@@ -225,28 +262,20 @@ function renderPaginaPrograma(programa, config) {
       ]),
     ]),
     el('div', { class: 'cuerpo-programa' }, [
-      el('div', { class: 'fila-datos-programa fila-disciplina' }, [
-        celdaDatos('', 'DISCIPLINA', programa.disciplina),
-        celdaDatos('', 'CAMPO FORMATIVO', programa.campoFormativo),
-        el('div', { class: 'celda-datos-programa' }, [el('strong', {}, `${ETIQUETAS_TRIMESTRE[programa.trimestre] || ''}   CICLO ESCOLAR: ${programa.cicloEscolar || '____'}`)]),
-      ]),
-      el('div', { class: 'fila-datos-programa fila-profesor' }, [
-        celdaDatos('', 'NOMBRE DEL (DE LA) PROFESOR (A)', programa.profesor),
-        celdaDatos('', 'GRUPOS', programa.grupos),
-      ]),
+      ...filasDatos,
       el('div', { class: 'barra-temario' }, 'TEMARIO'),
       el('div', { class: 'fila-temario' }, [
-        columnaTemario('FECHAS DEL TRIMESTRE', programa.fechasTrimestre),
-        columnaTemario('CONTENIDOS', programa.procesosDesarrollo),
-        columnaTemario('ORIENTACIONES DIDÁCTICAS', programa.orientacionesDidacticas),
+        columnaTemario('FECHAS DEL TRIMESTRE', programa.fechasTrimestre, ventana),
+        columnaTemario('CONTENIDOS', programa.procesosDesarrollo, ventana),
+        columnaTemario('ORIENTACIONES DIDÁCTICAS', programa.orientacionesDidacticas, ventana),
         colCriterios,
       ]),
-      el('div', { class: 'fila-observaciones-programa' }, [
+      conPie ? el('div', { class: 'fila-observaciones-programa' }, [
         el('strong', {}, 'OBSERVACIONES: '),
         el('span', { class: 'texto-observaciones-programa' }, programa.observaciones || ''),
-      ]),
+      ]) : null,
     ]),
-    el('div', { class: 'pie-programa' }, [
+    conPie ? el('div', { class: 'pie-programa' }, [
       el('div', { class: 'firma-pie-programa' }, [
         el('div', { class: 'etiqueta-elaboro' }, 'ELABORÓ'),
         el('div', {}, `PROFR. (A) ${nombreElaboro(programa)}`.trim()),
@@ -255,8 +284,56 @@ function renderPaginaPrograma(programa, config) {
         el('div', { class: 'etiqueta-elaboro' }, 'VO. BO. DE COORDINACIÓN'),
         el('div', {}, `LIC. ${programa.coordinadora || ''}`.trim()),
       ]),
-    ]),
+    ]) : null,
+    totalHojas > 1 ? el('div', { class: 'numero-hoja-programa' }, `Hoja ${hoja} de ${totalHojas}`) : null,
   ]);
+}
+
+// Arma la hoja en un lugar oculto para saber cuánto espacio le queda al temario
+// y cuánto texto tiene.
+function medirPagina(programa, config, opciones) {
+  const huesped = el('div', { style: 'position:absolute; left:-9999px; top:0; visibility:hidden;' });
+  document.body.appendChild(huesped);
+  const pagina = renderPaginaPrograma(programa, config, { ...opciones, lineas: null });
+  huesped.appendChild(pagina);
+  const altoTexto = Math.max(...[...pagina.querySelectorAll('.texto-col-temario')].map((t) => t.getBoundingClientRect().height));
+  const altoVentana = pagina.querySelector('.contenido-col-temario').getBoundingClientRect().height;
+  huesped.remove();
+  return { altoTexto, altoVentana };
+}
+
+// Decide cuántas hojas hacen falta y qué renglones del temario lleva cada una.
+// Si todo cabe en una hoja, es una sola; si no, la primera se llena (sin
+// observaciones ni nombres) y el resto sigue en las siguientes hojas.
+function repartirPaginas(programa, config) {
+  const lineaPx = altoLineaTemarioPx(programa);
+  const cabe = (alto) => Math.floor(alto / lineaPx + 0.001);
+
+  const unica = medirPagina(programa, config, { primera: true, conPie: true, desde: 0 });
+  const totalLineas = Math.ceil(unica.altoTexto / lineaPx - 0.05);
+  if (totalLineas <= cabe(unica.altoVentana)) return [{ primera: true, conPie: true, desde: 0, lineas: null }];
+
+  const hojas = [];
+  let desde = 0;
+  let primera = true;
+  for (let i = 0; i < 20; i++) {
+    const conPie = medirPagina(programa, config, { primera, conPie: true, desde });
+    if (totalLineas - desde <= cabe(conPie.altoVentana)) {
+      hojas.push({ primera, conPie: true, desde, lineas: null });
+      return hojas;
+    }
+    const sinPie = medirPagina(programa, config, { primera, conPie: false, desde });
+    const capacidad = Math.max(1, cabe(sinPie.altoVentana));
+    hojas.push({ primera, conPie: false, desde, lineas: capacidad });
+    desde += capacidad;
+    primera = false;
+  }
+  return hojas;
+}
+
+function renderPaginasPrograma(programa, config) {
+  const hojas = repartirPaginas(programa, config);
+  return hojas.map((hoja, i) => renderPaginaPrograma(programa, config, { ...hoja, hoja: i + 1, totalHojas: hojas.length }));
 }
 
 function fijarTamanoPapelImpresion(papel) {
@@ -285,14 +362,15 @@ function imprimirPrograma(programa) {
   padre.insertBefore(ancla, contenedor);
   const raiz = el('div', { class: 'raiz-impresion' }, [contenedor]);
   document.body.appendChild(raiz);
-  const eraCompacta = contenedor.classList.contains('vista-compacta');
-  contenedor.classList.remove('vista-compacta');
+  // El zoom de pantalla (ver ajustarVista) no va al papel.
+  const zoomOriginal = contenedor.style.zoom;
+  contenedor.style.zoom = '';
 
   let restaurado = false;
   function restaurar() {
     if (restaurado) return;
     restaurado = true;
-    if (eraCompacta) contenedor.classList.add('vista-compacta');
+    contenedor.style.zoom = zoomOriginal;
     padre.insertBefore(contenedor, ancla);
     ancla.remove();
     raiz.remove();
@@ -323,34 +401,59 @@ export async function montarEditorPrograma(contenedor, programaId, sesion, { onV
     return;
   }
 
-  const puedeEditar = !esRevisorOAdmin(sesion) || programa.profesorId === sesion.uid;
   const config = await obtenerConfig();
   if (!programa.cicloEscolar && config.cicloEscolar) programa.cicloEscolar = config.cicloEscolar;
 
   let guardarTimeout = null;
   const estadoGuardado = el('span', { class: 'estado-guardado' });
+
+  // Esquina de la página: quién hizo el último cambio (ver editadoPorNombre en
+  // programasModel.js; los programas anteriores a ese campo muestran a su dueño).
+  const ultimaEdicion = el('div', { class: 'ultima-edicion-programa' });
+  function pintarUltimaEdicion() {
+    const nombre = programa.editadoPorNombre || programa.profesorNombre || 'sin nombre';
+    ultimaEdicion.textContent = `Última edición: ${nombre}${programa.updatedAt ? ` · ${fechaCorta(programa.updatedAt)}` : ''}`;
+  }
+  pintarUltimaEdicion();
+
   function guardarConDebounce() {
     clearTimeout(guardarTimeout);
     estadoGuardado.textContent = 'Guardando…';
     estadoGuardado.className = 'estado-guardado';
     guardarTimeout = setTimeout(() => {
+      programa.editadoPorNombre = sesion.nombre || sesion.email || '';
+      programa.editadoPorId = sesion.uid;
       guardarPrograma(programa)
-        .then(() => { estadoGuardado.textContent = 'Guardado ✓'; estadoGuardado.className = 'estado-guardado ok'; })
+        .then(() => { estadoGuardado.textContent = 'Guardado ✓'; estadoGuardado.className = 'estado-guardado ok'; pintarUltimaEdicion(); })
         .catch((err) => { estadoGuardado.textContent = `No se pudo guardar: ${err.message}`; estadoGuardado.className = 'estado-guardado error'; });
     }, 400);
     repintarPreview();
   }
 
-  const contenedorPreview = el('div', { class: 'hoja-contenedor vista-compacta' });
+  const contenedorPreview = el('div', { class: 'hoja-contenedor' });
+
+  // La hoja mide ~28 cm de ancho: en vez de dejarla de un tamaño fijo (que se
+  // salía de la caja y se veía recorrida a la derecha), se reduce lo justo para
+  // que quepa en el ancho que tenga la vista previa.
+  function ajustarVista() {
+    const caja = contenedorPreview.parentElement;
+    if (!caja || !caja.clientWidth) return;
+    const estilo = getComputedStyle(caja);
+    const disponible = caja.clientWidth - parseFloat(estilo.paddingLeft) - parseFloat(estilo.paddingRight) - 4;
+    const anchoHoja = papelDePrograma(programa).ancho * (96 / 2.54);
+    contenedorPreview.style.zoom = String(Math.min(1, disponible / anchoHoja));
+  }
+
   function repintarPreview() {
     clear(contenedorPreview);
-    contenedorPreview.appendChild(renderPaginaPrograma(programa, config));
+    renderPaginasPrograma(programa, config).forEach((pagina) => contenedorPreview.appendChild(pagina));
+    ajustarVista();
   }
 
   const campoTexto = (etiqueta, valor, onInput, tipo = 'text') => el('div', { class: 'campo' }, [
     el('label', {}, etiqueta),
     el('input', {
-      type: tipo, value: valor || '', disabled: !puedeEditar,
+      type: tipo, value: valor || '',
       oninput: (e) => { onInput(e.target.value); guardarConDebounce(); },
     }),
   ]);
@@ -358,13 +461,12 @@ export async function montarEditorPrograma(contenedor, programaId, sesion, { onV
   const campoArea = (etiqueta, valor, onInput, filas = '4') => el('div', { class: 'campo' }, [
     el('label', {}, etiqueta),
     el('textarea', {
-      rows: filas, disabled: !puedeEditar,
+      rows: filas,
       oninput: (e) => { onInput(e.target.value); guardarConDebounce(); },
     }, valor || ''),
   ]);
 
   const selectorTrimestre = el('select', {
-    disabled: !puedeEditar,
     onchange: (e) => { programa.trimestre = e.target.value; guardarConDebounce(); },
   }, Object.entries(ETIQUETAS_TRIMESTRE).map(([v, t]) => el('option', { value: v, selected: programa.trimestre === v }, t)));
 
@@ -374,17 +476,17 @@ export async function montarEditorPrograma(contenedor, programaId, sesion, { onV
     (programa.criterios || []).forEach((c, i) => {
       listaCriterios.appendChild(el('div', { class: 'fila-criterio-programa' }, [
         el('input', {
-          type: 'text', placeholder: `Criterio ${i + 1}`, value: c.nombre, disabled: !puedeEditar,
+          type: 'text', placeholder: `Criterio ${i + 1}`, value: c.nombre,
           oninput: (e) => { c.nombre = e.target.value; guardarConDebounce(); },
         }),
         el('input', {
-          type: 'number', placeholder: '%', class: 'input-porcentaje-criterio', value: c.porcentaje, disabled: !puedeEditar,
+          type: 'number', placeholder: '%', class: 'input-porcentaje-criterio', value: c.porcentaje,
           oninput: (e) => { c.porcentaje = e.target.value === '' ? '' : parseFloat(e.target.value) || 0; guardarConDebounce(); },
         }),
-        puedeEditar ? el('button', {
+        el('button', {
           type: 'button', class: 'btn-icono', title: 'Quitar criterio',
           onclick: () => { programa.criterios.splice(i, 1); pintarCriterios(); guardarConDebounce(); },
-        }, '✕') : null,
+        }, '✕'),
       ]));
     });
   }
@@ -392,7 +494,7 @@ export async function montarEditorPrograma(contenedor, programaId, sesion, { onV
 
   // Se llena solo con el nombre del profesor, hasta que se escriba otro aquí.
   const campoElaboro = el('input', {
-    type: 'text', value: nombreElaboro(programa), disabled: !puedeEditar,
+    type: 'text', value: nombreElaboro(programa),
     oninput: (e) => { programa.elaboro = e.target.value; guardarConDebounce(); },
   });
 
@@ -413,6 +515,18 @@ export async function montarEditorPrograma(contenedor, programaId, sesion, { onV
 
   const panelTemario = el('div', { class: 'panel' }, [
     el('h2', {}, 'Temario'),
+    el('div', { class: 'campo' }, [
+      el('label', {}, 'Interlineado del temario (0.7 = compacto, 1 = normal)'),
+      el('input', {
+        type: 'number', step: '0.05', min: '0.5', max: '3', value: interlineadoTemario(programa),
+        oninput: (e) => {
+          const v = parseFloat(e.target.value);
+          programa.interlineadoTemario = Number.isFinite(v) ? v : null;
+          guardarConDebounce();
+        },
+      }),
+      el('span', { class: 'etiqueta-chica' }, 'Se aplica a fechas, contenidos y orientaciones para que sus renglones sigan alineados. Si el temario no cabe en una hoja, pasa a una segunda.'),
+    ]),
     campoArea('Fechas del trimestre', programa.fechasTrimestre, (v) => { programa.fechasTrimestre = v; }),
     campoArea('Contenidos', programa.procesosDesarrollo, (v) => { programa.procesosDesarrollo = v; }),
     campoArea('Orientaciones didácticas', programa.orientacionesDidacticas, (v) => { programa.orientacionesDidacticas = v; }),
@@ -421,10 +535,10 @@ export async function montarEditorPrograma(contenedor, programaId, sesion, { onV
   const panelCriterios = el('div', { class: 'panel' }, [
     el('h2', {}, 'Criterios de evaluación'),
     listaCriterios,
-    puedeEditar ? el('button', {
+    el('button', {
       type: 'button', class: 'btn-secundario',
       onclick: () => { programa.criterios.push(nuevoCriterioPrograma()); pintarCriterios(); guardarConDebounce(); },
-    }, '+ Agregar criterio') : null,
+    }, '+ Agregar criterio'),
     campoTexto('Evaluación obtenida', programa.evaluacionObtenida, (v) => { programa.evaluacionObtenida = v; }),
   ]);
 
@@ -445,7 +559,6 @@ export async function montarEditorPrograma(contenedor, programaId, sesion, { onV
   // en el diálogo de impresión, si no cada hoja se parte en dos al imprimir.
   const selectorPapel = el('select', {
     class: 'selector-papel', title: 'Tamaño de hoja con el que se arma e imprime el programa',
-    disabled: !puedeEditar,
     onchange: (e) => { programa.tamanoPapel = e.target.value; guardarConDebounce(); },
   }, Object.entries(ETIQUETAS_PAPEL_PROGRAMA).map(([valor, etiqueta]) => el('option', {
     value: valor, selected: (programa.tamanoPapel || PAPEL_PROGRAMA_POR_DEFECTO) === valor,
@@ -484,10 +597,11 @@ export async function montarEditorPrograma(contenedor, programaId, sesion, { onV
   ]);
 
   clear(contenedor);
-  contenedor.appendChild(el('button', { type: 'button', class: 'btn-secundario', onclick: onVolver, style: 'margin-bottom:0.8rem;' }, '← Volver a mis programas'));
-  if (!puedeEditar) {
-    contenedor.appendChild(el('p', { class: 'aviso-solo-lectura' }, 'Este programa es de otro(a) profesor(a); solo puedes consultarlo.'));
-  }
+  contenedor.appendChild(el('div', { class: 'barra-superior-programa' }, [
+    el('button', { type: 'button', class: 'btn-secundario', onclick: onVolver }, '← Volver a mis programas'),
+    ultimaEdicion,
+  ]));
   contenedor.appendChild(layout);
   repintarPreview();
+  if (window.ResizeObserver) new ResizeObserver(ajustarVista).observe(panelPreview);
 }

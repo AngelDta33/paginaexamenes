@@ -5,6 +5,24 @@ import { uid } from './model.js';
 
 export const ETIQUETAS_TRIMESTRE = { 1: 'PRIMER TRIMESTRE', 2: 'SEGUNDO TRIMESTRE', 3: 'TERCER TRIMESTRE' };
 
+// Interlineado del temario (fechas, contenidos y orientaciones). Se mide como en
+// Word ("Múltiple"): 1 es una línea sencilla de Arial, que mide ~1.15 veces el
+// tamaño de la letra; 0.7 es un temario compacto para que quepa en una hoja.
+export const INTERLINEADO_TEMARIO_POR_DEFECTO = 0.7;
+export const TAMANO_TEMARIO_PT = 9.5;
+const ALTO_LINEA_SENCILLA = 1.15;
+
+export function interlineadoTemario(programa) {
+  const v = Number(programa && programa.interlineadoTemario);
+  return Number.isFinite(v) && v >= 0.5 && v <= 3 ? v : INTERLINEADO_TEMARIO_POR_DEFECTO;
+}
+
+// Alto exacto de cada renglón del temario, en píxeles: con un alto fijo el texto
+// se puede repartir en varias hojas cortando siempre entre renglones.
+export function altoLineaTemarioPx(programa) {
+  return TAMANO_TEMARIO_PT * (96 / 72) * ALTO_LINEA_SENCILLA * interlineadoTemario(programa);
+}
+
 // Número de filas de criterios con las que arranca un programa nuevo — el
 // formato en Word trae 6 renglones en blanco listos para llenar.
 const FILAS_CRITERIOS_INICIALES = 6;
@@ -22,6 +40,9 @@ export function nuevoPrograma(sesion) {
     updatedAt: ahora,
     profesorId: sesion ? sesion.uid : null,
     profesorNombre: sesion ? sesion.nombre : '',
+    // Quién hizo el último cambio — se actualiza al guardar (ver programas.js).
+    editadoPorId: sesion ? sesion.uid : null,
+    editadoPorNombre: sesion ? sesion.nombre : '',
     disciplina: '',
     campoFormativo: '',
     trimestre: '1', // '1' | '2' | '3'
@@ -35,6 +56,7 @@ export function nuevoPrograma(sesion) {
     grupos: '',
     fechasTrimestre: '',
     procesosDesarrollo: '',
+    interlineadoTemario: INTERLINEADO_TEMARIO_POR_DEFECTO,
     orientacionesDidacticas: '',
     criterios: Array.from({ length: FILAS_CRITERIOS_INICIALES }, nuevoCriterio),
     evaluacionObtenida: '',
@@ -63,6 +85,8 @@ export function duplicarPrograma(programa, sesion) {
     updatedAt: ahora,
     profesorId: sesion ? sesion.uid : null,
     profesorNombre: sesion ? sesion.nombre : '',
+    editadoPorId: sesion ? sesion.uid : null,
+    editadoPorNombre: sesion ? sesion.nombre : '',
     criterios: (programa.criterios || []).map((c) => ({ ...c, id: uid('crit') })),
   };
 }
