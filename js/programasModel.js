@@ -7,14 +7,29 @@ export const ETIQUETAS_TRIMESTRE = { 1: 'PRIMER TRIMESTRE', 2: 'SEGUNDO TRIMESTR
 
 // Interlineado del temario (fechas, contenidos y orientaciones). Se mide como en
 // Word ("Múltiple"): 1 es una línea sencilla de Arial, que mide ~1.15 veces el
-// tamaño de la letra; 0.7 es un temario compacto para que quepa en una hoja.
-export const INTERLINEADO_TEMARIO_POR_DEFECTO = 0.7;
+// tamaño de la letra. Vale 1 mientras el maestro no elija otro en el editor
+// (interlineadoElegido): los programas que guardaron el 0.7 que hubo antes por
+// defecto vuelven solos a 1.
+export const INTERLINEADO_TEMARIO_POR_DEFECTO = 1;
 export const TAMANO_TEMARIO_PT = 9.5;
 const ALTO_LINEA_SENCILLA = 1.15;
 
+// En la tabla de criterios, "Porcentaje" y "Porcentaje obtenido" solo necesitan
+// el ancho de su título; todo lo demás es para el nombre del criterio. Debe
+// coincidir con el ancho en css/programa.css (.tabla-criterios).
+export const ANCHO_COLUMNA_PORCENTAJE_CM = 2;
+
+// Texto de una columna del temario tal como se acomoda en la hoja: sin los
+// renglones vacíos (Enter de más) del final, que no se ven pero sí ocupan alto.
+// Los del principio y de en medio se respetan: sirven para alinear las columnas.
+export function textoTemario(texto) {
+  return String(texto || '').replace(/\s+$/, '');
+}
+
 export function interlineadoTemario(programa) {
   const v = Number(programa && programa.interlineadoTemario);
-  return Number.isFinite(v) && v >= 0.5 && v <= 3 ? v : INTERLINEADO_TEMARIO_POR_DEFECTO;
+  const valido = Number.isFinite(v) && v >= 0.5 && v <= 3;
+  return programa && programa.interlineadoElegido && valido ? v : INTERLINEADO_TEMARIO_POR_DEFECTO;
 }
 
 // Alto exacto de cada renglón del temario, en píxeles: con un alto fijo el texto

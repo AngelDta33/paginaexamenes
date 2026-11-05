@@ -8,7 +8,9 @@
 // la hoja puede pasar a una segunda página.
 // La librería docx se carga solo al exportar (la misma que usa el examen).
 
-import { ETIQUETAS_TRIMESTRE, totalPorcentajeCriterios, nombreElaboro, interlineadoTemario } from './programasModel.js';
+import {
+  ETIQUETAS_TRIMESTRE, totalPorcentajeCriterios, nombreElaboro, interlineadoTemario, ANCHO_COLUMNA_PORCENTAJE_CM, textoTemario,
+} from './programasModel.js';
 
 const URL_DOCX = 'https://cdn.jsdelivr.net/npm/docx@9.8.1/+esm';
 
@@ -143,14 +145,17 @@ async function encabezado(config, anchoCm) {
 // obtenida) y, debajo, las dos líneas de firma de enterado.
 function contenidoCriterios(programa, anchoCm) {
   const anchoUtil = anchoCm; // la tabla ocupa toda la columna, sin márgenes, como en la hoja
-  // Mismo reparto que la hoja: ahí la columna "Porcentaje" se ensancha sola lo
-  // que necesite para que su título no se parta en dos.
-  const ancho1 = anchoUtil * 0.4;
-  const ancho2 = anchoUtil * 0.3;
-  const ancho3 = anchoUtil - ancho1 - ancho2;
+  // Igual que la hoja: "Porcentaje" y "Porcentaje obtenido" miden lo de su título
+  // y el resto es para el nombre del criterio.
+  const ancho2 = ANCHO_COLUMNA_PORCENTAJE_CM;
+  const ancho3 = ANCHO_COLUMNA_PORCENTAJE_CM;
+  const ancho1 = anchoUtil - ancho2 - ancho3;
   const celdaCriterio = (texto, { negrita = false, centrado = false, ancho }) => new D.TableCell({
     width: { size: tw(ancho), type: D.WidthType.DXA },
-    margins: { top: tw(0.08), bottom: tw(0.08), left: tw(0.12), right: tw(0.12) },
+    // Mismo relleno que la hoja: 0.2 cm en la columna del nombre, 0.12 en las de porcentaje.
+    margins: {
+      top: tw(0.08), bottom: tw(0.08), left: tw(ancho === ancho1 ? 0.2 : 0.12), right: tw(ancho === ancho1 ? 0.2 : 0.12),
+    },
     borders: bordesTodos(0.5),
     children: [parrafo(texto, { negrita, centrado, tamano: 18 })],
   });
@@ -223,7 +228,7 @@ function contenidoCriterios(programa, anchoCm) {
     })],
   });
 
-  return { tabla, firmas, altoTabla: 2.12 + 0.6 * ((programa.criterios || []).length + 1) };
+  return { tabla, firmas };
 }
 
 // Párrafo vacío de alto exacto, para dejar entre bloques el mismo aire que la hoja.
@@ -236,7 +241,7 @@ function pie(programa, anchoCm) {
     width: { size: tw(anchoCm / 2), type: D.WidthType.DXA },
     borders: sinBordes(),
     children: [
-      parrafo(titulo, { negrita: true, centrado: true, despues: 0.6 }),
+      parrafo(titulo, { negrita: true, centrado: true, despues: 0.5 }),
       parrafo(cargo, { centrado: true }),
     ],
   });
@@ -256,20 +261,35 @@ function pie(programa, anchoCm) {
 }
 
 // papel = { ancho, alto } en cm, ya acostado (ver papelDePrograma en programas.js).
-export async function exportarProgramaWord(programa, config, papel) {
+// opciones: lo que ya calculó la vista previa para que el Word salga igual —
+// los anchos de las cuatro columnas del temario (fracciones), el alto del temario
+// cuando todo cabe en una hoja y lo que mide la tabla de criterios, en cm.
+export async function exportarProgramaWord(programa, config, papel, opciones = {}) {
   if (!D) D = await import(URL_DOCX);
 
   const margenLateralCm = 1.2;
   const margenVerticalCm = 1.0;
   const anchoCm = papel.ancho - 2 * margenLateralCm;
-  // Cinco columnas en la tabla: las cuatro de la hoja más una división extra dentro
-  // de "Orientaciones", porque el renglón de profesor/grupos se parte a la mitad
-  // exacta de la hoja (a 50 %) y esa mitad cae dentro de esa columna.
-  const [aFechas, aContenidos, aOrientA, aOrientB, aCriterios] = [0.17, 0.27, 0.06, 0.21, 0.29].map((p) => anchoCm * p);
-  const aOrientaciones = aOrientA + aOrientB;
-  // Alto mínimo del temario para que la hoja se vea llena como en el PDF; lo
-  // demás (encabezado, datos, observaciones, nombres) ocupa unos 11 cm.
-  const altoTemarioCm = Math.max(5, papel.alto - 2 * margenVerticalCm - 11);
+  const anchos = (opciones.anchos || [0.17, 0.27, 0.27, 0.29]).map((p) => anchoCm * p);
+  // Las columnas de la tabla de Word: las cuatro del temario más un corte donde
+  // se parte el renglón de profesor/grupos (a la mitad exacta, como en la hoja),
+  // que casi siempre cae dentro de alguna de ellas.
+  const bordes = [0];
+  anchos.forEach((a) => bordes.push(bordes[bordes.length - 1] + a));
+  const mitad = anchoCm / 2;
+  const cortes = [...new Set([...bordes, mitad].map((x) => Math.round(x * 1000) / 1000))].sort((a, b) => a - b);
+  const columnasWord = cortes.slice(1).map((x, i) => x - cortes[i]);
+  const columnasEntre = (desdeCm, hastaCm) => cortes.filter((x) => x > desdeCm + 0.001 && x <= hastaCm + 0.001).length;
+  const span = (i) => columnasEntre(bordes[i], bordes[i + 1]);
+  const totalColumnas = columnasWord.length;
+  const [aFechas, aContenidos, aOrientaciones, aCriterios] = anchos;
+  // Alto del temario cuando todo cabe en una hoja (lo mide la vista previa); sin
+  // ese dato se usa lo que queda de la hoja quitando encabezado, datos y pie.
+  // Se le resta un margen de seguridad: Word (y LibreOffice) suman los márgenes de
+  // las celdas a los altos mínimos, y unos milímetros de más mandan los nombres
+  // del pie a otra hoja. Si el contenido necesita más, Word estira las celdas solo.
+  const HOLGURA_CM = 0.9;
+  const altoTemarioCm = (opciones.altoTemarioCm || Math.max(5, papel.alto - 2 * margenVerticalCm - 11)) - HOLGURA_CM;
 
   const encabezadoTabla = await encabezado(config, anchoCm);
   // Mismo interlineado del temario que en la vista previa ("Múltiple" en Word).
@@ -281,65 +301,72 @@ export async function exportarProgramaWord(programa, config, papel) {
   });
   // Texto del temario: 0.2 cm de aire arriba y 0.3 a los lados, como en la hoja.
   const margenesTexto = { top: tw(0.2), bottom: 0, left: tw(0.3), right: tw(0.3) };
-  const celdaTexto = (cm, texto, extra = {}) => celda(cm, parrafosDeTexto(texto, interlineado), { margins: margenesTexto, rowSpan: 2, ...extra });
+  const celdaTexto = (cm, texto, extra = {}) => celda(cm, parrafosDeTexto(textoTemario(texto), interlineado), { margins: margenesTexto, rowSpan: 2, ...extra });
 
   // En la hoja las firmas de enterado van pegadas al fondo de la columna de
   // criterios. En Word eso se logra con una segunda fila (de alto mínimo) a la que
   // se unen las tres columnas de texto, con las firmas alineadas abajo.
   const criterios = contenidoCriterios(programa, aCriterios - 0.05);
-  const altoFirmas = Math.max(2.2, altoTemarioCm - criterios.altoTabla);
+  const altoTablaCriteriosCm = opciones.altoTablaCriteriosCm || (2.12 + 0.6 * ((programa.criterios || []).length + 1));
+  const altoFirmas = Math.max(1.8, altoTemarioCm - altoTablaCriteriosCm);
   const parrafoFinal = () => new D.Paragraph({ spacing: { before: 0, after: 0, line: 20, lineRule: D.LineRuleType.EXACT } });
 
   const tablaPrincipal = new D.Table({
     width: { size: tw(anchoCm), type: D.WidthType.DXA },
-    columnWidths: [aFechas, aContenidos, aOrientA, aOrientB, aCriterios].map(tw),
+    columnWidths: columnasWord.map(tw),
     layout: D.TableLayoutType.FIXED,
     rows: [
       new D.TableRow({
-        // En la hoja cada una de estas tres líneas es su propia celda con 0.12 cm
-        // de aire arriba y abajo.
-        children: [celda(anchoCm, [
-          parrafoConEtiqueta('DISCIPLINA', programa.disciplina),
-          parrafoConEtiqueta('CAMPO FORMATIVO', programa.campoFormativo, { antes: 0.24 }),
-          parrafo(`${ETIQUETAS_TRIMESTRE[programa.trimestre] || ''}   CICLO ESCOLAR: ${programa.cicloEscolar || '____'}`, { negrita: true, antes: 0.24 }),
-        ], { columnSpan: 5, margins: { top: tw(0.12), bottom: tw(0.12), left: tw(0.3), right: tw(0.3) } })],
+        // Disciplina, campo formativo y trimestre en una sola línea, como en la hoja.
+        children: [celda(anchoCm, [new D.Paragraph({
+          spacing: { line: LINEA_HOJA },
+          children: [
+            new D.TextRun({ font: FUENTE, size: TAM_TEXTO, bold: true, text: 'DISCIPLINA: ' }),
+            // Dos espacios entre bloques: lo mismo que los 0.2 cm de la hoja.
+            new D.TextRun({ font: FUENTE, size: TAM_TEXTO, text: `${programa.disciplina || ''}  ` }),
+            new D.TextRun({ font: FUENTE, size: TAM_TEXTO, bold: true, text: 'CAMPO FORMATIVO: ' }),
+            new D.TextRun({ font: FUENTE, size: TAM_TEXTO, text: `${programa.campoFormativo || ''}  ` }),
+            new D.TextRun({ font: FUENTE, size: TAM_TEXTO, bold: true, text: `${ETIQUETAS_TRIMESTRE[programa.trimestre] || ''} CICLO ESCOLAR: ${programa.cicloEscolar || '____'}` }),
+          ],
+        })], { columnSpan: totalColumnas })],
       }),
       new D.TableRow({
         children: [
-          celda(aFechas + aContenidos + aOrientA, [parrafoConEtiqueta('NOMBRE DEL (DE LA) PROFESOR (A)', programa.profesor)], { columnSpan: 3 }),
-          celda(aOrientB + aCriterios, [parrafoConEtiqueta('GRUPOS', programa.grupos)], { columnSpan: 2 }),
+          celda(mitad, [parrafoConEtiqueta('NOMBRE DEL (DE LA) PROFESOR (A)', programa.profesor)], { columnSpan: columnasEntre(0, mitad) }),
+          celda(mitad, [parrafoConEtiqueta('GRUPOS', programa.grupos)], { columnSpan: columnasEntre(mitad, anchoCm) }),
         ],
       }),
       new D.TableRow({
-        children: [celda(anchoCm, [parrafo('TEMARIO', { negrita: true, centrado: true, tamano: 22 })], { columnSpan: 5 })],
+        children: [celda(anchoCm, [parrafo('TEMARIO', { negrita: true, centrado: true, tamano: 22 })], { columnSpan: totalColumnas })],
       }),
       new D.TableRow({
         cantSplit: true,
         children: [
-          tituloColumna(aFechas, 'FECHAS DEL TRIMESTRE'),
-          tituloColumna(aContenidos, 'CONTENIDOS'),
-          tituloColumna(aOrientaciones, 'ORIENTACIONES DIDÁCTICAS', { columnSpan: 2 }),
-          tituloColumna(aCriterios, 'CRITERIOS DE EVALUACIÓN'),
+          tituloColumna(aFechas, 'FECHAS DEL TRIMESTRE', { columnSpan: span(0) }),
+          tituloColumna(aContenidos, 'CONTENIDOS', { columnSpan: span(1) }),
+          tituloColumna(aOrientaciones, 'ORIENTACIONES DIDÁCTICAS', { columnSpan: span(2) }),
+          tituloColumna(aCriterios, 'CRITERIOS DE EVALUACIÓN', { columnSpan: span(3) }),
         ],
       }),
       new D.TableRow({
         children: [
-          celdaTexto(aFechas, programa.fechasTrimestre),
-          celdaTexto(aContenidos, programa.procesosDesarrollo),
-          celdaTexto(aOrientaciones, programa.orientacionesDidacticas, { columnSpan: 2 }),
-          celda(aCriterios, [criterios.tabla, parrafoFinal()], { margins: { top: tw(0.1), bottom: 0, left: 0, right: 0 } }),
+          celdaTexto(aFechas, programa.fechasTrimestre, { columnSpan: span(0) }),
+          celdaTexto(aContenidos, programa.procesosDesarrollo, { columnSpan: span(1) }),
+          celdaTexto(aOrientaciones, programa.orientacionesDidacticas, { columnSpan: span(2) }),
+          celda(aCriterios, [criterios.tabla, parrafoFinal()], { columnSpan: span(3), margins: { top: 0, bottom: 0, left: 0, right: 0 } }),
         ],
       }),
       new D.TableRow({
         height: { value: tw(altoFirmas), rule: D.HeightRule.ATLEAST },
         children: [
           celda(aCriterios, [criterios.firmas, parrafoFinal()], {
+            columnSpan: span(3),
             margins: { top: 0, bottom: tw(0.1), left: 0, right: 0 }, verticalAlign: D.VerticalAlign.BOTTOM,
           }),
         ],
       }),
       new D.TableRow({
-        height: { value: tw(1.4), rule: D.HeightRule.ATLEAST },
+        height: { value: tw(1.1), rule: D.HeightRule.ATLEAST },
         children: [celda(anchoCm, [
           new D.Paragraph({
             spacing: { line: LINEA_HOJA },
@@ -348,7 +375,7 @@ export async function exportarProgramaWord(programa, config, papel) {
               new D.TextRun({ font: FUENTE, size: TAM_TEXTO, text: programa.observaciones || '' }),
             ],
           }),
-        ], { columnSpan: 5, margins: { top: tw(0.15), bottom: tw(0.15), left: tw(0.3), right: tw(0.3) } })],
+        ], { columnSpan: totalColumnas, margins: { top: tw(0.15), bottom: tw(0.15), left: tw(0.3), right: tw(0.3) } })],
       }),
     ],
   });
@@ -370,7 +397,10 @@ export async function exportarProgramaWord(programa, config, papel) {
         encabezadoTabla,
         espaciador(0.3),
         tablaPrincipal,
-        espaciador(0.5),
+        // En la hoja hay 0.5 cm; aquí un poco menos, porque Word suele medir los
+        // renglones de la tabla un pelo más altos y así los nombres no se pasan
+        // solos a otra hoja cuando el programa llena la página.
+        espaciador(0.25),
         pie(programa, anchoCm),
       ],
     }],

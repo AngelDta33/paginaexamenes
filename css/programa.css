@@ -21,6 +21,8 @@
 .celda-datos-programa { padding: 0.12cm 0.3cm; border-right: 1pt solid #111; }
 .celda-datos-programa:last-child { border-right: none; }
 .celda-datos-programa strong { font-weight: bold; }
+.datos-en-linea span { margin-right: 0.2cm; }
+.datos-en-linea span:last-child { margin-right: 0; }
 
 .barra-temario { text-align: center; font-weight: bold; font-size: 11pt; padding: 0.12cm 0; border-bottom: 1pt solid #111; }
 
@@ -43,11 +45,13 @@
 }
 
 .col-criterios { display: flex; flex-direction: column; min-height: 0; }
-.tabla-criterios { width: 100%; border-collapse: collapse; font-size: 9pt; }
+.tabla-criterios { width: 100%; border-collapse: collapse; font-size: 9pt; table-layout: fixed; }
 .tabla-criterios th, .tabla-criterios td { border: 0.5pt solid #111; padding: 0.08cm 0.2cm; text-align: center; }
 .tabla-criterios th { font-weight: bold; }
-.tabla-criterios th:nth-child(1) { width: 46%; }
-.tabla-criterios th:nth-child(2), .tabla-criterios th:nth-child(3) { width: 27%; }
+/* "Porcentaje" y "Porcentaje obtenido" solo miden lo de su título; el resto es
+   para el nombre del criterio (ANCHO_COLUMNA_PORCENTAJE_CM en programasModel.js). */
+.tabla-criterios th:nth-child(2), .tabla-criterios th:nth-child(3) { width: 2cm; box-sizing: border-box; }
+.tabla-criterios th:nth-child(n+2), .tabla-criterios td:nth-child(n+2) { padding-left: 0.12cm; padding-right: 0.12cm; }
 .tabla-criterios td.celda-criterio-nombre { text-align: left; }
 .tabla-criterios tr.fila-total td { font-weight: bold; }
 .tabla-criterios tr.fila-evaluacion td.celda-criterio-nombre { font-weight: bold; }
@@ -57,6 +61,7 @@
 .linea-firma-programa { border-bottom: 0.5pt solid #111; margin-bottom: 0.1cm; height: 0.6cm; }
 .etiqueta-firma-programa { font-size: 8.5pt; }
 
+.cuerpo-programa.cuerpo-solo-pie { flex: none; }
 .fila-observaciones-programa { border-top: 1pt solid #111; padding: 0.15cm 0.3cm; min-height: 1.4cm; }
 .fila-observaciones-programa strong { font-weight: bold; }
 .texto-observaciones-programa { white-space: pre-wrap; font-size: 9.5pt; }
