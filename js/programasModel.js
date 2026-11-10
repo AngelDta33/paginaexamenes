@@ -32,10 +32,24 @@ export function interlineadoTemario(programa) {
   return programa && programa.interlineadoElegido && valido ? v : INTERLINEADO_TEMARIO_POR_DEFECTO;
 }
 
-// Alto exacto de cada renglón del temario, en píxeles: con un alto fijo el texto
-// se puede repartir en varias hojas cortando siempre entre renglones.
-export function altoLineaTemarioPx(programa) {
-  return TAMANO_TEMARIO_PT * (96 / 72) * ALTO_LINEA_SENCILLA * interlineadoTemario(programa);
+// Tamaño de letra de cada espacio del temario, a elegir en el editor. Sin
+// elegir (o en programas guardados antes de que existiera) vale lo de siempre:
+// 9.5 pt el texto y 9 pt la tabla de criterios.
+export const COLUMNAS_TEMARIO = ['fechas', 'contenidos', 'orientaciones', 'criterios'];
+export const TAMANOS_LETRA_TEMARIO = [7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5, 11, 12];
+const TAMANO_CRITERIOS_PT = 9;
+
+export function tamanoLetraTemario(programa, columna) {
+  const v = Number(programa && programa.tamanosLetraTemario && programa.tamanosLetraTemario[columna]);
+  if (TAMANOS_LETRA_TEMARIO.includes(v)) return v;
+  return columna === 'criterios' ? TAMANO_CRITERIOS_PT : TAMANO_TEMARIO_PT;
+}
+
+// Alto exacto de cada renglón de una columna del temario, en píxeles: con un
+// alto fijo el texto se puede repartir en varias hojas cortando siempre entre
+// renglones. Cada columna usa el de su propio tamaño de letra.
+export function altoLineaTemarioPx(programa, columna = 'contenidos') {
+  return tamanoLetraTemario(programa, columna) * (96 / 72) * ALTO_LINEA_SENCILLA * interlineadoTemario(programa);
 }
 
 // Número de filas de criterios con las que arranca un programa nuevo — el

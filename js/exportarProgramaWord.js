@@ -10,6 +10,7 @@
 
 import {
   ETIQUETAS_TRIMESTRE, totalPorcentajeCriterios, nombreElaboro, interlineadoTemario, ANCHO_COLUMNA_PORCENTAJE_CM, textoTemario,
+  tamanoLetraTemario,
 } from './programasModel.js';
 
 const URL_DOCX = 'https://cdn.jsdelivr.net/npm/docx@9.8.1/+esm';
@@ -55,13 +56,16 @@ function tipoDeDataUrl(dataUrl) {
 
 // Un texto de varias líneas (como se escribe en los campos del editor) pasa a
 // un párrafo por línea, conservando las líneas en blanco.
-function parrafosDeTexto(texto, opciones = {}) {
+function parrafosDeTexto(texto, opciones = {}, tamano = TAM_TEXTO) {
   const lineas = String(texto || '').split('\n');
   return lineas.map((linea) => new D.Paragraph({
     ...opciones,
-    children: [new D.TextRun({ font: FUENTE, size: TAM_TEXTO, text: linea })],
+    children: [new D.TextRun({ font: FUENTE, size: tamano, text: linea })],
   }));
 }
+
+// Tamaño de letra (en medios puntos) elegido para un espacio del temario.
+const medioPuntosTemario = (programa, columna) => Math.round(tamanoLetraTemario(programa, columna) * 2);
 
 function parrafo(texto, { negrita = false, centrado = false, tamano = TAM_TEXTO, antes = 0, despues = 0 } = {}) {
   return new D.Paragraph({
@@ -157,7 +161,7 @@ function contenidoCriterios(programa, anchoCm) {
       top: tw(0.08), bottom: tw(0.08), left: tw(ancho === ancho1 ? 0.2 : 0.12), right: tw(ancho === ancho1 ? 0.2 : 0.12),
     },
     borders: bordesTodos(0.5),
-    children: [parrafo(texto, { negrita, centrado, tamano: 18 })],
+    children: [parrafo(texto, { negrita, centrado, tamano: medioPuntosTemario(programa, 'criterios') })],
   });
   // "Porcentaje" lleva lo que vale cada criterio; "Porcentaje obtenido" queda en
   // blanco para escribir a mano lo que sacó el alumno.
@@ -301,7 +305,7 @@ export async function exportarProgramaWord(programa, config, papel, opciones = {
   });
   // Texto del temario: 0.2 cm de aire arriba y 0.3 a los lados, como en la hoja.
   const margenesTexto = { top: tw(0.2), bottom: 0, left: tw(0.3), right: tw(0.3) };
-  const celdaTexto = (cm, texto, extra = {}) => celda(cm, parrafosDeTexto(textoTemario(texto), interlineado), { margins: margenesTexto, rowSpan: 2, ...extra });
+  const celdaTexto = (cm, texto, columna, extra = {}) => celda(cm, parrafosDeTexto(textoTemario(texto), interlineado, medioPuntosTemario(programa, columna)), { margins: margenesTexto, rowSpan: 2, ...extra });
 
   // En la hoja las firmas de enterado van pegadas al fondo de la columna de
   // criterios. En Word eso se logra con una segunda fila (de alto mínimo) a la que
@@ -350,9 +354,9 @@ export async function exportarProgramaWord(programa, config, papel, opciones = {
       }),
       new D.TableRow({
         children: [
-          celdaTexto(aFechas, programa.fechasTrimestre, { columnSpan: span(0) }),
-          celdaTexto(aContenidos, programa.procesosDesarrollo, { columnSpan: span(1) }),
-          celdaTexto(aOrientaciones, programa.orientacionesDidacticas, { columnSpan: span(2) }),
+          celdaTexto(aFechas, programa.fechasTrimestre, 'fechas', { columnSpan: span(0) }),
+          celdaTexto(aContenidos, programa.procesosDesarrollo, 'contenidos', { columnSpan: span(1) }),
+          celdaTexto(aOrientaciones, programa.orientacionesDidacticas, 'orientaciones', { columnSpan: span(2) }),
           celda(aCriterios, [criterios.tabla, parrafoFinal()], { columnSpan: span(3), margins: { top: 0, bottom: 0, left: 0, right: 0 } }),
         ],
       }),
@@ -387,7 +391,9 @@ export async function exportarProgramaWord(programa, config, papel, opciones = {
     sections: [{
       properties: {
         page: {
-          size: { width: tw(papel.ancho), height: tw(papel.alto) },
+          // Horizontal declarado (no solo con las medidas acostadas): docx pide las
+          // medidas en vertical y las voltea él mismo al marcar LANDSCAPE.
+          size: { width: tw(papel.alto), height: tw(papel.ancho), orientation: D.PageOrientation.LANDSCAPE },
           margin: {
             top: tw(margenVerticalCm), bottom: tw(margenVerticalCm), left: tw(margenLateralCm), right: tw(margenLateralCm),
           },

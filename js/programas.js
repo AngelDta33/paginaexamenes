@@ -9,6 +9,7 @@ import {
 import {
   nuevoPrograma, nuevoCriterioPrograma, totalPorcentajeCriterios, ETIQUETAS_TRIMESTRE,
   duplicarPrograma, nombreElaboro, interlineadoTemario, altoLineaTemarioPx, textoTemario,
+  tamanoLetraTemario, TAMANOS_LETRA_TEMARIO,
 } from './programasModel.js';
 import { obtenerConfig } from './store.js';
 import { esRevisorOAdmin } from './auth.js';
@@ -209,7 +210,7 @@ function renglonesCriterios(programa) {
 // La tabla con el encabezado y los renglones [desde, hasta) — cuando no cabe en
 // una hoja, cada hoja lleva su parte y repite el encabezado.
 function tablaCriterios(programa, desde = 0, hasta = Infinity) {
-  return el('table', { class: 'tabla-criterios' }, [
+  return el('table', { class: 'tabla-criterios', style: `font-size:${tamanoLetraTemario(programa, 'criterios')}pt;` }, [
     el('thead', {}, [el('tr', {}, [el('th', {}, 'Criterios'), el('th', {}, 'Porcentaje'), el('th', {}, 'Porcentaje obtenido')])]),
     el('tbody', {}, renglonesCriterios(programa).slice(desde, hasta)),
   ]);
@@ -222,12 +223,28 @@ function bloqueFirmas() {
   ]);
 }
 
+// Las tres columnas de texto del temario, en el orden de la hoja.
+const COLUMNAS_TEXTO = [
+  { columna: 'fechas', campo: 'fechasTrimestre', titulo: 'FECHAS DEL TRIMESTRE' },
+  { columna: 'contenidos', campo: 'procesosDesarrollo', titulo: 'CONTENIDOS' },
+  { columna: 'orientaciones', campo: 'orientacionesDidacticas', titulo: 'ORIENTACIONES DIDÁCTICAS' },
+];
+
+// Letra y alto de renglón de una columna de texto (cada una puede tener su tamaño).
+function estiloTextoColumna(programa, columna) {
+  return `font-size:${tamanoLetraTemario(programa, columna)}pt; line-height:${altoLineaTemarioPx(programa, columna)}px;`;
+}
+
+// Un valor por columna de texto: acepta un número (el mismo para las tres) o un arreglo.
+const porColumna = (v, i) => (Array.isArray(v) ? v[i] : v);
+
 // Una columna de texto del temario: se ve como una ventana sobre el texto
-// completo. `desde` y `lineas` (en renglones) dicen qué parte se muestra en esta
-// hoja; con `lineas` en null la ventana ocupa todo el espacio que le quede.
+// completo. `desde` y `lineas` (en renglones de esa columna) dicen qué parte se
+// muestra en esta hoja; con `lineas` en null la ventana ocupa todo el espacio
+// que le quede.
 function columnaTemario(titulo, texto, ventana) {
   const interior = el('div', {
-    class: 'texto-col-temario', style: `margin-top:-${ventana.desde * ventana.lineaPx}px;`,
+    class: 'texto-col-temario', style: `${ventana.estilo} margin-top:-${ventana.desde * ventana.lineaPx}px;`,
   }, textoTemario(texto));
   return el('div', { class: 'col-temario' }, [
     el('div', { class: 'titulo-col-temario' }, titulo),
@@ -250,7 +267,13 @@ function renderPaginaPrograma(programa, config, anchos, {
 } = {}) {
   const papel = papelDePrograma(programa);
   const lineaPx = altoLineaTemarioPx(programa);
-  const ventana = { desde, lineas, lineaPx };
+  // `desde` y `lineas` vienen por columna (cada una corta en sus propios renglones).
+  const ventanas = COLUMNAS_TEXTO.map(({ columna }, i) => ({
+    desde: porColumna(desde, i) || 0,
+    lineas: porColumna(lineas, i) ?? null,
+    lineaPx: altoLineaTemarioPx(programa, columna),
+    estilo: estiloTextoColumna(programa, columna),
+  }));
   const llevaCriterios = !medir && (filasDesde < filasHasta || firmas);
   const numFilas = renglonesCriterios(programa).length;
 
@@ -316,9 +339,7 @@ function renderPaginaPrograma(programa, config, anchos, {
         class: 'fila-temario',
         style: `grid-template-columns: ${anchos.map((a) => `${a * 100}%`).join(' ')};`,
       }, [
-        columnaTemario('FECHAS DEL TRIMESTRE', programa.fechasTrimestre, ventana),
-        columnaTemario('CONTENIDOS', programa.procesosDesarrollo, ventana),
-        columnaTemario('ORIENTACIONES DIDÁCTICAS', programa.orientacionesDidacticas, ventana),
+        ...COLUMNAS_TEXTO.map(({ campo, titulo }, i) => columnaTemario(titulo, programa[campo], ventanas[i])),
         colCriterios,
       ]),
       conPie ? el('div', { class: 'fila-observaciones-programa' }, [
@@ -358,9 +379,11 @@ function conHuesped(programa, hijos, medir) {
 // Alto de cada columna del temario para cada ancho posible (en pasos de 1 %).
 function alturasPorAncho(programa) {
   const W = anchoTemarioPx(programa);
-  const textos = [programa.fechasTrimestre, programa.procesosDesarrollo, programa.orientacionesDidacticas].map(textoTemario);
+  const textos = COLUMNAS_TEXTO.map(({ campo }) => textoTemario(programa[campo]));
   const margenTexto = 0.2 * PX_POR_CM;
-  const cajasTexto = textos.map((t) => el('div', { class: 'texto-col-temario', style: 'box-sizing:border-box;' }, t || ''));
+  const cajasTexto = textos.map((t, i) => el('div', {
+    class: 'texto-col-temario', style: `box-sizing:border-box; ${estiloTextoColumna(programa, COLUMNAS_TEXTO[i].columna)}`,
+  }, t || ''));
   const tabla = tablaCriterios(programa);
   const cajaCriterios = el('div', { style: 'box-sizing:border-box;' }, [tabla]);
   const firmas = bloqueFirmas();
@@ -432,11 +455,12 @@ function medirCriterios(programa, anchos) {
 function medirPagina(programa, config, anchos, opciones) {
   const pagina = renderPaginaPrograma(programa, config, anchos, { ...opciones, lineas: null, medir: true });
   return conHuesped(programa, [pagina], () => {
-    const altoTexto = Math.max(...[...pagina.querySelectorAll('.texto-col-temario')].map((t) => t.getBoundingClientRect().height));
+    // Alto del texto de cada columna (en el orden de COLUMNAS_TEXTO).
+    const altosTexto = [...pagina.querySelectorAll('.texto-col-temario')].map((t) => t.getBoundingClientRect().height);
     const altoVentana = pagina.querySelector('.contenido-col-temario').getBoundingClientRect().height;
     const col = pagina.querySelector('.col-criterios');
     const altoColumna = col.getBoundingClientRect().height - col.querySelector('.titulo-col-temario').getBoundingClientRect().height;
-    return { altoTexto, altoVentana, altoColumna };
+    return { altosTexto, altoVentana, altoColumna };
   });
 }
 
@@ -445,37 +469,39 @@ function medirPagina(programa, config, anchos, opciones) {
 // corta entre renglones y la tabla de criterios entre renglones de la tabla) y
 // las observaciones y los nombres van en la última.
 function planificarPrograma(programa, config) {
-  const lineaPx = altoLineaTemarioPx(programa);
+  // Cada columna de texto corta en sus propios renglones (puede tener otro tamaño de letra).
+  const lineasPx = COLUMNAS_TEXTO.map(({ columna }) => altoLineaTemarioPx(programa, columna));
   const anchos = elegirAnchos(alturasPorAncho(programa));
   const crit = medirCriterios(programa, anchos);
   const numFilas = crit.filas.length;
   const altoTablaDesde = (j) => (j < numFilas ? crit.encabezado + crit.filas.slice(j).reduce((s, h) => s + h, 0) : 0);
-  const cabe = (alto) => Math.floor(alto / lineaPx + 0.001);
+  const cabe = (alto, i) => Math.floor(alto / lineasPx[i] + 0.001);
+  const todas = (f) => COLUMNAS_TEXTO.every((_, i) => f(i));
 
   const hojas = [];
-  let desde = 0;
+  let desde = COLUMNAS_TEXTO.map(() => 0);
   let fila = 0;
   let firmasPendientes = true;
   let primera = true;
   let medidaUnica = null;
-  let totalLineas = 0;
+  let totalLineas = COLUMNAS_TEXTO.map(() => 0);
   for (let i = 0; i < 20; i++) {
-    if (i > 0 && desde >= totalLineas && fila >= numFilas && !firmasPendientes) {
+    if (i > 0 && todas((c) => desde[c] >= totalLineas[c]) && fila >= numFilas && !firmasPendientes) {
       hojas.push({ primera: false, conPie: true, soloPie: true, filasDesde: numFilas, filasHasta: numFilas, firmas: false });
       break;
     }
     const conPie = medirPagina(programa, config, anchos, { primera, conPie: true, desde });
     if (i === 0) {
       medidaUnica = conPie;
-      totalLineas = Math.ceil(conPie.altoTexto / lineaPx - 0.05);
+      totalLineas = conPie.altosTexto.map((alto, c) => Math.ceil(alto / lineasPx[c] - 0.05));
     }
     const criteriosRestantes = altoTablaDesde(fila) + (firmasPendientes ? crit.firmas : 0);
-    if (totalLineas - desde <= cabe(conPie.altoVentana) && criteriosRestantes <= conPie.altoColumna + 0.5) {
+    if (todas((c) => totalLineas[c] - desde[c] <= cabe(conPie.altoVentana, c)) && criteriosRestantes <= conPie.altoColumna + 0.5) {
       hojas.push({ primera, conPie: true, desde, lineas: null, filasDesde: fila, filasHasta: numFilas, firmas: firmasPendientes });
       break;
     }
     const sinPie = medirPagina(programa, config, anchos, { primera, conPie: false, desde });
-    const capacidad = Math.max(1, cabe(sinPie.altoVentana));
+    const capacidad = COLUMNAS_TEXTO.map((_, c) => Math.max(1, cabe(sinPie.altoVentana, c)));
     let disponible = sinPie.altoColumna;
     let hasta = fila;
     if (fila < numFilas) {
@@ -485,7 +511,7 @@ function planificarPrograma(programa, config) {
     }
     const ponFirmas = firmasPendientes && hasta >= numFilas && crit.firmas <= disponible + 0.5;
     hojas.push({ primera, conPie: false, desde, lineas: capacidad, filasDesde: fila, filasHasta: hasta, firmas: ponFirmas });
-    desde += capacidad;
+    desde = desde.map((d, c) => d + capacidad[c]);
     fila = hasta;
     if (ponFirmas) firmasPendientes = false;
     primera = false;
@@ -504,22 +530,31 @@ function renderPaginasPrograma(programa, config, plan = planificarPrograma(progr
   return plan.hojas.map((hoja, i) => renderPaginaPrograma(programa, config, plan.anchos, { ...hoja, hoja: i + 1, totalHojas: plan.hojas.length }));
 }
 
+// La hoja del programa siempre es horizontal (ver papelDePrograma): el @page
+// lleva el ancho mayor primero y, antes, la palabra "landscape" para los
+// navegadores que solo entienden la orientación. Así el diálogo de impresión
+// (y el PDF) salen en horizontal sin que el maestro tenga que cambiarlo.
 function fijarTamanoPapelImpresion(papel) {
   let estilo = document.getElementById('estilo-papel-impresion');
   if (!estilo) {
     estilo = el('style', { id: 'estilo-papel-impresion' });
     document.head.appendChild(estilo);
   }
-  estilo.textContent = `@media print { @page { size: ${papel.ancho}cm ${papel.alto}cm; margin: 0; } }`;
+  estilo.textContent = `@media print { @page { size: landscape; size: ${papel.ancho}cm ${papel.alto}cm; margin: 0; } }`;
 }
+
+// El editor de programa abierto, para que Cmd/Ctrl + P imprima lo mismo que el
+// botón (ver el "beforeprint" de abajo).
+let programaAbierto = null; // { programa, contenedorPreview }
+let imprimiendoPrograma = false;
 
 // Mismo mecanismo que imprimir() en preview.js: sacar la hoja de su lugar y
 // colgarla directo de <body> para que no queden páginas en blanco, con el
-// tamaño de papel que el maestro eligió para este programa.
-function imprimirPrograma(programa) {
-  const contenedor = document.querySelector('.hoja-contenedor');
-  if (!contenedor) return;
-
+// tamaño de papel que el maestro eligió para este programa. Se usa la hoja de
+// ESTE editor (no la primera .hoja-contenedor del documento, que puede ser la
+// de un examen abierto antes en la misma sesión). Devuelve cómo dejar todo
+// como estaba.
+function prepararImpresionPrograma(programa, contenedor) {
   fijarTamanoPapelImpresion(papelDePrograma(programa));
 
   const tituloOriginal = document.title;
@@ -530,21 +565,33 @@ function imprimirPrograma(programa) {
   padre.insertBefore(ancla, contenedor);
   const raiz = el('div', { class: 'raiz-impresion' }, [contenedor]);
   document.body.appendChild(raiz);
-  // El zoom de pantalla (ver ajustarVista) no va al papel.
-  const zoomOriginal = contenedor.style.zoom;
-  contenedor.style.zoom = '';
+  // La escala de pantalla (ver ajustarVista) no va al papel.
+  const escalaOriginal = { transform: contenedor.style.transform, width: contenedor.style.width };
+  contenedor.style.transform = '';
+  contenedor.style.width = '';
+  imprimiendoPrograma = true;
 
   let restaurado = false;
-  function restaurar() {
-    if (restaurado) return;
+  return function restaurar() {
+    if (restaurado) return; // afterprint y el finally pueden llegar los dos
     restaurado = true;
-    contenedor.style.zoom = zoomOriginal;
+    imprimiendoPrograma = false;
+    contenedor.style.transform = escalaOriginal.transform;
+    contenedor.style.width = escalaOriginal.width;
     padre.insertBefore(contenedor, ancla);
     ancla.remove();
     raiz.remove();
     document.title = tituloOriginal;
-  }
+    // El @page horizontal es solo del programa: que no se quede puesto para lo
+    // siguiente que se imprima (un examen va en vertical y pone el suyo).
+    const estilo = document.getElementById('estilo-papel-impresion');
+    if (estilo) estilo.textContent = '';
+  };
+}
 
+function imprimirPrograma(programa, contenedor) {
+  if (!contenedor || !contenedor.parentNode) return;
+  const restaurar = prepararImpresionPrograma(programa, contenedor);
   window.addEventListener('afterprint', restaurar, { once: true });
   try {
     window.print();
@@ -552,6 +599,17 @@ function imprimirPrograma(programa) {
     restaurar();
   }
 }
+
+// Cmd/Ctrl + P (o Archivo → Imprimir) con un programa abierto: se prepara igual
+// que con el botón, en horizontal y solo la hoja. Si la impresión ya viene del
+// botón, ya está preparada; si el programa no está a la vista (otra sección de
+// la app), no se toca nada.
+window.addEventListener('beforeprint', () => {
+  if (imprimiendoPrograma || !programaAbierto) return;
+  const { programa, contenedorPreview } = programaAbierto;
+  if (!document.body.contains(contenedorPreview) || contenedorPreview.offsetParent === null) return;
+  window.addEventListener('afterprint', prepararImpresionPrograma(programa, contenedorPreview), { once: true });
+});
 
 // ---------------------------------------------------------------------------
 // EDITOR
@@ -599,17 +657,46 @@ export async function montarEditorPrograma(contenedor, programaId, sesion, { onV
   }
 
   const contenedorPreview = el('div', { class: 'hoja-contenedor' });
+  // La hoja se arma SIEMPRE a su tamaño real y solo se escala como imagen
+  // (transform), dentro de un lienzo que mide lo que mide ya escalada. Antes se
+  // reducía con `zoom`, que vuelve a acomodar el texto a otro tamaño: según el
+  // ancho de la ventana o el zoom del navegador, los renglones cambiaban y las
+  // letras se amontonaban. Con transform, cambiar el tamaño de la ventana solo
+  // cambia la escala; el contenido de la hoja no se mueve.
+  const lienzoPreview = el('div', { class: 'lienzo-programa' }, [contenedorPreview]);
+  const visorPreview = el('div', { class: 'visor-programa' }, [lienzoPreview]);
 
-  // La hoja mide ~28 cm de ancho: en vez de dejarla de un tamaño fijo (que se
-  // salía de la caja y se veía recorrida a la derecha), se reduce lo justo para
-  // que quepa en el ancho que tenga la vista previa.
+  // Zoom de la vista previa, sobre el tamaño que la ajusta al ancho del panel
+  // (100 % = la hoja completa a lo ancho). Solo cambia cómo se ve en pantalla.
+  const NIVELES_ZOOM = [0.5, 0.67, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3];
+  let nivelZoom = 1;
+  const etiquetaZoom = el('span', { class: 'etiqueta-zoom-programa' }, '100 %');
+  const cambiarZoom = (paso) => {
+    const i = NIVELES_ZOOM.indexOf(nivelZoom);
+    nivelZoom = NIVELES_ZOOM[Math.min(NIVELES_ZOOM.length - 1, Math.max(0, i + paso))];
+    ajustarVista();
+  };
+  const btnAlejar = el('button', { type: 'button', class: 'btn-secundario btn-zoom-programa', title: 'Alejar la vista previa', onclick: () => cambiarZoom(-1) }, '−');
+  const btnAcercar = el('button', { type: 'button', class: 'btn-secundario btn-zoom-programa', title: 'Acercar la vista previa', onclick: () => cambiarZoom(1) }, '+');
+  const btnZoomNormal = el('button', {
+    type: 'button', class: 'btn-secundario btn-zoom-programa', title: 'Volver a ver la hoja completa (100 %)',
+    onclick: () => { nivelZoom = 1; ajustarVista(); },
+  }, '100 %');
+  const controlesZoom = el('div', { class: 'controles-zoom-programa' }, ['Zoom: ', btnAlejar, etiquetaZoom, btnAcercar, btnZoomNormal]);
+
   function ajustarVista() {
-    const caja = contenedorPreview.parentElement;
-    if (!caja || !caja.clientWidth) return;
-    const estilo = getComputedStyle(caja);
-    const disponible = caja.clientWidth - parseFloat(estilo.paddingLeft) - parseFloat(estilo.paddingRight) - 4;
+    const disponible = visorPreview.clientWidth - 4;
+    if (disponible <= 0) return;
     const anchoHoja = papelDePrograma(programa).ancho * (96 / 2.54);
-    contenedorPreview.style.zoom = String(Math.min(1, disponible / anchoHoja));
+    const escala = Math.min(1, disponible / anchoHoja) * nivelZoom;
+    contenedorPreview.style.width = `${anchoHoja}px`;
+    contenedorPreview.style.transformOrigin = 'top left';
+    contenedorPreview.style.transform = `scale(${escala})`;
+    lienzoPreview.style.width = `${anchoHoja * escala}px`;
+    lienzoPreview.style.height = `${contenedorPreview.offsetHeight * escala}px`;
+    etiquetaZoom.textContent = `${Math.round(nivelZoom * 100)} %`;
+    btnAlejar.disabled = nivelZoom === NIVELES_ZOOM[0];
+    btnAcercar.disabled = nivelZoom === NIVELES_ZOOM[NIVELES_ZOOM.length - 1];
   }
 
   // Calcular los anchos de columna mide el texto muchas veces, así que el plan se
@@ -623,12 +710,19 @@ export async function montarEditorPrograma(contenedor, programaId, sesion, { onV
     return planCache.plan;
   }
 
+  // Aviso junto a la vista previa cuando el programa ya no cabe en una hoja.
+  const avisoHojas = el('p', { class: 'aviso-hojas-programa oculto' });
+
   let repintarTimeout = null;
   function repintarPreview({ inmediato = false } = {}) {
     clearTimeout(repintarTimeout);
     const repintar = () => {
       clear(contenedorPreview);
-      renderPaginasPrograma(programa, config, planActual()).forEach((pagina) => contenedorPreview.appendChild(pagina));
+      const plan = planActual();
+      renderPaginasPrograma(programa, config, plan).forEach((pagina) => contenedorPreview.appendChild(pagina));
+      const n = plan.hojas.length;
+      avisoHojas.textContent = `⚠ El programa saldrá en ${n} hoja(s). Si quieres que quepa en una, reduce el texto, el interlineado o el tamaño de letra del temario.`;
+      avisoHojas.classList.toggle('oculto', n <= 1);
       ajustarVista();
     };
     if (inmediato) repintar();
@@ -698,6 +792,23 @@ export async function montarEditorPrograma(contenedor, programaId, sesion, { onV
     ]),
   ]);
 
+  // Selector de tamaño de letra de un espacio del temario (se guarda en
+  // programa.tamanosLetraTemario[columna]; sin elegir, el de siempre).
+  const selectorLetra = (columna) => el('label', { class: 'selector-letra-temario' }, [
+    'Tamaño de letra: ',
+    el('select', {
+      onchange: (e) => {
+        programa.tamanosLetraTemario = { ...(programa.tamanosLetraTemario || {}), [columna]: Number(e.target.value) };
+        guardarConDebounce();
+      },
+    }, TAMANOS_LETRA_TEMARIO.map((pt) => el('option', { value: pt, selected: tamanoLetraTemario(programa, columna) === pt }, `${pt} pt`))),
+  ]);
+  const areaConLetra = (etiqueta, columna, valor, onInput) => {
+    const area = campoArea(etiqueta, valor, onInput);
+    area.querySelector('label').after(selectorLetra(columna));
+    return area;
+  };
+
   const panelTemario = el('div', { class: 'panel' }, [
     el('h2', {}, 'Temario'),
     el('div', { class: 'campo' }, [
@@ -711,15 +822,16 @@ export async function montarEditorPrograma(contenedor, programaId, sesion, { onV
           guardarConDebounce();
         },
       }),
-      el('span', { class: 'etiqueta-chica' }, 'Se aplica a fechas, contenidos y orientaciones para que sus renglones sigan alineados. Si el temario no cabe en una hoja, pasa a una segunda.'),
+      el('span', { class: 'etiqueta-chica' }, 'Se aplica a fechas, contenidos y orientaciones. Con el mismo tamaño de letra, sus renglones quedan alineados entre columnas. Si el temario no cabe en una hoja, pasa a una segunda.'),
     ]),
-    campoArea('Fechas del trimestre', programa.fechasTrimestre, (v) => { programa.fechasTrimestre = v; }),
-    campoArea('Contenidos', programa.procesosDesarrollo, (v) => { programa.procesosDesarrollo = v; }),
-    campoArea('Orientaciones didácticas', programa.orientacionesDidacticas, (v) => { programa.orientacionesDidacticas = v; }),
+    areaConLetra('Fechas del trimestre', 'fechas', programa.fechasTrimestre, (v) => { programa.fechasTrimestre = v; }),
+    areaConLetra('Contenidos', 'contenidos', programa.procesosDesarrollo, (v) => { programa.procesosDesarrollo = v; }),
+    areaConLetra('Orientaciones didácticas', 'orientaciones', programa.orientacionesDidacticas, (v) => { programa.orientacionesDidacticas = v; }),
   ]);
 
   const panelCriterios = el('div', { class: 'panel' }, [
     el('h2', {}, 'Criterios de evaluación'),
+    selectorLetra('criterios'),
     listaCriterios,
     el('button', {
       type: 'button', class: 'btn-secundario',
@@ -773,11 +885,13 @@ export async function montarEditorPrograma(contenedor, programaId, sesion, { onV
     el('h2', {}, ['Vista previa ', estadoGuardado]),
     el('div', { class: 'acciones-preview' }, [
       el('label', { class: 'campo-papel' }, ['Hoja: ', selectorPapel]),
-      el('button', { type: 'button', class: 'btn-primario', onclick: () => imprimirPrograma(programa) }, '🖨 Imprimir / Descargar PDF'),
+      el('button', { type: 'button', class: 'btn-primario', onclick: () => imprimirPrograma(programa, contenedorPreview) }, '🖨 Imprimir / Descargar PDF'),
       btnWord,
     ]),
-    el('p', { class: 'etiqueta-chica nota-impresion' }, 'Al imprimir, elige el mismo tamaño de hoja de aquí arriba (en orientación horizontal) y pon Márgenes: Ninguno y Escala: 100% (sin "Ajustar al área de impresión"). Así el PDF sale idéntico a esta vista previa.'),
-    contenedorPreview,
+    el('p', { class: 'etiqueta-chica nota-impresion' }, 'La hoja sale en horizontal. Al imprimir, elige el mismo tamaño de hoja de aquí arriba y pon Márgenes: Ninguno y Escala: 100% (sin "Ajustar al área de impresión"). Así el PDF sale idéntico a esta vista previa.'),
+    avisoHojas,
+    controlesZoom,
+    visorPreview,
   ]);
 
   const layout = el('div', { class: 'editor-layout' }, [
@@ -791,6 +905,7 @@ export async function montarEditorPrograma(contenedor, programaId, sesion, { onV
     ultimaEdicion,
   ]));
   contenedor.appendChild(layout);
+  programaAbierto = { programa, contenedorPreview };
   repintarPreview({ inmediato: true });
   if (window.ResizeObserver) new ResizeObserver(ajustarVista).observe(panelPreview);
 }
