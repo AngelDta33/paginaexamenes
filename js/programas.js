@@ -523,6 +523,7 @@ function planificarPrograma(programa, config) {
     // Para el Word: el espacio del temario en una sola hoja y lo que mide la tabla de criterios.
     altoTemarioCm: medidaUnica.altoColumna / PX_POR_CM,
     altoTablaCriteriosCm: altoTablaDesde(0) / PX_POR_CM,
+    altoFirmasCm: crit.firmas / PX_POR_CM,
   };
 }
 
@@ -871,7 +872,7 @@ export async function montarEditorPrograma(contenedor, programaId, sesion, { onV
       try {
         const plan = planActual();
         await exportarProgramaWord(programa, config, papelDePrograma(programa), {
-          anchos: plan.anchos, altoTemarioCm: plan.altoTemarioCm, altoTablaCriteriosCm: plan.altoTablaCriteriosCm,
+          anchos: plan.anchos, altoTemarioCm: plan.altoTemarioCm, altoTablaCriteriosCm: plan.altoTablaCriteriosCm, altoFirmasCm: plan.altoFirmasCm,
         });
       } catch (err) {
         alert(`No se pudo generar el archivo de Word: ${err.message}`);

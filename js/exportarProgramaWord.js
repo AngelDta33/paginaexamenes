@@ -218,8 +218,10 @@ function contenidoCriterios(programa, anchoCm) {
     borders: sinBordes(),
     margins: { left: tw(0.1), right: tw(0.1) },
     children: [
-      new D.Paragraph({ spacing: { before: tw(1.2) }, border: { bottom: borde(0.5) }, children: [] }),
-      parrafo(etiqueta, { centrado: true, tamano: 17, antes: 0.05 }),
+      // Mismo aire que la hoja (.firmas-programa / .linea-firma-programa en
+      // programa.css): 0.2 cm de relleno + 0.6 cm de raya, y 0.1 cm hasta el texto.
+      new D.Paragraph({ spacing: { before: tw(0.8) }, border: { bottom: borde(0.5) }, children: [] }),
+      parrafo(etiqueta, { centrado: true, tamano: 17, antes: 0.1 }),
     ],
   });
   const firmas = new D.Table({
@@ -272,7 +274,11 @@ export async function exportarProgramaWord(programa, config, papel, opciones = {
   if (!D) D = await import(URL_DOCX);
 
   const margenLateralCm = 1.2;
-  const margenVerticalCm = 1.0;
+  // 2 mm menos que la hoja (1 cm): Word suma bordes y rellenos de la tabla de
+  // criterios un poco distinto que el navegador, y en un programa que la vista
+  // previa acomoda justo en una hoja, esos milímetros mandaban los nombres del
+  // pie solos a una segunda hoja. A la vista no se nota.
+  const margenVerticalCm = 0.8;
   const anchoCm = papel.ancho - 2 * margenLateralCm;
   const anchos = (opciones.anchos || [0.17, 0.27, 0.27, 0.29]).map((p) => anchoCm * p);
   // Las columnas de la tabla de Word: las cuatro del temario más un corte donde
@@ -312,7 +318,11 @@ export async function exportarProgramaWord(programa, config, papel, opciones = {
   // se unen las tres columnas de texto, con las firmas alineadas abajo.
   const criterios = contenidoCriterios(programa, aCriterios - 0.05);
   const altoTablaCriteriosCm = opciones.altoTablaCriteriosCm || (2.12 + 0.6 * ((programa.criterios || []).length + 1));
-  const altoFirmas = Math.max(1.8, altoTemarioCm - altoTablaCriteriosCm);
+  // Las firmas ocupan lo que sobra de la columna de criterios, y como mínimo lo
+  // que miden en la hoja (antes era un 1.8 cm fijo: unos milímetros más que en
+  // la hoja, que en un programa justo de una hoja mandaban los nombres del pie
+  // solos a una segunda hoja en Word).
+  const altoFirmas = Math.max(opciones.altoFirmasCm || 1.5, altoTemarioCm - altoTablaCriteriosCm);
   const parrafoFinal = () => new D.Paragraph({ spacing: { before: 0, after: 0, line: 20, lineRule: D.LineRuleType.EXACT } });
 
   const tablaPrincipal = new D.Table({
@@ -408,6 +418,10 @@ export async function exportarProgramaWord(programa, config, papel, opciones = {
         // solos a otra hoja cuando el programa llena la página.
         espaciador(0.25),
         pie(programa, anchoCm),
+        // Word siempre necesita un párrafo después de la última tabla; si se deja
+        // que lo ponga él, mide un renglón completo y, con el programa justo en una
+        // hoja, ese renglón vacío solo crea una segunda hoja en blanco.
+        new D.Paragraph({ spacing: { before: 0, after: 0, line: 20, lineRule: D.LineRuleType.EXACT } }),
       ],
     }],
   });
