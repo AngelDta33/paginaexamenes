@@ -427,6 +427,18 @@ button {
 .btn-motivo-falta:disabled { cursor: default; text-decoration: none; }
 .celda-totales { font-weight: bold; color: var(--rojo); }
 
+/* Justificada que cuenta como falta por la regla de "cada 3 justificadas":
+   se ve como falta, con borde punteado y una J chiquita para saber de dónde salió. */
+.por-justificadas .btn-celda-estado, .leyenda-swatch.por-justificadas { position: relative; border-style: dashed; border-width: 2px; }
+.por-justificadas .btn-celda-estado::after, .leyenda-swatch.por-justificadas::after {
+  content: 'J'; position: absolute; right: 2px; bottom: 0; font-size: 0.55rem; line-height: 1; color: #444;
+}
+.casilla-justificadas-falta {
+  display: inline-flex; align-items: center; gap: 0.35rem; margin: 0 0 0.8rem; font-size: 0.9rem; cursor: pointer;
+}
+.casilla-justificadas-falta input { width: auto; margin: 0; }
+.casilla-justificadas-falta:has(input:disabled) { cursor: default; opacity: 0.75; }
+
 .leyenda-asistencia { display: flex; gap: 1.1rem; flex-wrap: wrap; margin: 0.5rem 0 0.9rem 0; font-size: 0.85rem; color: var(--gris); }
 .leyenda-item { display: flex; align-items: center; gap: 0.35rem; }
 .leyenda-swatch {

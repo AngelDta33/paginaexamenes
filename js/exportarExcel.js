@@ -8,7 +8,7 @@ import {
   fechaCortaMX, calcularPromedio, valorRubro, INICIALES_ESTADO_ASISTENCIA,
   esRubroAsistencia, tieneEvaluaciones, calendarioDeGrupo, fechasEnTrimestre,
   promedioAsistenciaAlumno, usaPorcentaje, calificacionFinal,
-  columnasPaseDeLista, porcentajeAsistencia,
+  columnasPaseDeLista, porcentajeAsistencia, diasConReglaJustificadas,
 } from './gruposModel.js';
 
 function nombreArchivoSeguro(texto) {
@@ -225,7 +225,9 @@ export async function exportarGrupoExcel(grupo) {
   // Reservados de antemano para que ningún trimestre choque con ellos.
   const nombresHojas = new Set(['Rúbrica y calificaciones', 'Desglose']);
 
-  const dias = await listarAsistencias(grupo.id);
+  // Las justificadas que cuentan como falta (si el grupo usa esa regla) salen
+  // como F y suman en Faltas, igual que en la pantalla del pase de lista.
+  const dias = diasConReglaJustificadas(grupo, await listarAsistencias(grupo.id));
 
   // Trimestres con fechas capturadas dentro (los vacíos no generan hoja).
   const calendario = calendarioDeGrupo(grupo);

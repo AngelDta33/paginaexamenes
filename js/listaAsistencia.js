@@ -9,6 +9,7 @@ import {
   valoresAsistenciaDeGrupo, promedioAsistenciaAlumno,
   DIAS_SEMANA_NOMBRES, calendarioDeGrupo, nuevoTrimestre, crearTrimestresEstandar, fechasDeClase,
   fechasEnTrimestre, usaPorcentaje, formatearNota, trimestresSuperpuestos, ESTADOS_CON_MOTIVO,
+  diasConReglaJustificadas, usaJustificadasAFalta, JUSTIFICADAS_POR_FALTA,
 } from './gruposModel.js';
 
 // Ciclo al hacer clic: sin marcar → presente → falta → justificada → retardo → sin marcar.
@@ -312,7 +313,13 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
     const trimestreActivo = trimestres.find((t) => t.id === filtroTrimestre) || null;
     const todasLasFechas = Array.from(porFecha.keys()).sort();
     const fechas = trimestreActivo ? fechasEnTrimestre(todasLasFechas, trimestreActivo) : todasLasFechas;
-    const diasArray = fechas.map((f) => porFecha.get(f));
+    // Lo que se ve y se cuenta: los días tal cual, salvo que el grupo use la
+    // regla de "cada 3 justificadas, una falta" (ver diasConReglaJustificadas).
+    // Se calcula sobre todos los días, no solo los del trimestre filtrado, para
+    // que la cuenta de justificadas siga el orden real del ciclo. Los clics
+    // siguen cambiando los días originales de porFecha, que son los que se guardan.
+    const efectivos = new Map(diasConReglaJustificadas(grupo, Array.from(porFecha.values())).map((d) => [d.fecha, d]));
+    const diasArray = fechas.map((f) => efectivos.get(f));
 
     if (trimestreActivo && fechas.length === 0) {
       contenedorTabla.appendChild(el('p', { class: 'aviso-vacio' }, `No hay fechas capturadas dentro de "${trimestreActivo.nombre || 'ese trimestre'}" (${trimestreActivo.inicio} a ${trimestreActivo.fin}).`));
@@ -399,15 +406,22 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
       const celdas = fechasVisibles.map((f) => {
         const dia = porFecha.get(f);
         const reg = dia.registros[alumno.id] || { estado: null, nota: '' };
+        // regVisto es lo que se muestra: igual a reg, salvo una justificada que
+        // por la regla de 3 cuenta como falta (al hacer clic se sigue el ciclo
+        // normal desde "justificada", que es lo que está guardado).
+        const regVisto = efectivos.get(f).registros[alumno.id] || reg;
+        const porJustificadas = !!regVisto.porJustificadas;
         // En una falta o un retardo, la nota del día ES el motivo: en vez del
         // ícono 📝 genérico se ofrece un enlace "motivo" con todas sus letras
         // debajo de la celda, que el maestro usa solo si tiene algo que aclarar.
         const llevaMotivo = ESTADOS_CON_MOTIVO.has(reg.estado);
-        const celda = el('td', { class: `celda-asistencia ${reg.estado ? `estado-${reg.estado}` : ''}` }, [
+        const celda = el('td', { class: `celda-asistencia ${regVisto.estado ? `estado-${regVisto.estado}` : ''} ${porJustificadas ? 'por-justificadas' : ''}` }, [
           el('div', { class: 'fila-celda-asistencia' }, [
           el('button', {
             type: 'button', class: 'btn-celda-estado', disabled: soloLectura,
-            title: ETIQUETAS_ESTADO_ASISTENCIA[reg.estado] || 'Sin marcar',
+            title: porJustificadas
+              ? `Justificada que cuenta como falta (es la ${JUSTIFICADAS_POR_FALTA}.ª justificada)`
+              : (ETIQUETAS_ESTADO_ASISTENCIA[reg.estado] || 'Sin marcar'),
             onclick: soloLectura ? undefined : async () => {
               const actual = reg.estado || null;
               const siguiente = SIGUIENTE_ESTADO[actual === null ? 'null' : actual];
@@ -420,7 +434,7 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
               }
               pintarTabla();
             },
-          }, reg.estado ? INICIALES_ESTADO[reg.estado] : '·'),
+          }, regVisto.estado ? INICIALES_ESTADO[regVisto.estado] : '·'),
           llevaMotivo ? null : el('button', {
             type: 'button', class: `btn-nota-dia ${reg.nota ? 'tiene-nota' : ''}`, disabled: soloLectura,
             title: reg.nota ? `Nota: ${reg.nota}` : 'Agregar nota',
@@ -522,8 +536,43 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
         `${ETIQUETAS_ESTADO_ASISTENCIA[estado]} (${valores[estado]})`,
       ]));
     });
+    if (usaJustificadasAFalta(grupo)) {
+      leyenda.appendChild(el('span', { class: 'leyenda-item' }, [
+        el('span', { class: 'leyenda-swatch estado-falta por-justificadas' }, 'F'),
+        `Justificada que cuenta como falta (cada ${JUSTIFICADAS_POR_FALTA}.ª)`,
+      ]));
+    }
   }
   pintarLeyenda();
+
+  // Casilla "cada 3 justificadas, una falta": no siempre se usa, por eso es
+  // opcional y por grupo. No cambia nada de lo guardado en el pase de lista —
+  // solo cómo se cuenta—, así que se puede prender y apagar sin perder nada. Se
+  // guarda en el grupo (configuración del curso, como los valores de
+  // asistencia), así que solo la cambia quien puede editar el grupo; los demás
+  // la ven marcada o no, para saber cómo se están contando las faltas.
+  const casillaJustificadas = el('input', {
+    type: 'checkbox', checked: usaJustificadasAFalta(grupo), disabled: !puedeEditarGrupo,
+    onchange: async (e) => {
+      const antes = usaJustificadasAFalta(grupo);
+      grupo.justificadasAFalta = e.target.checked;
+      e.target.disabled = true;
+      try {
+        await guardarGrupo(grupo);
+      } catch (err) {
+        grupo.justificadasAFalta = antes;
+        e.target.checked = antes;
+        alert(`No se pudo guardar: ${err.message}`);
+      }
+      e.target.disabled = false;
+      pintarLeyenda();
+      pintarTabla();
+    },
+  });
+  const filaCasillaJustificadas = el('label', {
+    class: 'casilla-justificadas-falta',
+    title: `Cuenta como falta cada ${JUSTIFICADAS_POR_FALTA}.ª justificada de un alumno (en orden de fecha). Lo marcado no se modifica: al quitar la casilla todo vuelve a contarse como antes.`,
+  }, [casillaJustificadas, ` Cada ${JUSTIFICADAS_POR_FALTA} justificadas, la última cuenta como falta`]);
 
   const btnValores = el('button', { type: 'button', class: 'btn-secundario', onclick: () => abrirModalValores() }, '⚙ Valores de asistencia');
 
@@ -747,6 +796,7 @@ export async function montarListaAsistencia(contenedor, grupo, { soloLectura = f
     el('h2', {}, 'Pase de lista'),
     el('p', { class: 'etiqueta-chica' }, textoAyuda(soloLectura, puedeEditarGrupo)),
     leyenda,
+    filaCasillaJustificadas,
     soloLectura ? null : el('div', { class: 'barra-nueva' }, [
       // Agregar una fecha sí entra en "corregir el pase de lista" (sin columna no
       // hay dónde marcar el día que faltó capturar); los valores de asistencia y el

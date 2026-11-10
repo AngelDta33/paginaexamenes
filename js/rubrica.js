@@ -15,7 +15,7 @@ import {
   sumaPorcentajes, validarRubros, calcularPromedio, valorRubro, crearRubrosEstandar,
   usaPorcentaje, formatearNota, notaAEscala, escalaANota, atributosInputNota, calificacionFinal,
   columnasPaseDeLista, columnasPaseDeListaOcultas, trimestresConFechas, porcentajeAsistencia,
-  umbralDerechoExamen,
+  umbralDerechoExamen, diasConReglaJustificadas,
 } from './gruposModel.js';
 
 export async function montarRubrica(contenedor, grupo, { onAbrirEvaluaciones, soloLectura = false } = {}) {
@@ -24,7 +24,9 @@ export async function montarRubrica(contenedor, grupo, { onAbrirEvaluaciones, so
 
   let dias = [];
   try {
-    dias = await listarAsistencias(grupo.id);
+    // Con la regla de "cada 3 justificadas, una falta" (si el grupo la usa),
+    // el rubro de asistencia cuenta igual que la tabla del pase de lista.
+    dias = diasConReglaJustificadas(grupo, await listarAsistencias(grupo.id));
   } catch (err) {
     // Si falla la carga de asistencia, la rúbrica sigue funcionando para los
     // rubros normales; el rubro de asistencia simplemente mostrará "—".

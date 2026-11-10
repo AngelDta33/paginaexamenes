@@ -339,6 +339,41 @@ export function promedioAsistenciaAlumno(grupo, alumnoId, dias) {
   return suma / estados.length;
 }
 
+// Regla opcional por grupo (casilla en el pase de lista): cada 3 justificadas
+// de un alumno, la 3.ª (y la 6.ª, la 9.ª…) cuenta como falta. No se guarda nada
+// distinto en el pase de lista — la celda sigue guardada como "justificada" —,
+// solo se cuenta como falta al mostrar y calcular; así, si se apaga la casilla
+// todo vuelve a como estaba. Se cuentan en orden de fecha a lo largo de todo el
+// ciclo, para que una misma celda no cambie según el trimestre que se vea.
+export const JUSTIFICADAS_POR_FALTA = 3;
+
+export function usaJustificadasAFalta(grupo) {
+  return !!(grupo && grupo.justificadasAFalta);
+}
+
+// Recibe TODOS los días del grupo y devuelve copias en las que las justificadas
+// que tocan llevan estado 'falta' (y porJustificadas: true para distinguirlas).
+// Con la casilla apagada devuelve los mismos días, sin copiar. Las copias son
+// solo para leer: lo que se guarda son siempre los días originales.
+export function diasConReglaJustificadas(grupo, dias) {
+  if (!usaJustificadasAFalta(grupo)) return dias;
+  const ordenados = [...dias].sort((a, b) => (a.fecha < b.fecha ? -1 : a.fecha > b.fecha ? 1 : 0));
+  const cuenta = {};
+  const copias = new Map();
+  for (const dia of ordenados) {
+    let copia = null;
+    for (const [alumnoId, reg] of Object.entries(dia.registros || {})) {
+      if (!reg || reg.estado !== 'justificada') continue;
+      cuenta[alumnoId] = (cuenta[alumnoId] || 0) + 1;
+      if (cuenta[alumnoId] % JUSTIFICADAS_POR_FALTA !== 0) continue;
+      if (!copia) copia = { ...dia, registros: { ...dia.registros } };
+      copia.registros[alumnoId] = { ...reg, estado: 'falta', porJustificadas: true };
+    }
+    if (copia) copias.set(dia, copia);
+  }
+  return dias.map((dia) => copias.get(dia) || dia);
+}
+
 export function idAsistencia(grupoId, fechaISO) {
   return `${grupoId}_${fechaISO}`;
 }
