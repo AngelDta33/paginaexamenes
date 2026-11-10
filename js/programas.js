@@ -288,7 +288,11 @@ function renderPaginaPrograma(programa, config, anchos, {
     class: 'page pagina-programa',
     style: `--pagina-ancho:${papel.ancho}cm; --pagina-alto:${papel.alto}cm; --lh-temario:${lineaPx}px;`,
   }, [
-    el('div', { class: 'encabezado-programa' }, [
+    // El membrete (logo y nombre de la escuela) solo va en la primera hoja,
+    // igual que en el Word; las demás se identifican con su renglón de
+    // "(continuación)". Como medirPagina arma la hoja con este mismo `primera`,
+    // el espacio que deja libre se aprovecha para el temario.
+    primera ? el('div', { class: 'encabezado-programa' }, [
       config.logoDataUrl ? el('img', { class: 'logo-programa', src: config.logoDataUrl }) : null,
       el('div', { class: 'titulo-programa' }, [
         el('div', {}, 'COLEGIO CULTURAL MÉXICO-ARAGÓN, S.C.'),
@@ -296,7 +300,7 @@ function renderPaginaPrograma(programa, config, anchos, {
         el('div', {}, 'ÁREA I DIRECTIVA'),
         el('div', {}, 'PROGRAMA DE ACTIVIDADES ACADÉMICAS'),
       ]),
-    ]),
+    ]) : null,
     // soloPie: el temario ya se acabó en la hoja anterior y aquí solo siguen
     // las observaciones y los nombres (sin una tabla del temario vacía).
     soloPie ? el('div', { class: 'cuerpo-programa cuerpo-solo-pie' }, [
